@@ -3,6 +3,12 @@ name = "tql"
 version = "0.1.0"
 authors = ["Antoni Boucher <Antoni.Boucher@USherbrooke.ca>"]
 
+[[bin]]
+name = "tql"
+doc = false
+
 [lib]
 name = "tql"
 crate-type = ["dylib"]
+doc = true
+plugin = true

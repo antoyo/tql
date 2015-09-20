@@ -12,20 +12,27 @@ extern crate rustc;
 extern crate syntax;
 
 use rustc::plugin::Registry;
-use syntax::ast::{BinOp_, Expr, Expr_, Item, MetaItem, TokenTree};
-use syntax::ast::Expr_::{ExprBinary, ExprMethodCall, ExprPath};
+use syntax::ast::{Expr_, MetaItem, TokenTree};
+use syntax::ast::Expr_::{ExprMethodCall, ExprPath};
 use syntax::codemap::{Span, Spanned};
-use syntax::ext::base::{Annotatable, DummyResult, ExtCtxt, MacEager, MacResult, MultiItemDecorator};
+use syntax::ext::base::{Annotatable, DummyResult, ExtCtxt, MacEager, MacResult};
 use syntax::ext::base::SyntaxExtension::MultiDecorator;
 use syntax::ext::build::AstBuilder;
 use syntax::parse::token::{InternedString, intern};
-use syntax::ptr::P;
 
 use std::collections::HashSet;
 use std::mem;
 
+pub mod ast;
+pub mod gen;
+
+use ast::{Filter, Query};
+use ast::convert::expression_to_filter;
+use gen::ToSql;
+
 type SqlTables = HashSet<String>;
 
+// FIXME: make this thread safe.
 fn singleton() -> &'static mut SqlTables {
     static mut hash_map: *mut SqlTables = 0 as *mut SqlTables;
 
@@ -38,46 +45,6 @@ fn singleton() -> &'static mut SqlTables {
     }
 }
 
-#[derive(Debug)]
-enum Operator {
-    And,
-    Or,
-    Eq,
-    Lt,
-    Le,
-    Ne,
-    Ge,
-    Gt,
-}
-
-impl ToString for Operator {
-    fn to_string(&self) -> String {
-        match *self {
-            Operator::And => "AND".to_string(),
-            Operator::Or => "OR".to_string(),
-            Operator::Eq => "=".to_string(),
-            Operator::Lt => "<".to_string(),
-            Operator::Le => "<=".to_string(),
-            Operator::Ne => "<>".to_string(),
-            Operator::Ge => ">=".to_string(),
-            Operator::Gt => ">".to_string(),
-        }
-    }
-}
-
-#[derive(Debug)]
-struct Filter {
-    identifier: String,
-    operator: Operator,
-    value: P<Expr>,
-}
-
-impl ToString for Filter {
-    fn to_string(&self) -> String {
-        self.identifier.clone() + " " + &self.operator.to_string() + " ?"
-    }
-}
-
 fn expand_select(cx: &mut ExtCtxt, expr: Expr_, filter: Option<Filter>) -> String {
     if let ExprPath(None, path) = expr {
         let table_name = path.segments[0].identifier.to_string();
@@ -87,65 +54,11 @@ fn expand_select(cx: &mut ExtCtxt, expr: Expr_, filter: Option<Filter>) -> Strin
             cx.span_err(path.span, &format!("Table `{}` does not exist", table_name));
         }
 
-        let mut where_clause = String::new();
-
-        if let Some(filter) = filter {
-            where_clause.push_str(" WHERE ");
-            where_clause.push_str(&filter.to_string());
-        }
-
-        return format!("SELECT * FROM {}{}", table_name, where_clause);
+        let query = Query::Select{filter: filter, table: table_name};
+        return query.to_sql();
     }
 
     unreachable!();
-}
-
-fn binop_to_operator(binop: BinOp_) -> Operator {
-    match binop {
-        BinOp_::BiAdd => unimplemented!(),
-        BinOp_::BiSub => unimplemented!(),
-        BinOp_::BiMul => unimplemented!(),
-        BinOp_::BiDiv => unimplemented!(),
-        BinOp_::BiRem => unimplemented!(),
-        BinOp_::BiAnd => Operator::And,
-        BinOp_::BiOr => Operator::Or,
-        BinOp_::BiBitXor => unimplemented!(),
-        BinOp_::BiBitAnd => unimplemented!(),
-        BinOp_::BiBitOr => unimplemented!(),
-        BinOp_::BiShl => unimplemented!(),
-        BinOp_::BiShr => unimplemented!(),
-        BinOp_::BiEq => Operator::Eq,
-        BinOp_::BiLt => Operator::Lt,
-        BinOp_::BiLe => Operator::Le,
-        BinOp_::BiNe => Operator::Ne,
-        BinOp_::BiGe => Operator::Ge,
-        BinOp_::BiGt => Operator::Gt,
-    }
-}
-
-fn arg_to_filter(arg: &P<Expr>, cx: &mut ExtCtxt) -> Filter {
-    let (operator, identifier, value) =
-        match arg.node {
-            ExprBinary(Spanned { node: op, .. }, ref expr1, ref expr2) => {
-                match expr1.node {
-                    ExprPath(None, ref path) => {
-                        let identifier = path.segments[0].identifier.to_string();
-                        (binop_to_operator(op), identifier, expr2)
-                    },
-                    _ => unreachable!()
-                }
-            },
-            _ => {
-                cx.span_err(arg.span, &format!("Expected binary operation"));
-                unreachable!();
-            },
-        };
-
-    Filter {
-        identifier: identifier,
-        operator: operator,
-        value: value.clone(),
-    }
 }
 
 fn expand_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult + 'static> {
@@ -163,7 +76,7 @@ fn expand_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult +
             let sql = match method_name.as_ref() {
                 "collect" => expand_select(cx, this, None),
                 "filter" => {
-                    let filter = arg_to_filter(&arguments[0], cx);
+                    let filter = expression_to_filter(&arguments[0], cx);
                     expand_select(cx, this, Some(filter))
                 },
                 _ => {
@@ -183,7 +96,7 @@ fn expand_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult +
     DummyResult::any(sp)
 }
 
-fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, meta_item: &MetaItem, item: &Annotatable, push: &mut FnMut(Annotatable)) {
+fn expand_sql_table(_: &mut ExtCtxt, _: Span, _: &MetaItem, item: &Annotatable, _: &mut FnMut(Annotatable)) {
     // Add to sql_tables.
     let mut sql_tables = singleton();
 
@@ -195,8 +108,6 @@ fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, meta_item: &MetaItem, item: &Ann
 
 #[plugin_registrar]
 pub fn plugin_registrar(reg: &mut Registry) {
-
     reg.register_macro("sql", expand_sql);
-
     reg.register_syntax_extension(intern("sql_table"), MultiDecorator(Box::new(expand_sql_table)));
 }
