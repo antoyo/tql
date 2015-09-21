@@ -17,9 +17,9 @@
 | <pre>DELETE FROM Table WHERE id = 1</pre> | <pre>Table.get(1).delete();<br/>// ou<br/>Table.filter(id == 1).delete()</pre> |
 | <pre>SELECT AVG(field2) FROM Table</pre> | <pre>Table.aggregate(avg(field2))</pre> |
 | <pre>SELECT AVG(field1) FROM Table1 GROUP BY field2</pre> | <pre>Table1.values(field2).annotate(avg(field1))</pre> |
-| <pre>SELECT AVG(field1) as average FROM Table1 GROUP BY field2 HAVING average > 5</pre> | <pre>Table1.values(field2).annotate(average = avg(field1)).filter(average > 5)</pre> |
-| <pre>SELECT AVG(field1) as average FROM Table1 WHERE field1 < 10 GROUP BY field2 HAVING average > 5</pre> | <pre>Table1.filter(field1 < 10).values(field2).annotate(average = avg(field1)).filter(average > 5)</pre> |
-| <pre>SELECT Table1.field1, Table2.field1 FROM Table1 INNER JOIN Table2 ON Table1.pk = Table2.fk</pre> | <pre>#[sql_table]<br/>struct Table1 {<br/>    pk: db::PrimaryKey,<br/>    field1: i32,<br/>}<br/>#[sql_table]<br/>struct Table2 {<br/>    field1: i32,<br/>    fk: db::ForeignKey<Table1>,<br/>}<br/>Table1.all().join(Table2)</pre> |
+| <pre>SELECT AVG(field1) as average FROM Table1<br/>GROUP BY field2<br/>HAVING average > 5</pre> | <pre>Table1.values(field2).annotate(average = avg(field1)).filter(average > 5)</pre> |
+| <pre>SELECT AVG(field1) as average FROM Table1<br/>WHERE field1 < 10<br/>GROUP BY field2<br/>HAVING average > 5</pre> | <pre>Table1.filter(field1 < 10).values(field2).annotate(average = avg(field1)).filter(average > 5)</pre> |
+| <pre>SELECT Table1.field1, Table2.field1 FROM Table1<br/>INNER JOIN Table2 ON Table1.pk = Table2.fk</pre> | <pre>#[sql_table]<br/>struct Table1 {<br/>    pk: db::PrimaryKey,<br/>    field1: i32,<br/>}<br/>#[sql_table]<br/>struct Table2 {<br/>    field1: i32,<br/>    fk: db::ForeignKey<Table1>,<br/>}<br/>Table1.all().join(Table2)</pre> |
 | <pre>SELECT * FROM Table1 WHERE YEAR(date) = 2015</pre> | <pre>Table1.filter(date.year() == 2015)</pre> |
 | <pre>SELECT * FROM Table1 WHERE INSTR(field1, 'string') > 0</pre> | <pre>Table1.filter(field1.contains("string"))</pre> |
 | <pre>SELECT * FROM Table1 WHERE field1 in (1, 2, 3)</pre> | <pre>Table1.filter([1, 2, 3].contains(field1))</pre> |
