@@ -1,11 +1,11 @@
 | SQL                   | Rust                      |
 |:----------------------|:--------------------------|
-| ```sql SELECT * FROM Table``` | `Table.all()` |
+| <pre lang="sql">SELECT * FROM Table</pre> | <pre lang="rust">Table.all()</pre> |
 | SELECT field1 FROM Table | Table.only(field1) |
 | SELECT field1 FROM Table | Table.defer(pk) // Exclusion de champs. |
 | SELECT * FROM Table WHERE field1 = "value1" | Table.filter(field1 == "value1") |
 | SELECT * FROM Table WHERE primary_key = 42 | <code>Table.get(42)<br/>// Raccourci pour :<br/>Table.filter(primary_key == 42)[0..1];</code> |
-| SELECT * FROM Table WHERE primary_key = 42 | <code>Table.get(field1 == "value1")<br/>// Raccourci pour :<br/>Table.filter(primary_key == 42)[0..1];</code> |
+| SELECT * FROM Table WHERE field1 = 'value1' | <code>Table.get(field1 == "value1")<br/>// Raccourci pour :<br/>Table.filter(field1 == "value1")[0..1];</code> |
 | SELECT * FROM Table WHERE field1 = "value1 AND field2 < 100 | Table.filter(field1 == "value1" && field2 < 100) |
 | SELECT * FROM Table WHERE field1 = "value1 OR field2 < 100 | Table.filter(field1 == "value1" || field2 < 100) |
 | SELECT * FROM Table ORDER BY field1 | Table.sort(field1) |
@@ -27,6 +27,6 @@
 | SELECT * FROM Table1 WHERE field1 LIKE '%string' | Table1.filter(field1.ends_with("string")) |
 | SELECT * FROM Table1 WHERE field1 BETWEEN 1 AND 5 | Table1.filter(field1 in 1..6) |
 | SELECT * FROM Table1 WHERE field1 IS NULL | Table1.filter(field1.is_none()) |
-| SELECT * FROM Table1 WHERE field1 REGEXP BINARY '^[a-d]' | Table1.filter(r"^[a-d]".is_match(field1)) |
+| SELECT * FROM Table1 WHERE field1 REGEXP BINARY '\^[a-d]' | Table1.filter(r"^[a-d]".is_match(field1)) |
 | SELECT * FROM Table1 WHERE field1 REGEXP '^[a-d]' | Table1.filter(r"^[a-d]".is_match(field1, db::CaseInsensitive)) |
 | <code>CREATE TABLE IF NOT EXISTS Table1 (<br/>    pk INTEGER NOT NULL AUTO_INCREMENT,<br/>    field1 INTEGER,<br/>    PRIMARY KEY (pk)<br/>)</code> | <code>#[sql_table]<br/>struct Table1 {<br/>    pk: db::PrimaryKey,<br/>    field1: i32,<br/>}<br/>Table1.create()</code |
