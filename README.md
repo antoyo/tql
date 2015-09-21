@@ -11,14 +11,14 @@
 | <pre>SELECT * FROM Table ORDER BY field1</pre> | <pre>Table.sort(field1)</pre> |
 | <pre>SELECT * FROM Table ORDER BY field1 DESC</pre> | <pre>Table.sort(-field1)</pre> |
 | <pre>SELECT * FROM Table LIMIT 0, 20</pre> | <pre>Table[0..20]</pre> |
-| <pre>SELECT * FROM Table<br/>WHERE field1 = "value1"<br/>    AND field2 < 100<br/>ORDER BY field2 DESC<br/>LIMIT 10, 20</pre> | <pre>Table.filter(field1 == "value1" && field2 < 100).sort(-field2)[10..20]</pre> |
+| <pre>SELECT * FROM Table<br/>WHERE field1 = "value1"<br/>    AND field2 < 100<br/>ORDER BY field2 DESC<br/>LIMIT 10, 20</pre> | <pre>Table.filter(field1 == "value1" && field2 < 100)<br/>    .sort(-field2)[10..20]</pre> |
 | <pre>INSERT INTO Table(field1, field2) VALUES("value1", 55)</pre> | let table = <pre>Table {<br/>    field1: "value1",<br/>    field2: 55,<br/>};<br/> table.insert()</pre> |
 | <pre>UPDATE Table SET field1 = "value1", field2 = 55 WHERE id = 1</pre> | <pre>Table.get(1).update(field1 = "value1", field2 = 55);<br/>// ou<br/>Table.filter(id == 1).update(field1 = "value1", field2 = 55);<br/>// ou<br/>let table = Table.get(1);<br/>table.field1 = "value1";<br/>table.field2 = 55;<br/>table.update();</pre> |
 | <pre>DELETE FROM Table WHERE id = 1</pre> | <pre>Table.get(1).delete();<br/>// ou<br/>Table.filter(id == 1).delete()</pre> |
 | <pre>SELECT AVG(field2) FROM Table</pre> | <pre>Table.aggregate(avg(field2))</pre> |
 | <pre>SELECT AVG(field1) FROM Table1 GROUP BY field2</pre> | <pre>Table1.values(field2).annotate(avg(field1))</pre> |
-| <pre>SELECT AVG(field1) as average FROM Table1<br/>GROUP BY field2<br/>HAVING average > 5</pre> | <pre>Table1.values(field2).annotate(average = avg(field1)).filter(average > 5)</pre> |
-| <pre>SELECT AVG(field1) as average FROM Table1<br/>WHERE field1 < 10<br/>GROUP BY field2<br/>HAVING average > 5</pre> | <pre>Table1.filter(field1 < 10).values(field2).annotate(average = avg(field1)).filter(average > 5)</pre> |
+| <pre>SELECT AVG(field1) as average FROM Table1<br/>GROUP BY field2<br/>HAVING average > 5</pre> | <pre>Table1.values(field2).annotate(average = avg(field1))<br/>    .filter(average > 5)</pre> |
+| <pre>SELECT AVG(field1) as average FROM Table1<br/>WHERE field1 < 10<br/>GROUP BY field2<br/>HAVING average > 5</pre> | <pre>Table1.filter(field1 < 10).values(field2)<br/>    .annotate(average = avg(field1)).filter(average > 5)</pre> |
 | <pre>SELECT Table1.field1, Table2.field1 FROM Table1<br/>INNER JOIN Table2 ON Table1.pk = Table2.fk</pre> | <pre>#[sql_table]<br/>struct Table1 {<br/>    pk: db::PrimaryKey,<br/>    field1: i32,<br/>}<br/>#[sql_table]<br/>struct Table2 {<br/>    field1: i32,<br/>    fk: db::ForeignKey<Table1>,<br/>}<br/>Table1.all().join(Table2)</pre> |
 | <pre>SELECT * FROM Table1 WHERE YEAR(date) = 2015</pre> | <pre>Table1.filter(date.year() == 2015)</pre> |
 | <pre>SELECT * FROM Table1 WHERE INSTR(field1, 'string') > 0</pre> | <pre>Table1.filter(field1.contains("string"))</pre> |
