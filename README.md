@@ -11,7 +11,7 @@
 | <pre>SELECT * FROM Table ORDER BY field1</pre> | <pre>Table.sort(field1)</pre> |
 | <pre>SELECT * FROM Table ORDER BY field1 DESC</pre> | <pre>Table.sort(-field1)</pre> |
 | <pre>SELECT * FROM Table LIMIT 0, 20</pre> | <pre>Table[0..20]</pre> |
-| <pre>SELECT * FROM Table WHERE field1 = "value1" AND field2 < 100 ORDER BY field2 DESC LIMIT 10, 20</pre> | <pre>Table.filter(field1 == "value1" && field2 < 100).sort(-field2)[10..20]</pre> |
+| <pre>SELECT * FROM Table<br/>WHERE field1 = "value1"<br/>    AND field2 < 100<br/>ORDER BY field2 DESC<br/>LIMIT 10, 20</pre> | <pre>Table.filter(field1 == "value1" && field2 < 100).sort(-field2)[10..20]</pre> |
 | <pre>INSERT INTO Table(field1, field2) VALUES("value1", 55)</pre> | let table = <pre>Table {<br/>    field1: "value1",<br/>    field2: 55,<br/>};<br/> table.insert()</pre> |
 | <pre>UPDATE Table SET field1 = "value1", field2 = 55 WHERE id = 1</pre> | <pre>Table.get(1).update(field1 = "value1", field2 = 55);<br/>// ou<br/>Table.filter(id == 1).update(field1 = "value1", field2 = 55);<br/>// ou<br/>let table = Table.get(1);<br/>table.field1 = "value1";<br/>table.field2 = 55;<br/>table.update();</pre> |
 | <pre>DELETE FROM Table WHERE id = 1</pre> | <pre>Table.get(1).delete();<br/>// ou<br/>Table.filter(id == 1).delete()</pre> |
