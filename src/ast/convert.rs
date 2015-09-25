@@ -6,34 +6,58 @@ use syntax::codemap::Spanned;
 use syntax::ext::base::ExtCtxt;
 use syntax::ptr::P;
 
-use super::{Filter, Operator};
+use super::{Filter, FilterExpression, LogicalOperator, RelationalOperator};
 
-/// Convert a `BinOp_` to an SQL `Operator`.
-pub fn binop_to_operator(binop: BinOp_) -> Operator {
+/// Convert a `BinOp_` to an SQL `LogicalOperator`.
+pub fn binop_to_logical_operator(binop: BinOp_) -> LogicalOperator {
     match binop {
-        BinOp_::BiAdd => unimplemented!(),
-        BinOp_::BiSub => unimplemented!(),
-        BinOp_::BiMul => unimplemented!(),
-        BinOp_::BiDiv => unimplemented!(),
-        BinOp_::BiRem => unimplemented!(),
-        BinOp_::BiAnd => Operator::And,
-        BinOp_::BiOr => Operator::Or,
-        BinOp_::BiBitXor => unimplemented!(),
-        BinOp_::BiBitAnd => unimplemented!(),
-        BinOp_::BiBitOr => unimplemented!(),
-        BinOp_::BiShl => unimplemented!(),
-        BinOp_::BiShr => unimplemented!(),
-        BinOp_::BiEq => Operator::Equal,
-        BinOp_::BiLt => Operator::LesserThan,
-        BinOp_::BiLe => Operator::LesserThanEqual,
-        BinOp_::BiNe => Operator::NotEqual,
-        BinOp_::BiGe => Operator::GreaterThan,
-        BinOp_::BiGt => Operator::GreaterThanEqual,
+        BinOp_::BiAdd => unreachable!(),
+        BinOp_::BiSub => unreachable!(),
+        BinOp_::BiMul => unreachable!(),
+        BinOp_::BiDiv => unreachable!(),
+        BinOp_::BiRem => unreachable!(),
+        BinOp_::BiAnd => LogicalOperator::And,
+        BinOp_::BiOr => LogicalOperator::Or,
+        BinOp_::BiBitXor => unreachable!(),
+        BinOp_::BiBitAnd => unreachable!(),
+        BinOp_::BiBitOr => unreachable!(),
+        BinOp_::BiShl => unreachable!(),
+        BinOp_::BiShr => unreachable!(),
+        BinOp_::BiEq => unreachable!(),
+        BinOp_::BiLt => unreachable!(),
+        BinOp_::BiLe => unreachable!(),
+        BinOp_::BiNe => unreachable!(),
+        BinOp_::BiGe => unreachable!(),
+        BinOp_::BiGt => unreachable!(),
     }
 }
 
-/// Convert a Rust expression to a `Filter`.
-pub fn expression_to_filter(arg: &P<Expr>, cx: &mut ExtCtxt) -> Filter {
+/// Convert a `BinOp_` to an SQL `RelationalOperator`.
+pub fn binop_to_relational_operator(binop: BinOp_) -> RelationalOperator {
+    match binop {
+        BinOp_::BiAdd => unreachable!(),
+        BinOp_::BiSub => unreachable!(),
+        BinOp_::BiMul => unreachable!(),
+        BinOp_::BiDiv => unreachable!(),
+        BinOp_::BiRem => unreachable!(),
+        BinOp_::BiAnd => unreachable!(),
+        BinOp_::BiOr => unreachable!(),
+        BinOp_::BiBitXor => unreachable!(),
+        BinOp_::BiBitAnd => unreachable!(),
+        BinOp_::BiBitOr => unreachable!(),
+        BinOp_::BiShl => unreachable!(),
+        BinOp_::BiShr => unreachable!(),
+        BinOp_::BiEq => RelationalOperator::Equal,
+        BinOp_::BiLt => RelationalOperator::LesserThan,
+        BinOp_::BiLe => RelationalOperator::LesserThanEqual,
+        BinOp_::BiNe => RelationalOperator::NotEqual,
+        BinOp_::BiGe => RelationalOperator::GreaterThan,
+        BinOp_::BiGt => RelationalOperator::GreaterThanEqual,
+    }
+}
+
+/// Convert a Rust expression to a `FilterExpression`.
+pub fn expression_to_filter_expression(arg: &P<Expr>, cx: &mut ExtCtxt) -> FilterExpression {
     let (binop, identifier, value) =
         match arg.node {
             ExprBinary(Spanned { node: op, .. }, ref expr1, ref expr2) => {
@@ -51,9 +75,9 @@ pub fn expression_to_filter(arg: &P<Expr>, cx: &mut ExtCtxt) -> Filter {
             },
         };
 
-    Filter {
+    FilterExpression::Filter(Filter {
         operand1: identifier,
-        operator: binop_to_operator(binop),
+        operator: binop_to_relational_operator(binop),
         operand2: value.clone(),
-    }
+    })
 }

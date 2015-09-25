@@ -1,6 +1,5 @@
 #![feature(plugin_registrar, rustc_private, slice_patterns)]
 
-// TODO: permettre de spécifier les champs manuellement pour un SELECT.
 // TODO: supporter plusieurs SGBDs.
 // TODO: faire des benchmarks.
 // TODO: créer une macro qui permet de choisir le SGBD. Donner un paramètre optionel à cette macro
@@ -26,8 +25,8 @@ use std::mem;
 pub mod ast;
 pub mod gen;
 
-use ast::{Filter, Query};
-use ast::convert::expression_to_filter;
+use ast::{Fields, FilterExpression, Query};
+use ast::convert::expression_to_filter_expression;
 use gen::ToSql;
 
 type SqlTables = HashSet<String>;
@@ -45,7 +44,7 @@ fn singleton() -> &'static mut SqlTables {
     }
 }
 
-fn expand_select(cx: &mut ExtCtxt, expr: Expr_, filter: Option<Filter>) -> String {
+fn expand_select(cx: &mut ExtCtxt, expr: Expr_, filter_expression: FilterExpression) -> String {
     if let ExprPath(None, path) = expr {
         let table_name = path.segments[0].identifier.to_string();
 
@@ -54,7 +53,18 @@ fn expand_select(cx: &mut ExtCtxt, expr: Expr_, filter: Option<Filter>) -> Strin
             cx.span_err(path.span, &format!("Table `{}` does not exist", table_name));
         }
 
-        let query = Query::Select{filter: filter, table: table_name};
+        let joins = vec![];
+        let limit = None;
+        let order = vec![];
+
+        let query = Query::Select {
+            fields: Fields::All,
+            filter: filter_expression,
+            joins: &joins,
+            limit: limit,
+            order: &order,
+            table: table_name
+        };
         return query.to_sql();
     }
 
@@ -74,10 +84,10 @@ fn expand_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult +
             let mut arguments = arguments.clone();
             arguments.remove(0);
             let sql = match method_name.as_ref() {
-                "collect" => expand_select(cx, this, None),
+                "collect" => expand_select(cx, this, FilterExpression::NoFilters),
                 "filter" => {
-                    let filter = expression_to_filter(&arguments[0], cx);
-                    expand_select(cx, this, Some(filter))
+                    let filter = expression_to_filter_expression(&arguments[0], cx);
+                    expand_select(cx, this, filter)
                 },
                 _ => {
                     cx.span_err(method_span, &format!("Unknown method {}", method_name));

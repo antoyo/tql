@@ -1,7 +1,16 @@
-use ast::{Expression, Filter, Identifier, Operator, Query};
+use ast::{Expression, Fields, Filter, FilterExpression, Identifier, LogicalOperator, RelationalOperator, Query};
 
 pub trait ToSql {
     fn to_sql(&self) -> String;
+}
+
+impl<'a> ToSql for Fields<'a> {
+    fn to_sql(&self) -> String {
+        match *self {
+            Fields::All => "*".to_string(),
+            _ => unimplemented!(),
+        }
+    }
 }
 
 impl ToSql for Filter {
@@ -10,34 +19,44 @@ impl ToSql for Filter {
     }
 }
 
-impl ToSql for Operator {
+impl ToSql for LogicalOperator {
     fn to_sql(&self) -> String {
         match *self {
-            Operator::And => "AND".to_string(),
-            Operator::Or => "OR".to_string(),
-            Operator::Equal => "=".to_string(),
-            Operator::LesserThan => "<".to_string(),
-            Operator::LesserThanEqual => "<=".to_string(),
-            Operator::NotEqual => "<>".to_string(),
-            Operator::GreaterThan => ">=".to_string(),
-            Operator::GreaterThanEqual => ">".to_string(),
+            LogicalOperator::And => "AND".to_string(),
+            LogicalOperator::Not => "NOT".to_string(),
+            LogicalOperator::Or => "OR".to_string(),
         }
     }
 }
 
-impl ToSql for Query {
+impl ToSql for RelationalOperator {
     fn to_sql(&self) -> String {
         match *self {
-            Query::CreateTable => "".to_string(),
-            Query::Delete => "".to_string(),
-            Query::Insert => "".to_string(),
-            Query::Select{ref filter, ref table} => {
+            RelationalOperator::Equal => "=".to_string(),
+            RelationalOperator::LesserThan => "<".to_string(),
+            RelationalOperator::LesserThanEqual => "<=".to_string(),
+            RelationalOperator::NotEqual => "<>".to_string(),
+            RelationalOperator::GreaterThan => ">=".to_string(),
+            RelationalOperator::GreaterThanEqual => ">".to_string(),
+        }
+    }
+}
+
+impl<'a> ToSql for Query<'a> {
+    fn to_sql(&self) -> String {
+        match *self {
+            Query::CreateTable { .. } => "".to_string(), // TODO
+            Query::Delete { .. } => "".to_string(), // TODO
+            Query::Insert { .. } => "".to_string(), // TODO
+            Query::Select{ref fields, ref filter, ref joins, ref limit, ref order, ref table} => {
+                let fields_sql = fields.to_sql();
                 match filter {
-                    &Some(ref filter) => format!("SELECT * FROM {} {}", table, filter.to_sql()),
-                    &None => format!("SELECT * FROM {}", table),
+                    &FilterExpression::Filters(_) => unimplemented!(),
+                    &FilterExpression::Filter(ref filter) => format!("SELECT {} FROM {} {}", fields_sql, table, filter.to_sql()),
+                    &FilterExpression::NoFilters => format!("SELECT {} FROM {}", fields_sql, table),
                 }
             },
-            Query::Update => "".to_string(),
+            Query::Update { .. } => "".to_string(), // TODO
         }
     }
 }
