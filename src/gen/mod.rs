@@ -1,4 +1,4 @@
-use ast::{Expression, Fields, Filter, FilterExpression, Identifier, LogicalOperator, RelationalOperator, Query};
+use ast::{Expression, Fields, Filter, Filters, FilterExpression, Identifier, LogicalOperator, RelationalOperator, Query};
 
 pub trait ToSql {
     fn to_sql(&self) -> String;
@@ -14,6 +14,22 @@ impl<'a> ToSql for Fields<'a> {
 }
 
 impl ToSql for Filter {
+    fn to_sql(&self) -> String {
+        self.operand1.to_sql() + " " + &self.operator.to_sql() + " " + &self.operand2.to_sql()
+    }
+}
+
+impl ToSql for FilterExpression {
+    fn to_sql(&self) -> String {
+        match *self {
+            FilterExpression::Filter(ref filter) => filter.to_sql(),
+            FilterExpression::Filters(ref filters) => filters.to_sql(),
+            FilterExpression::NoFilters => "".to_string(),
+        }
+    }
+}
+
+impl ToSql for Filters {
     fn to_sql(&self) -> String {
         self.operand1.to_sql() + " " + &self.operator.to_sql() + " " + &self.operand2.to_sql()
     }
@@ -51,8 +67,8 @@ impl<'a> ToSql for Query<'a> {
             Query::Select{ref fields, ref filter, ref joins, ref limit, ref order, ref table} => {
                 let fields_sql = fields.to_sql();
                 match filter {
-                    &FilterExpression::Filters(_) => unimplemented!(),
-                    &FilterExpression::Filter(ref filter) => format!("SELECT {} FROM {} {}", fields_sql, table, filter.to_sql()),
+                    &FilterExpression::Filters(ref filters) => format!("SELECT {} FROM {} WHERE {}", fields_sql, table, filters.to_sql()),
+                    &FilterExpression::Filter(ref filter) => format!("SELECT {} FROM {} WHERE {}", fields_sql, table, filter.to_sql()),
                     &FilterExpression::NoFilters => format!("SELECT {} FROM {}", fields_sql, table),
                 }
             },

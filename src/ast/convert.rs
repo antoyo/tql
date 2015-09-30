@@ -5,7 +5,7 @@ use syntax::ast::Expr_::{ExprBinary, ExprPath};
 use syntax::codemap::Spanned;
 use syntax::ptr::P;
 
-use super::{Filter, FilterExpression, LogicalOperator, RelationalOperator};
+use super::{Filter, FilterExpression, Filters, LogicalOperator, RelationalOperator};
 use error::{Error, SqlResult, res};
 
 /// Convert a `BinOp_` to an SQL `LogicalOperator`.
@@ -59,31 +59,45 @@ pub fn binop_to_relational_operator(binop: BinOp_) -> RelationalOperator {
 /// Convert a Rust expression to a `FilterExpression`.
 pub fn expression_to_filter_expression(arg: &P<Expr>) -> SqlResult<FilterExpression> {
     let mut errors = vec![];
-    let dummy = (BinOp_::BiEq, "".to_string(), arg);
-    let (binop, identifier, value) =
+    let dummy = FilterExpression::NoFilters;
+    let filter =
         match arg.node {
-            ExprBinary(Spanned { node: op, .. }, ref expr1, ref expr2) => {
+            ExprBinary(Spanned { node: op, span }, ref expr1, ref expr2) => {
                 match expr1.node {
                     ExprPath(None, ref path) => {
                         let identifier = path.segments[0].identifier.to_string();
-                        (op, identifier, expr2)
-                    },
-                    _ => dummy
+                        FilterExpression::Filter(Filter {
+                            operand1: identifier,
+                            operator: binop_to_relational_operator(op),
+                            operand2: expr2.clone(),
+                        })
+                    }
+                    ExprBinary(_, _, _) => {
+                        let filter1 = try!(expression_to_filter_expression(expr1));
+                        let filter2 = try!(expression_to_filter_expression(expr2));
+                        FilterExpression::Filters(Filters {
+                            operand1: Box::new(filter1),
+                            operator: binop_to_logical_operator(op),
+                            operand2: Box::new(filter2),
+                        })
+                    }
+                    _ => {
+                        errors.push(Error::new(
+                            format!("Expected && or ||"),
+                            span,
+                        ));
+                        dummy
+                    }
                 }
-            },
+            }
             _ => {
                 errors.push(Error::new(
                     format!("Expected binary operation"),
                     arg.span,
                 ));
                 dummy
-            },
+            }
         };
 
-    let filter = FilterExpression::Filter(Filter {
-        operand1: identifier,
-        operator: binop_to_relational_operator(binop),
-        operand2: value.clone(),
-    });
     res(filter, errors)
 }
