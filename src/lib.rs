@@ -12,10 +12,6 @@
 extern crate rustc;
 extern crate syntax;
 
-use std::collections::HashSet;
-use std::mem;
-use std::result::Result::{Err, Ok};
-
 use rustc::plugin::Registry;
 use syntax::ast::{MetaItem, TokenTree};
 use syntax::codemap::Span;
@@ -28,22 +24,11 @@ pub mod ast;
 pub mod convert;
 pub mod error;
 pub mod gen;
+pub mod state;
 
-use convert::{SqlTables, expression_to_sql};
+use convert::expression_to_sql;
 use error::Error;
-
-// FIXME: make this thread safe.
-fn singleton() -> &'static mut SqlTables {
-    static mut hash_map: *mut SqlTables = 0 as *mut SqlTables;
-
-    let map: SqlTables = HashSet::new();
-    unsafe {
-        if hash_map == 0 as *mut SqlTables {
-            hash_map = mem::transmute(Box::new(map));
-        }
-        &mut *hash_map
-    }
-}
+use state::singleton;
 
 fn expand_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult + 'static> {
     let mut parser = cx.new_parser_from_tts(args);

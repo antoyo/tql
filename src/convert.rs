@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use syntax::ast::Expr;
 use syntax::ast::Expr_::{ExprMethodCall, ExprPath};
 use syntax::codemap::{Span, Spanned};
@@ -10,9 +8,7 @@ use ast::convert::expression_to_filter_expression;
 use gen::ToSql;
 
 use error::{Error, SqlResult, res};
-
-// TODO: mettre ce type dans lib.rs.
-pub type SqlTables = HashSet<String>;
+use state::SqlTables;
 
 #[derive(Debug)]
 pub struct MethodCall<'a> {
