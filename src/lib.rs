@@ -14,20 +14,23 @@ extern crate syntax;
 
 use std::collections::HashSet;
 use std::mem;
+use std::result::Result::{Err, Ok};
 
 use rustc::plugin::Registry;
 use syntax::ast::{MetaItem, TokenTree};
 use syntax::codemap::Span;
-use syntax::ext::base::{Annotatable, ExtCtxt, MacEager, MacResult};
+use syntax::ext::base::{Annotatable, DummyResult, ExtCtxt, MacEager, MacResult};
 use syntax::ext::base::SyntaxExtension::MultiDecorator;
 use syntax::ext::build::AstBuilder;
 use syntax::parse::token::{InternedString, intern};
 
 pub mod ast;
 pub mod convert;
+pub mod error;
 pub mod gen;
 
 use convert::{SqlTables, expression_to_sql};
+use error::Error;
 
 // FIXME: make this thread safe.
 fn singleton() -> &'static mut SqlTables {
@@ -46,9 +49,19 @@ fn expand_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult +
     let mut parser = cx.new_parser_from_tts(args);
     let expression = (*parser.parse_expr()).clone();
     let sql_tables = singleton();
-    let sql = expression_to_sql(cx, &expression, sql_tables);
-    let string_literal = intern(&sql);
-    MacEager::expr(cx.expr_str(sp, InternedString::new_from_name(string_literal)))
+    let sql_result = expression_to_sql(&expression, sql_tables);
+    match sql_result {
+        Ok(sql) => {
+            let string_literal = intern(&sql);
+            MacEager::expr(cx.expr_str(sp, InternedString::new_from_name(string_literal)))
+        }
+        Err(errors) => {
+            for &Error {ref message, position} in &errors {
+                cx.span_err(position, &message);
+            }
+            DummyResult::any(sp)
+        }
+    }
 }
 
 fn expand_sql_table(_: &mut ExtCtxt, _: Span, _: &MetaItem, item: &Annotatable, _: &mut FnMut(Annotatable)) {
@@ -59,6 +72,7 @@ fn expand_sql_table(_: &mut ExtCtxt, _: Span, _: &MetaItem, item: &Annotatable, 
         let table_name = item.ident.to_string();
         sql_tables.insert(table_name);
     }
+    // TODO: erreur si ce n’est pas une struct.
 }
 
 #[plugin_registrar]

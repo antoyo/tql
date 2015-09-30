@@ -3,10 +3,10 @@
 use syntax::ast::{BinOp_, Expr};
 use syntax::ast::Expr_::{ExprBinary, ExprPath};
 use syntax::codemap::Spanned;
-use syntax::ext::base::ExtCtxt;
 use syntax::ptr::P;
 
 use super::{Filter, FilterExpression, LogicalOperator, RelationalOperator};
+use error::{Error, SqlResult, res};
 
 /// Convert a `BinOp_` to an SQL `LogicalOperator`.
 pub fn binop_to_logical_operator(binop: BinOp_) -> LogicalOperator {
@@ -57,7 +57,9 @@ pub fn binop_to_relational_operator(binop: BinOp_) -> RelationalOperator {
 }
 
 /// Convert a Rust expression to a `FilterExpression`.
-pub fn expression_to_filter_expression(arg: &P<Expr>, cx: &mut ExtCtxt) -> FilterExpression {
+pub fn expression_to_filter_expression(arg: &P<Expr>) -> SqlResult<FilterExpression> {
+    let mut errors = vec![];
+    let dummy = (BinOp_::BiEq, "".to_string(), arg);
     let (binop, identifier, value) =
         match arg.node {
             ExprBinary(Spanned { node: op, .. }, ref expr1, ref expr2) => {
@@ -66,18 +68,22 @@ pub fn expression_to_filter_expression(arg: &P<Expr>, cx: &mut ExtCtxt) -> Filte
                         let identifier = path.segments[0].identifier.to_string();
                         (op, identifier, expr2)
                     },
-                    _ => unreachable!()
+                    _ => dummy
                 }
             },
             _ => {
-                cx.span_err(arg.span, &format!("Expected binary operation"));
-                unreachable!();
+                errors.push(Error::new(
+                    format!("Expected binary operation"),
+                    arg.span,
+                ));
+                dummy
             },
         };
 
-    FilterExpression::Filter(Filter {
+    let filter = FilterExpression::Filter(Filter {
         operand1: identifier,
         operator: binop_to_relational_operator(binop),
         operand2: value.clone(),
-    })
+    });
+    res(filter, errors)
 }
