@@ -4,24 +4,24 @@ use syntax::codemap::{Span, Spanned};
 use syntax::ptr::P;
 
 use ast::{Fields, FilterExpression, Query};
-use ast::convert::expression_to_filter_expression;
+use ast::convert::{arguments_to_orders, expression_to_filter_expression};
 use gen::ToSql;
 
 use error::{Error, SqlResult, res};
 use state::SqlTables;
 
 #[derive(Debug)]
-pub struct MethodCall<'a> {
-    pub arguments: &'a [P<Expr>],
-    pub name: String,
-    pub position: Span,
+struct MethodCall<'a> {
+    arguments: &'a [P<Expr>],
+    name: String,
+    position: Span,
 }
 
 #[derive(Debug)]
-pub struct MethodCalls<'a> {
-    pub calls: Vec<MethodCall<'a>>,
-    pub name: String,
-    pub position: Span,
+struct MethodCalls<'a> {
+    calls: Vec<MethodCall<'a>>,
+    name: String,
+    position: Span,
 }
 
 impl<'a> MethodCalls<'a> {
@@ -31,35 +31,39 @@ impl<'a> MethodCalls<'a> {
 }
 
 fn method_calls_to_sql(method_calls: &MethodCalls, sql_tables: &SqlTables) -> SqlResult<String> {
-    // TODO: prendre en compte tous les éléments du vecteur.
-    let method_call = &method_calls.calls[0];
+    // TODO: vérifier que la suite d’appels de méthode est valide.
     let mut errors = vec![];
 
-    if !sql_tables.contains(&method_calls.name) {
-        errors.push(Error::new(
-            format!("Table `{}` does not exist", method_calls.name),
-            method_calls.position,
-        ));
-    }
+    let mut filter_expression = FilterExpression::NoFilters;
+    let mut order = vec![];
 
-    let filter_expression = match &method_call.name[..] {
-        "collect" => FilterExpression::NoFilters,
-        "filter" => {
-            try!(expression_to_filter_expression(&method_call.arguments[0]))
-        },
-        _ => {
+    for method_call in &method_calls.calls {
+        if !sql_tables.contains(&method_calls.name) {
             errors.push(Error::new(
-                format!("Unknown method {}", method_call.name),
-                method_call.position,
+                format!("Table `{}` does not exist", method_calls.name),
+                method_calls.position,
             ));
-            FilterExpression::NoFilters
-        },
-    };
+        }
+
+        match &method_call.name[..] {
+            "collect" => (), // TODO
+            "filter" => {
+                filter_expression = try!(expression_to_filter_expression(&method_call.arguments[0]));
+            }
+            "sort" => {
+                order = try!(arguments_to_orders(method_call.arguments));
+            }
+            _ => {
+                errors.push(Error::new(
+                    format!("Unknown method {}", method_call.name),
+                    method_call.position,
+                ));
+            }
+        };
+    }
 
     let joins = vec![];
     let limit = None;
-    let order = vec![];
-
     let query = Query::Select {
         fields: Fields::All,
         filter: filter_expression,
@@ -71,6 +75,7 @@ fn method_calls_to_sql(method_calls: &MethodCalls, sql_tables: &SqlTables) -> Sq
     res(query.to_sql(), errors)
 }
 
+/// Convert a Rust expression to SQL.
 pub fn expression_to_sql(expression: &Expr, sql_tables: &SqlTables) -> SqlResult<String> {
     let method_calls = try!(expression_to_vec(&expression));
     method_calls_to_sql(&method_calls, sql_tables)

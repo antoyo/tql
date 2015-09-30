@@ -1,12 +1,68 @@
 //! A module providing functions to convert Rust AST to Sql AST.
 
-use syntax::ast::{BinOp_, Expr};
-use syntax::ast::Expr_::{ExprBinary, ExprPath};
+use syntax::ast::{BinOp_, Expr, Path};
+use syntax::ast::Expr_::{ExprBinary, ExprPath, ExprUnary};
 use syntax::codemap::Spanned;
 use syntax::ptr::P;
 
-use super::{Filter, FilterExpression, Filters, LogicalOperator, RelationalOperator};
+use super::{Filter, FilterExpression, Filters, LogicalOperator, Order, RelationalOperator};
 use error::{Error, SqlResult, res};
+
+fn argument_to_order(arg: &Expr) -> SqlResult<Order> {
+    fn identifier(arg: &Expr, identifier: &Expr) -> SqlResult<String> {
+        if let ExprPath(_, Path { ref segments, .. }) = identifier.node {
+            if segments.len() == 1 {
+                Ok(segments[0].identifier.to_string())
+            }
+            else {
+                Err(vec![Error {
+                    message: "Expected an identifier".to_string(),
+                    position: arg.span,
+                }])
+            }
+        }
+        else {
+            Err(vec![Error {
+                message: "Expected an identifier".to_string(),
+                position: arg.span,
+            }])
+        }
+    }
+
+    let mut errors = vec![];
+    let order =
+        match arg.node {
+            ExprUnary(_op, ref expr) => {
+                // TODO: check if op is -
+                let ident = try!(identifier(arg, expr));
+                Order::Descending(ident)
+            }
+            ExprPath(None, ref path) => {
+                let ident = path.segments[0].identifier.to_string();
+                Order::Ascending(ident)
+            }
+            _ => {
+                errors.push(Error::new(
+                    format!("Expected - or identifier"),
+                    arg.span,
+                ));
+                Order::Ascending("".to_string())
+            }
+        };
+    res(order, errors)
+}
+
+pub fn arguments_to_orders(arguments: &[P<Expr>]) -> SqlResult<Vec<Order>> {
+    let mut orders = vec![];
+
+    for arg in arguments {
+        // TODO: conserver toutes les erreurs au lieu d’arrêter à la première.
+        let order = try!(argument_to_order(arg));
+        orders.push(order);
+    }
+
+    Ok(orders)
+}
 
 /// Convert a `BinOp_` to an SQL `LogicalOperator`.
 pub fn binop_to_logical_operator(binop: BinOp_) -> LogicalOperator {

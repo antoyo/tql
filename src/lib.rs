@@ -2,6 +2,7 @@
 
 // FIXME: unreachable!() fait planter le compilateur.
 // FIXME: enlever les clone() inutiles.
+// TODO: rendre le moins d’identifiants publiques.
 // TODO: supporter plusieurs SGBDs.
 // TODO: faire des benchmarks.
 // TODO: créer une macro qui permet de choisir le SGBD. Donner un paramètre optionel à cette macro
