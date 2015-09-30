@@ -1,5 +1,7 @@
 #![feature(plugin_registrar, rustc_private, slice_patterns)]
 
+// FIXME: unreachable!() fait planter le compilateur.
+// FIXME: enlever les clone() inutiles.
 // TODO: supporter plusieurs SGBDs.
 // TODO: faire des benchmarks.
 // TODO: créer une macro qui permet de choisir le SGBD. Donner un paramètre optionel à cette macro
@@ -10,26 +12,22 @@
 extern crate rustc;
 extern crate syntax;
 
+use std::collections::HashSet;
+use std::mem;
+
 use rustc::plugin::Registry;
-use syntax::ast::{Expr_, MetaItem, TokenTree};
-use syntax::ast::Expr_::{ExprMethodCall, ExprPath};
-use syntax::codemap::{Span, Spanned};
-use syntax::ext::base::{Annotatable, DummyResult, ExtCtxt, MacEager, MacResult};
+use syntax::ast::{MetaItem, TokenTree};
+use syntax::codemap::Span;
+use syntax::ext::base::{Annotatable, ExtCtxt, MacEager, MacResult};
 use syntax::ext::base::SyntaxExtension::MultiDecorator;
 use syntax::ext::build::AstBuilder;
 use syntax::parse::token::{InternedString, intern};
 
-use std::collections::HashSet;
-use std::mem;
-
 pub mod ast;
+pub mod convert;
 pub mod gen;
 
-use ast::{Fields, FilterExpression, Query};
-use ast::convert::expression_to_filter_expression;
-use gen::ToSql;
-
-type SqlTables = HashSet<String>;
+use convert::{SqlTables, expression_to_sql};
 
 // FIXME: make this thread safe.
 fn singleton() -> &'static mut SqlTables {
@@ -44,66 +42,13 @@ fn singleton() -> &'static mut SqlTables {
     }
 }
 
-fn expand_select(cx: &mut ExtCtxt, expr: Expr_, filter_expression: FilterExpression) -> String {
-    if let ExprPath(None, path) = expr {
-        let table_name = path.segments[0].identifier.to_string();
-
-        let sql_tables = singleton();
-        if !sql_tables.contains(&table_name) {
-            cx.span_err(path.span, &format!("Table `{}` does not exist", table_name));
-        }
-
-        let joins = vec![];
-        let limit = None;
-        let order = vec![];
-
-        let query = Query::Select {
-            fields: Fields::All,
-            filter: filter_expression,
-            joins: &joins,
-            limit: limit,
-            order: &order,
-            table: table_name
-        };
-        return query.to_sql();
-    }
-
-    unreachable!();
-}
-
 fn expand_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult + 'static> {
     let mut parser = cx.new_parser_from_tts(args);
-
     let expression = (*parser.parse_expr()).clone();
-
-    match expression.node {
-        ExprMethodCall(Spanned { node: method_name, span: method_span}, _, ref arguments) => {
-            let method_name = method_name.to_string();
-
-            let this = arguments[0].node.clone();
-            let mut arguments = arguments.clone();
-            arguments.remove(0);
-            let sql = match method_name.as_ref() {
-                "collect" => expand_select(cx, this, FilterExpression::NoFilters),
-                "filter" => {
-                    let filter = expression_to_filter_expression(&arguments[0], cx);
-                    expand_select(cx, this, filter)
-                },
-                _ => {
-                    cx.span_err(method_span, &format!("Unknown method {}", method_name));
-                    unreachable!();
-                },
-            };
-
-            let string_literal = intern(&sql);
-            return MacEager::expr(cx.expr_str(sp, InternedString::new_from_name(string_literal)));
-        },
-        _ => {
-            cx.span_err(expression.span, &format!("Expected method call"));
-        },
-    }
-
-    DummyResult::any(sp)
+    let sql_tables = singleton();
+    let sql = expression_to_sql(cx, &expression, sql_tables);
+    let string_literal = intern(&sql);
+    MacEager::expr(cx.expr_str(sp, InternedString::new_from_name(string_literal)))
 }
 
 fn expand_sql_table(_: &mut ExtCtxt, _: Span, _: &MetaItem, item: &Annotatable, _: &mut FnMut(Annotatable)) {
