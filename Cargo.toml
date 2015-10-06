@@ -12,3 +12,6 @@ name = "tql"
 crate-type = ["dylib"]
 doc = true
 plugin = true
+
+[dependencies]
+postgres = "0.10.0"

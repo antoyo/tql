@@ -8,7 +8,7 @@ struct Table<'a> {
 
 #[test]
 fn test_select() {
-    assert_eq!("SELECT * FROM Table", sql!(Table.collect()));
+    assert_eq!("SELECT * FROM Table", to_sql!(Table.collect()));
     assert_eq!("SELECT * FROM Table WHERE field1 = ? AND field2 < 100 ORDER BY field2 DESC",
-               sql!(Table.filter(field1 == "value1" && field2 < 100).sort(-field2)));
+               to_sql!(Table.filter(field1 == "value1" && field2 < 100).sort(-field2)));
 }
