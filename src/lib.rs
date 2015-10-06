@@ -30,6 +30,7 @@ pub mod ast;
 pub mod convert;
 pub mod error;
 pub mod gen;
+pub mod sql;
 pub mod state;
 
 use convert::{expression_to_sql, fields_vec_to_hashmap};

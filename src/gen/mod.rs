@@ -1,7 +1,10 @@
+use std::str::from_utf8;
+
 use syntax::ast::Expr_::ExprLit;
-use syntax::ast::Lit_::LitInt;
+use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
 
 use ast::{Expression, Fields, Filter, Filters, FilterExpression, Identifier, LogicalOperator, Order, RelationalOperator, Query};
+use sql::escape;
 
 pub trait ToSql {
     fn to_sql(&self) -> String;
@@ -111,8 +114,15 @@ impl ToSql for Expression {
         match self.node {
             ExprLit(ref literal) => {
                 match literal.node {
+                    // TODO: ne pas utiliser unwrap().
+                    LitBool(boolean) => boolean.to_string().to_uppercase(),
+                    LitByte(byte) => "'".to_string() + &escape((byte as char).to_string()) + "'",
+                    LitByteStr(ref bytestring) => "'".to_string() + &escape(from_utf8(&bytestring[..]).unwrap().to_string()) + "'",
+                    LitChar(character) => "'".to_string() + &escape(character.to_string()) + "'",
+                    LitFloat(ref float, _) => float.to_string(),
+                    LitFloatUnsuffixed(ref float) => float.to_string(),
                     LitInt(number, _) => number.to_string(),
-                    _ => "?".to_string(), // TODO
+                    LitStr(ref string, _) => "'".to_string() + &escape(string.to_string()) + "'",
                 }
             },
             _ => "?".to_string(),
