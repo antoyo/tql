@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use syntax::ast::{Expr, Path, StructField_, StructFieldKind, Ty};
 use syntax::ast::Expr_::{ExprMethodCall, ExprPath};
@@ -6,12 +6,11 @@ use syntax::ast::Ty_::TyPath;
 use syntax::codemap::{Span, Spanned};
 use syntax::ptr::P;
 
-use ast::{Fields, FilterExpression, Query};
+use ast::{FilterExpression, Query};
 use ast::convert::{arguments_to_orders, expression_to_filter_expression};
-use gen::ToSql;
-
 use error::{Error, SqlResult, res};
-use state::{SqlFields, SqlTables, Type};
+use gen::ToSql;
+use state::{SqlFields, SqlTables, Type, singleton};
 
 #[derive(Debug)]
 struct MethodCall<'a> {
@@ -67,13 +66,19 @@ fn method_calls_to_sql(method_calls: &MethodCalls, sql_tables: &SqlTables) -> Sq
 
     let joins = vec![];
     let limit = None;
+    let table_name = method_calls.name.clone();
+    let sql_tables = singleton();
+    let fields = match sql_tables.get(&table_name) {
+        Some(table) => table.keys().collect(),
+        None => vec![],
+    };
     let query = Query::Select {
-        fields: Fields::All,
+        fields: &fields[..],
         filter: filter_expression,
         joins: &joins,
         limit: limit,
         order: &order,
-        table: method_calls.name.clone(),
+        table: table_name,
     };
     res(query.to_sql(), errors)
 }
@@ -141,7 +146,7 @@ fn field_ty_to_type(ty: &Ty) -> Type {
 }
 
 pub fn fields_vec_to_hashmap(fields: &Vec<Spanned<StructField_>>) -> SqlFields {
-    let mut sql_fields = HashMap::new();
+    let mut sql_fields = BTreeMap::new();
     // TODO: ajouter le champ id.
     //sql_fields.insert("id".to_string(), Type::Int);
     for field in fields {

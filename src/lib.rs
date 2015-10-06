@@ -79,7 +79,7 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql: String, query_
     let table = sql_tables.get(&table_ident.to_string()).unwrap();
     let mut fields = vec![];
     // TODO: prendre en compte l’ID.
-    let mut index = 1usize;
+    let mut index = 0usize;
 
     for (name, _) in table {
         fields.push(Field {

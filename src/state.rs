@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::mem;
 
@@ -8,7 +9,7 @@ pub enum Type {
     String,
 }
 
-pub type SqlFields = HashMap<String, Type>;
+pub type SqlFields = BTreeMap<String, Type>;
 pub type SqlTables = HashMap<String, SqlFields>;
 
 // FIXME: make this thread safe.

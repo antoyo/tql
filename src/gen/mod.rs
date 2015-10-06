@@ -1,21 +1,19 @@
+use std::ops::Deref;
 use std::str::from_utf8;
 
 use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
 
-use ast::{Expression, Fields, Filter, Filters, FilterExpression, Identifier, LogicalOperator, Order, RelationalOperator, Query};
+use ast::{Expression, FieldList, Filter, Filters, FilterExpression, Identifier, LogicalOperator, Order, RelationalOperator, Query};
 use sql::escape;
 
 pub trait ToSql {
     fn to_sql(&self) -> String;
 }
 
-impl<'a> ToSql for Fields<'a> {
+impl<'a> ToSql for FieldList<'a> {
     fn to_sql(&self) -> String {
-        match *self {
-            Fields::All => "*".to_string(),
-            _ => unimplemented!(),
-        }
+        self.iter().map(Deref::deref).map(Deref::deref).collect::<Vec<_>>().join(", ")
     }
 }
 
@@ -90,7 +88,7 @@ impl<'a> ToSql for Query<'a> {
             Query::CreateTable { .. } => "".to_string(), // TODO
             Query::Delete { .. } => "".to_string(), // TODO
             Query::Insert { .. } => "".to_string(), // TODO
-            Query::Select{ref fields, ref filter, joins, ref limit, order, ref table} => {
+            Query::Select{fields, ref filter, joins, ref limit, order, ref table} => {
                 let where_clause = match filter {
                     &FilterExpression::Filter(_) => " WHERE ",
                     &FilterExpression::Filters(_) => " WHERE ",

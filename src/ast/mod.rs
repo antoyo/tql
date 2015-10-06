@@ -7,7 +7,7 @@ pub mod convert;
 
 pub type Expression = P<Expr>;
 pub type Identifier = String;
-pub type FieldList<'a> = &'a[Identifier];
+pub type FieldList<'a> = &'a[&'a Identifier];
 pub type Type = String;
 
 /// `Assignment` for use in SQL Update `Query`.
@@ -68,14 +68,6 @@ pub enum RelationalOperator {
     GreaterThanEqual,
 }
 
-/// A selection of SQL `Fields`.
-#[derive(Debug)]
-pub enum Fields<'a> {
-    ExcludedFields(FieldList<'a>),
-    Fields(FieldList<'a>),
-    All,
-}
-
 /// An SQL ORDER BY clause.
 #[derive(Debug)]
 pub enum Order {
@@ -99,7 +91,7 @@ pub enum Query<'a> {
         table: Identifier,
     },
     Select {
-        fields: Fields<'a>,
+        fields: FieldList<'a>,
         filter: FilterExpression,
         joins: &'a[Identifier],
         limit: Option<(u32, u32)>,
