@@ -21,7 +21,7 @@ pub struct Assignment {
 #[derive(Debug)]
 pub struct Filter {
     /// The field from the SQL table to be compared to `operand2`.
-    // TODO: also allow method calls.
+    // TODO: aussi permettre les appels de méthode.
     pub operand1: Identifier,
     /// The `operator` used to compare `operand1` to `operand2`.
     pub operator: RelationalOperator,
@@ -32,7 +32,7 @@ pub struct Filter {
 /// Either a single `Filter`, `Filters` or `NoFilters`.
 #[derive(Debug)]
 pub enum FilterExpression {
-    // TODO: also allow method calls.
+    // TODO: aussi permettre les appels de méthode.
     Filter(Filter),
     Filters(Filters),
     NoFilters,

@@ -9,6 +9,9 @@
 // pour choisir le nom de la macro à créer (pour permettre d’utiliser plusieurs SGBDs à la fois).
 // TODO: utiliser une compilation en 2 passes pour détecter les champs utilisés et les jointures
 // utiles (peut-être possible avec un lint plugin).
+// TODO: utiliser un lint plugin pour afficher les erreurs sémantiques (enregistrer les structures
+// avec leur positions dans un fichier qui sera utilisé dans le lint plugin pour afficher les
+// erreurs aux bons endroits).
 // TODO: peut-être utiliser Spanned pour conserver la position dans l’AST.
 
 extern crate rustc;
@@ -121,18 +124,23 @@ fn expand_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult +
     }
 }
 
-fn expand_sql_table(_: &mut ExtCtxt, _: Span, _: &MetaItem, item: &Annotatable, _: &mut FnMut(Annotatable)) {
+fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, _: &MetaItem, item: &Annotatable, _: &mut FnMut(Annotatable)) {
     // Add to sql_tables.
     let mut sql_tables = singleton();
 
     if let &Annotatable::Item(ref item) = item {
-        let table_name = item.ident.to_string();
         if let ItemStruct(ref struct_def, _) = item.node {
+            let table_name = item.ident.to_string();
             let fields = fields_vec_to_hashmap(&struct_def.fields);
             sql_tables.insert(table_name, fields);
         }
+        else {
+            cx.span_err(item.span, "Expected struct but found");
+        }
     }
-    // TODO: erreur si ce n’est pas une struct.
+    else {
+        cx.span_err(sp, "Expected struct item");
+    }
 }
 
 #[plugin_registrar]

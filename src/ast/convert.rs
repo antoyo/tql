@@ -2,6 +2,7 @@
 
 use syntax::ast::{BinOp_, Expr, Path};
 use syntax::ast::Expr_::{ExprBinary, ExprPath, ExprUnary};
+use syntax::ast::UnOp::UnNeg;
 use syntax::codemap::Spanned;
 use syntax::ptr::P;
 
@@ -12,28 +13,19 @@ fn argument_to_order(arg: &Expr) -> SqlResult<Order> {
     fn identifier(arg: &Expr, identifier: &Expr) -> SqlResult<String> {
         if let ExprPath(_, Path { ref segments, .. }) = identifier.node {
             if segments.len() == 1 {
-                Ok(segments[0].identifier.to_string())
-            }
-            else {
-                Err(vec![Error {
-                    message: "Expected an identifier".to_string(),
-                    position: arg.span,
-                }])
+                return Ok(segments[0].identifier.to_string());
             }
         }
-        else {
-            Err(vec![Error {
-                message: "Expected an identifier".to_string(),
-                position: arg.span,
-            }])
-        }
+        Err(vec![Error {
+            message: "Expected an identifier".to_string(),
+            position: arg.span,
+        }])
     }
 
     let mut errors = vec![];
     let order =
         match arg.node {
-            ExprUnary(_op, ref expr) => {
-                // TODO: check if op is -
+            ExprUnary(UnNeg, ref expr) => {
                 let ident = try!(identifier(arg, expr));
                 Order::Descending(ident)
             }
@@ -54,14 +46,16 @@ fn argument_to_order(arg: &Expr) -> SqlResult<Order> {
 
 pub fn arguments_to_orders(arguments: &[P<Expr>]) -> SqlResult<Vec<Order>> {
     let mut orders = vec![];
+    let mut errors = vec![];
 
     for arg in arguments {
-        // TODO: conserver toutes les erreurs au lieu d’arrêter à la première.
-        let order = try!(argument_to_order(arg));
-        orders.push(order);
+        match argument_to_order(arg) {
+            Ok(order) => orders.push(order),
+            Err(ref mut errs) => errors.append(errs),
+        }
     }
 
-    Ok(orders)
+    res(orders, errors)
 }
 
 /// Convert a `BinOp_` to an SQL `LogicalOperator`.
