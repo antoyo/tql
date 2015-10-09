@@ -116,6 +116,7 @@ fn arguments_to_limit(expression: &Expression) -> SqlResult<Limit> {
                 Limit::StartRange(range_start.clone())
             }
             ExprRange(Some(ref range_start), Some(ref range_end)) => {
+                // TODO: vérifier que range_start < range_end.
                 Limit::Range(range_start.clone(), range_end.clone())
             }
             ExprLit(_) | ExprPath(_, _) | ExprCall(_, _) | ExprMethodCall(_, _, _) | ExprBinary(_, _, _) | ExprUnary(_, _) | ExprCast(_, _)  => {

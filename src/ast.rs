@@ -52,6 +52,7 @@ pub struct Filters {
 pub enum Limit {
     EndRange(Expression),
     Index(Expression),
+    LimitOffset(u64, u64),
     NoLimit,
     Range(Expression, Expression),
     StartRange(Expression),

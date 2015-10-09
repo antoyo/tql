@@ -2,12 +2,11 @@
 
 use std::str::from_utf8;
 
-use syntax::ast::Expr_::{ExprBinary, ExprLit};
-use syntax::ast::BinOp_::{BiAdd, BiSub};
+use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
 
 use ast::{Expression, FieldList, Filter, Filters, FilterExpression, Identifier, Limit, LogicalOperator, Order, RelationalOperator, Query};
-use ast::Limit::{EndRange, Index, NoLimit, Range, StartRange};
+use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use sql::escape;
 
 pub trait ToSql {
@@ -74,8 +73,9 @@ impl ToSql for Limit {
         match *self {
             EndRange(ref expression) => " LIMIT ".to_string() + &expression.to_sql(),
             Index(ref expression) => " OFFSET ".to_string() + &expression.to_sql() + " LIMIT 1",
+            LimitOffset(expression1, expression2) => " OFFSET ".to_string() + &expression2.to_string() + " LIMIT " + &expression1.to_string(),
             NoLimit => "".to_string(),
-            Range(ref expression1, ref expression2) => " OFFSET ".to_string() + &expression1.to_sql() + " LIMIT " + &sub(expression2, expression1),
+            Range(ref expression1, ref expression2) => " OFFSET ".to_string() + &expression1.to_sql() + " LIMIT " + &expression2.to_sql(),
             StartRange(ref expression) => " OFFSET ".to_string() + &expression.to_sql(),
         }
     }
@@ -143,28 +143,6 @@ impl ToSql for RelationalOperator {
     }
 }
 
-pub fn all_literal(expression: &Expression) -> bool {
-    match expression.node {
-        ExprLit(_) => true,
-        ExprBinary(_, ref expr1, ref expr2) => all_literal(expr1) && all_literal(expr2),
-        _ => false,
-    }
-}
-
-fn evaluate(expression: &Expression) -> u64 {
-    match expression.node {
-        ExprLit(ref literal) => {
-            match literal.node {
-                LitInt(number, _) => number,
-                _ => 0,
-            }
-        },
-        ExprBinary(op, ref expr1, ref expr2) if op.node == BiAdd => evaluate(expr1) + evaluate(expr2),
-        ExprBinary(op, ref expr1, ref expr2) if op.node == BiSub => evaluate(expr1) - evaluate(expr2),
-        _ => 0,
-    }
-}
-
 // TODO: essayer de trouver une meilleure façon de mettre les symboles ($1, $2, …) dans la requête.
 fn replace_placeholder(string: String) -> String {
     let mut result = "".to_string();
@@ -192,14 +170,4 @@ fn replace_placeholder(string: String) -> String {
         }
     }
     result
-}
-
-// TODO: mettre cela dans l’optimisation.
-fn sub(expression1: &Expression, expression2: &Expression) -> String {
-    if all_literal(expression1) && all_literal(expression2) {
-        (evaluate(expression1) - evaluate(expression2)).to_string()
-    }
-    else {
-        "?".to_string()
-    }
 }

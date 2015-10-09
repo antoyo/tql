@@ -38,6 +38,7 @@ pub mod ast;
 pub mod attribute;
 pub mod error;
 pub mod gen;
+pub mod optimizer;
 pub mod parser;
 pub mod sql;
 pub mod state;
@@ -48,7 +49,8 @@ use analyzer::analyze;
 use ast::{Expression, FilterExpression, Limit, Query, QueryType, query_type};
 use attribute::fields_vec_to_hashmap;
 use error::{Error, SqlResult};
-use gen::{all_literal, ToSql};
+use gen::ToSql;
+use optimizer::{all_literal, optimize};
 use parser::parse;
 use state::singleton;
 
@@ -82,6 +84,7 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Vec<Expression> {
         match limit {
             Limit::EndRange(expression) => add(arguments, expression),
             Limit::Index(expression) => add(arguments, expression),
+            Limit::LimitOffset(_, _) => (),
             Limit::NoLimit => (),
             Limit::Range(expression1, expression2) => {
                 let offset = expression1.clone();
@@ -215,8 +218,8 @@ fn to_sql(cx: &mut ExtCtxt, args: &[TokenTree]) -> SqlResult<SqlQueryWithArgs> {
     let expression = (*parser.parse_expr()).clone();
     let sql_tables = singleton();
     let method_calls = try!(parse(&expression));
-    let query = try!(analyze(method_calls, sql_tables));
-    //let query = try!(optimize(query));
+    let mut query = try!(analyze(method_calls, sql_tables));
+    query = optimize(query);
     let sql = query.to_sql();
     Ok((sql, query_type(&query), arguments(cx, query)))
 }
