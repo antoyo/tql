@@ -1,13 +1,11 @@
-//! A module providing an Abstract Syntax Tree for SQL queries.
+//! Abstract syntax tree for SQL generation.
 
 use syntax::ast::Expr;
 use syntax::ptr::P;
 
-pub mod convert;
-
 pub type Expression = P<Expr>;
+pub type FieldList = Vec<Identifier>;
 pub type Identifier = String;
-pub type FieldList<'a> = &'a[&'a Identifier];
 pub type Type = String;
 
 /// `Assignment` for use in SQL Update `Query`.
@@ -49,12 +47,29 @@ pub struct Filters {
     pub operand2: Box<FilterExpression>,
 }
 
+/// An SQL LIMIT clause.
+#[derive(Debug)]
+pub enum Limit {
+    EndRange(Expression),
+    Index(Expression),
+    NoLimit,
+    Range(Expression, Expression),
+    StartRange(Expression),
+}
+
 /// `LogicalOperator` to combine `Filter`s.
 #[derive(Debug)]
 pub enum LogicalOperator {
     And,
     Not,
     Or,
+}
+
+/// An SQL ORDER BY clause.
+#[derive(Debug)]
+pub enum Order {
+    Ascending(Identifier),
+    Descending(Identifier),
 }
 
 /// `RelationalOperator` to be used in a `Filter`.
@@ -66,13 +81,6 @@ pub enum RelationalOperator {
     NotEqual,
     GreaterThan,
     GreaterThanEqual,
-}
-
-/// An SQL ORDER BY clause.
-#[derive(Debug)]
-pub enum Order {
-    Ascending(Identifier),
-    Descending(Identifier),
 }
 
 /// An SQL `Query`.
@@ -87,15 +95,15 @@ pub enum Query<'a> {
         table: Identifier,
     },
     Insert {
-        fields: FieldList<'a>,
+        fields: FieldList,
         table: Identifier,
     },
     Select {
-        fields: FieldList<'a>,
+        fields: FieldList,
         filter: FilterExpression,
-        joins: &'a[Identifier],
-        limit: Option<(u32, u32)>,
-        order: &'a[Order],
+        joins: Vec<Identifier>,
+        limit: Limit,
+        order: Vec<Order>,
         table: Identifier,
     },
     Update {
@@ -105,9 +113,20 @@ pub enum Query<'a> {
     },
 }
 
+/// The type of the query.
+pub enum QueryType {
+    SelectOne,
+    SelectMulti,
+}
+
 /// An SQL field with its type.
 #[derive(Debug)]
 pub struct TypedField {
     identifier: Identifier,
     typ: Type,
+}
+
+/// Get the query type.
+pub fn query_type(query: &Query) -> QueryType {
+    QueryType::SelectMulti
 }

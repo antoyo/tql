@@ -1,0 +1,205 @@
+//! The PostgreSQL code generator.
+
+use std::str::from_utf8;
+
+use syntax::ast::Expr_::{ExprBinary, ExprLit};
+use syntax::ast::BinOp_::{BiAdd, BiSub};
+use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
+
+use ast::{Expression, FieldList, Filter, Filters, FilterExpression, Identifier, Limit, LogicalOperator, Order, RelationalOperator, Query};
+use ast::Limit::{EndRange, Index, NoLimit, Range, StartRange};
+use sql::escape;
+
+pub trait ToSql {
+    fn to_sql(&self) -> String;
+}
+
+impl ToSql for Expression {
+    fn to_sql(&self) -> String {
+        match self.node {
+            ExprLit(ref literal) => {
+                match literal.node {
+                    // TODO: ne pas utiliser unwrap().
+                    LitBool(boolean) => boolean.to_string().to_uppercase(),
+                    LitByte(byte) => "'".to_string() + &escape((byte as char).to_string()) + "'",
+                    LitByteStr(ref bytestring) => "'".to_string() + &escape(from_utf8(&bytestring[..]).unwrap().to_string()) + "'",
+                    LitChar(character) => "'".to_string() + &escape(character.to_string()) + "'",
+                    LitFloat(ref float, _) => float.to_string(),
+                    LitFloatUnsuffixed(ref float) => float.to_string(),
+                    LitInt(number, _) => number.to_string(),
+                    LitStr(ref string, _) => "'".to_string() + &escape(string.to_string()) + "'",
+                }
+            },
+            _ => "?".to_string(),
+        }
+    }
+}
+
+impl ToSql for FieldList {
+    fn to_sql(&self) -> String {
+        self.join(", ")
+    }
+}
+
+impl ToSql for Filter {
+    fn to_sql(&self) -> String {
+        self.operand1.to_sql() + " " + &self.operator.to_sql() + " " + &self.operand2.to_sql()
+    }
+}
+
+impl ToSql for FilterExpression {
+    fn to_sql(&self) -> String {
+        match *self {
+            FilterExpression::Filter(ref filter) => filter.to_sql(),
+            FilterExpression::Filters(ref filters) => filters.to_sql(),
+            FilterExpression::NoFilters => "".to_string(),
+        }
+    }
+}
+
+impl ToSql for Filters {
+    fn to_sql(&self) -> String {
+        self.operand1.to_sql() + " " + &self.operator.to_sql() + " " + &self.operand2.to_sql()
+    }
+}
+
+impl ToSql for Identifier {
+    fn to_sql(&self) -> String {
+        self.clone()
+    }
+}
+
+impl ToSql for Limit {
+    fn to_sql(&self) -> String {
+        match *self {
+            EndRange(ref expression) => " LIMIT ".to_string() + &expression.to_sql(),
+            Index(ref expression) => " OFFSET ".to_string() + &expression.to_sql() + " LIMIT 1",
+            NoLimit => "".to_string(),
+            Range(ref expression1, ref expression2) => " OFFSET ".to_string() + &expression1.to_sql() + " LIMIT " + &sub(expression2, expression1),
+            StartRange(ref expression) => " OFFSET ".to_string() + &expression.to_sql(),
+        }
+    }
+}
+
+impl ToSql for LogicalOperator {
+    fn to_sql(&self) -> String {
+        match *self {
+            LogicalOperator::And => "AND".to_string(),
+            LogicalOperator::Not => "NOT".to_string(),
+            LogicalOperator::Or => "OR".to_string(),
+        }
+    }
+}
+
+impl ToSql for Order {
+    fn to_sql(&self) -> String {
+        match *self {
+            Order::Ascending(ref field) => field.clone(),
+            Order::Descending(ref field) => field.clone() + " DESC",
+        }
+    }
+}
+
+impl ToSql for [Order] {
+    fn to_sql(&self) -> String {
+        if self.len() > 0 {
+            " ORDER BY ".to_string() + &self.iter().map(ToSql::to_sql).collect::<Vec<_>>().join(", ")
+        }
+        else {
+            "".to_string()
+        }
+    }
+}
+
+impl<'a> ToSql for Query<'a> {
+    fn to_sql(&self) -> String {
+        match *self {
+            Query::CreateTable { .. } => "".to_string(), // TODO
+            Query::Delete { .. } => "".to_string(), // TODO
+            Query::Insert { .. } => "".to_string(), // TODO
+            Query::Select{ref fields, ref filter, ref joins, ref limit, ref order, ref table} => {
+                let where_clause = match filter {
+                    &FilterExpression::Filter(_) => " WHERE ",
+                    &FilterExpression::Filters(_) => " WHERE ",
+                    &FilterExpression::NoFilters => "",
+                };
+                replace_placeholder(format!("SELECT {} FROM {}{}{}{}{}", fields.to_sql(), table, where_clause, filter.to_sql(), order.to_sql(), limit.to_sql()))
+            },
+            Query::Update { .. } => "".to_string(), // TODO
+        }
+    }
+}
+
+impl ToSql for RelationalOperator {
+    fn to_sql(&self) -> String {
+        match *self {
+            RelationalOperator::Equal => "=".to_string(),
+            RelationalOperator::LesserThan => "<".to_string(),
+            RelationalOperator::LesserThanEqual => "<=".to_string(),
+            RelationalOperator::NotEqual => "<>".to_string(),
+            RelationalOperator::GreaterThan => ">=".to_string(),
+            RelationalOperator::GreaterThanEqual => ">".to_string(),
+        }
+    }
+}
+
+pub fn all_literal(expression: &Expression) -> bool {
+    match expression.node {
+        ExprLit(_) => true,
+        ExprBinary(_, ref expr1, ref expr2) => all_literal(expr1) && all_literal(expr2),
+        _ => false,
+    }
+}
+
+fn evaluate(expression: &Expression) -> u64 {
+    match expression.node {
+        ExprLit(ref literal) => {
+            match literal.node {
+                LitInt(number, _) => number,
+                _ => 0,
+            }
+        },
+        ExprBinary(op, ref expr1, ref expr2) if op.node == BiAdd => evaluate(expr1) + evaluate(expr2),
+        ExprBinary(op, ref expr1, ref expr2) if op.node == BiSub => evaluate(expr1) - evaluate(expr2),
+        _ => 0,
+    }
+}
+
+// TODO: essayer de trouver une meilleure façon de mettre les symboles ($1, $2, …) dans la requête.
+fn replace_placeholder(string: String) -> String {
+    let mut result = "".to_string();
+    let mut in_string = false;
+    let mut skip_next = false;
+    let mut index = 1;
+    for character in string.chars() {
+        if character == '?' && !in_string {
+            result.push('$');
+            result.push_str(&index.to_string());
+            index = index + 1;
+        }
+        else {
+            if character == '\\' {
+                skip_next = true;
+            }
+            else if character == '\'' && !skip_next {
+                skip_next = false;
+                in_string = !in_string;
+            }
+            else {
+                skip_next = false;
+            }
+            result.push(character);
+        }
+    }
+    result
+}
+
+// TODO: mettre cela dans l’optimisation.
+fn sub(expression1: &Expression, expression2: &Expression) -> String {
+    if all_literal(expression1) && all_literal(expression2) {
+        (evaluate(expression1) - evaluate(expression2)).to_string()
+    }
+    else {
+        "?".to_string()
+    }
+}
