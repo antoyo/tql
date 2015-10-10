@@ -174,7 +174,7 @@ fn expand_to_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResul
 
 fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args: SqlQueryWithArgs) -> Box<MacResult + 'static> {
     // TODO: générer un code différent en fonction du query_type.
-    let (sql, _, arguments) = sql_query_with_args;
+    let (sql, query_type, arguments) = sql_query_with_args;
     let string_literal = intern(&sql);
     let string = cx.expr_str(sp, InternedString::new_from_name(string_literal));
     let ident = Ident::new(intern("connection"), table_ident.ctxt);
@@ -210,12 +210,30 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
     }
     let args_expr = cx.expr_vec(DUMMY_SP, arg_refs);
 
-    let expr = quote_expr!(cx, {
-        let result = $ident.prepare($string).unwrap();
-        result.query(&$args_expr).unwrap().iter().map(|row| {
-            $struct_expr
-        }).collect::<Vec<_>>()
-    });
+    let expr = match query_type {
+        QueryType::SelectMulti => {
+            quote_expr!(cx, {
+                let result = $ident.prepare($string).unwrap();
+                result.query(&$args_expr).unwrap().iter().map(|row| {
+                    $struct_expr
+                }).collect::<Vec<_>>()
+            })
+        },
+        QueryType::SelectOne => {
+            quote_expr!(cx, {
+                let result = $ident.prepare($string).unwrap();
+                result.query(&$args_expr).unwrap().iter().next().map(|row| {
+                    $struct_expr
+                })
+            })
+        },
+        QueryType::Exec => {
+            quote_expr!(cx, {
+                let result = $ident.prepare($string).unwrap();
+                result.execute(&$args_expr)
+            })
+        },
+    };
 
     MacEager::expr(expr)
 }
