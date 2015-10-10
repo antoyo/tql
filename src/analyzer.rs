@@ -6,7 +6,7 @@ use syntax::ast::UnOp::UnNeg;
 use syntax::codemap::Spanned;
 use syntax::ptr::P;
 
-use ast::{Expression, Filter, FilterExpression, Filters, Limit, LogicalOperator, Order, RelationalOperator, Query};
+use ast::{Filter, FilterExpression, Filters, Limit, LogicalOperator, Order, RelationalOperator, Query};
 use ast::Limit::{EndRange, Index, NoLimit, Range, StartRange};
 use error::{Error, SqlResult, res};
 use parser::MethodCalls;
@@ -15,6 +15,7 @@ use state::SqlTables;
 /// Analyze and transform the AST.
 pub fn analyze<'a, 'b>(method_calls: MethodCalls, sql_tables: &'a SqlTables) -> SqlResult<Query<'b>> {
     // TODO: vérifier que la suite d’appels de méthode est valide.
+    // TODO: vérifier que la limite est une variable de type i64.
     let mut errors = vec![];
 
     let mut filter_expression = FilterExpression::NoFilters;
@@ -105,22 +106,22 @@ fn argument_to_order(arg: &Expr) -> SqlResult<Order> {
     res(order, errors)
 }
 
-fn arguments_to_limit(expression: &Expression) -> SqlResult<Limit> {
+fn arguments_to_limit(expression: &P<Expr>) -> SqlResult<Limit> {
     let mut errors = vec![];
     let limit =
         match expression.node {
             ExprRange(None, Some(ref range_end)) => {
-                Limit::EndRange(range_end.clone())
+                Limit::EndRange(range_end.node.clone())
             }
             ExprRange(Some(ref range_start), None) => {
-                Limit::StartRange(range_start.clone())
+                Limit::StartRange(range_start.node.clone())
             }
             ExprRange(Some(ref range_start), Some(ref range_end)) => {
                 // TODO: vérifier que range_start < range_end.
-                Limit::Range(range_start.clone(), range_end.clone())
+                Limit::Range(range_start.node.clone(), range_end.node.clone())
             }
             ExprLit(_) | ExprPath(_, _) | ExprCall(_, _) | ExprMethodCall(_, _, _) | ExprBinary(_, _, _) | ExprUnary(_, _) | ExprCast(_, _)  => {
-                Limit::Index(expression.clone())
+                Limit::Index(expression.node.clone())
             }
             _ => {
                 errors.push(Error::new(
@@ -212,7 +213,7 @@ fn expression_to_filter_expression(arg: &P<Expr>) -> SqlResult<FilterExpression>
                         FilterExpression::Filter(Filter {
                             operand1: identifier,
                             operator: binop_to_relational_operator(op),
-                            operand2: expr2.clone(),
+                            operand2: expr2.node.clone(),
                         })
                     }
                     ExprBinary(_, _, _) => {

@@ -24,7 +24,7 @@ extern crate rustc;
 extern crate syntax;
 
 use rustc::plugin::Registry;
-use syntax::ast::{Field, Ident, MetaItem, TokenTree};
+use syntax::ast::{Expr, Field, Ident, MetaItem, TokenTree};
 use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Item_::ItemStruct;
 use syntax::codemap::{DUMMY_SP, Span, Spanned};
@@ -32,6 +32,7 @@ use syntax::ext::base::{Annotatable, DummyResult, ExtCtxt, MacEager, MacResult};
 use syntax::ext::base::SyntaxExtension::MultiDecorator;
 use syntax::ext::build::AstBuilder;
 use syntax::parse::token::{InternedString, Token, intern, str_to_ident};
+use syntax::ptr::P;
 
 pub mod analyzer;
 pub mod ast;
@@ -40,34 +41,44 @@ pub mod error;
 pub mod gen;
 pub mod optimizer;
 pub mod parser;
+pub mod plugin;
 pub mod sql;
 pub mod state;
 
-pub type SqlQueryWithArgs = (String, QueryType, Vec<Expression>);
+pub type SqlQueryWithArgs = (String, QueryType, Vec<P<Expr>>);
 
 use analyzer::analyze;
 use ast::{Expression, FilterExpression, Limit, Query, QueryType, query_type};
 use attribute::fields_vec_to_hashmap;
 use error::{Error, SqlResult};
 use gen::ToSql;
-use optimizer::{all_literal, optimize};
+use optimizer::optimize;
 use parser::parse;
+use plugin::to_expr;
 use state::singleton;
 
 /// Extract the Rust `Expression`s from the `Query`.
-fn arguments(cx: &mut ExtCtxt, query: Query) -> Vec<Expression> {
+fn arguments(cx: &mut ExtCtxt, query: Query) -> Vec<P<Expr>> {
     let mut arguments = vec![];
 
-    fn add(arguments: &mut Vec<Expression>, expr: Expression) {
-        if !all_literal(&expr) {
-            match expr.node {
-                ExprLit(_) => (),
-                _ => arguments.push(expr),
-            }
+    fn is_literal(expr: &P<Expr>) -> bool {
+        match expr.node {
+            ExprLit(_) => true,
+            _ => false,
         }
     }
 
-    fn add_filter_arguments(filter: FilterExpression, arguments: &mut Vec<Expression>) {
+    fn add_expr(arguments: &mut Vec<P<Expr>>, expr: P<Expr>) {
+        if !is_literal(&expr) {
+            arguments.push(expr);
+        }
+    }
+
+    fn add(arguments: &mut Vec<P<Expr>>, expr: Expression) {
+        add_expr(arguments, to_expr(expr))
+    }
+
+    fn add_filter_arguments(filter: FilterExpression, arguments: &mut Vec<P<Expr>>) {
         match filter {
             FilterExpression::Filter(filter) => {
                 add(arguments, filter.operand2);
@@ -80,7 +91,7 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Vec<Expression> {
         }
     }
 
-    fn add_limit_arguments(cx: &mut ExtCtxt, limit: Limit, arguments: &mut Vec<Expression>) {
+    fn add_limit_arguments(cx: &mut ExtCtxt, limit: Limit, arguments: &mut Vec<P<Expr>>) {
         match limit {
             Limit::EndRange(expression) => add(arguments, expression),
             Limit::Index(expression) => add(arguments, expression),
@@ -89,7 +100,9 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Vec<Expression> {
             Limit::Range(expression1, expression2) => {
                 let offset = expression1.clone();
                 add(arguments, expression1);
-                add(arguments, quote_expr!(cx, $expression2 - $offset));
+                let expr2 = to_expr(expression2);
+                let offset = to_expr(offset);
+                add_expr(arguments, quote_expr!(cx, $expr2 - $offset));
             },
             Limit::StartRange(expression) => add(arguments, expression),
         }

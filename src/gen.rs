@@ -2,8 +2,10 @@
 
 use std::str::from_utf8;
 
+use syntax::ast::Expr;
 use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
+use syntax::ptr::P;
 
 use ast::{Expression, FieldList, Filter, Filters, FilterExpression, Identifier, Limit, LogicalOperator, Order, RelationalOperator, Query};
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
@@ -13,9 +15,15 @@ pub trait ToSql {
     fn to_sql(&self) -> String;
 }
 
+impl ToSql for P<Expr> {
+    fn to_sql(&self) -> String {
+        self.node.to_sql()
+    }
+}
+
 impl ToSql for Expression {
     fn to_sql(&self) -> String {
-        match self.node {
+        match *self {
             ExprLit(ref literal) => {
                 match literal.node {
                     // TODO: ne pas utiliser unwrap().
@@ -73,7 +81,7 @@ impl ToSql for Limit {
         match *self {
             EndRange(ref expression) => " LIMIT ".to_string() + &expression.to_sql(),
             Index(ref expression) => " OFFSET ".to_string() + &expression.to_sql() + " LIMIT 1",
-            LimitOffset(expression1, expression2) => " OFFSET ".to_string() + &expression2.to_string() + " LIMIT " + &expression1.to_string(),
+            LimitOffset(ref expression1, ref expression2) => " OFFSET ".to_string() + &expression2.to_sql() + " LIMIT " + &expression1.to_sql(),
             NoLimit => "".to_string(),
             Range(ref expression1, ref expression2) => " OFFSET ".to_string() + &expression1.to_sql() + " LIMIT " + &expression2.to_sql(),
             StartRange(ref expression) => " OFFSET ".to_string() + &expression.to_sql(),

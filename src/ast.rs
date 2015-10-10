@@ -1,9 +1,8 @@
 //! Abstract syntax tree for SQL generation.
 
-use syntax::ast::Expr;
-use syntax::ptr::P;
+use syntax::ast::Expr_;
 
-pub type Expression = P<Expr>;
+pub type Expression = Expr_;
 pub type FieldList = Vec<Identifier>;
 pub type Identifier = String;
 pub type Type = String;
@@ -52,7 +51,7 @@ pub struct Filters {
 pub enum Limit {
     EndRange(Expression),
     Index(Expression),
-    LimitOffset(u64, u64),
+    LimitOffset(Expression, Expression),
     NoLimit,
     Range(Expression, Expression),
     StartRange(Expression),
