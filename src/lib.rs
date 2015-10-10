@@ -7,6 +7,7 @@
 // FIXME: unreachable!() fait planter le compilateur.
 // FIXME: remplacer format!() par .to_string() quand c’est possible.
 // FIXME: enlever les clone() inutiles.
+// FIXME: utiliser des fermetures à la place de fonctions internes.
 // TODO: rendre les messages d’erreur plus semblables à ceux de Rust.
 // TODO: rendre le moins d’identifiants publiques.
 // TODO: supporter plusieurs SGBDs.

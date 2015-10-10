@@ -20,10 +20,12 @@ impl Error {
     ///
     /// This is a shortcut for:
     ///
-    /// ```Error {
+    /// ```
+    /// Error {
     ///     message: message,
     ///     position: position,
     /// }
+    /// ```
     pub fn new(message: String, position: Span) -> Error {
         Error {
             message: message,

@@ -3,14 +3,16 @@
 use syntax::ast::{BinOp_, Expr, Path};
 use syntax::ast::Expr_::{ExprBinary, ExprCall, ExprCast, ExprLit, ExprMethodCall, ExprPath, ExprRange, ExprUnary};
 use syntax::ast::UnOp::UnNeg;
-use syntax::codemap::Spanned;
+use syntax::codemap::{Span, Spanned};
 use syntax::ptr::P;
 
-use ast::{Filter, FilterExpression, Filters, Limit, LogicalOperator, Order, RelationalOperator, Query};
+use ast::{Filter, FilterExpression, Filters, Identifier, Limit, LogicalOperator, Order, RelationalOperator, Query};
 use ast::Limit::{EndRange, Index, NoLimit, Range, StartRange};
 use error::{Error, SqlResult, res};
 use parser::MethodCalls;
-use state::SqlTables;
+use state::{SqlFields, SqlTables};
+
+type Table<'a> = Option<&'a SqlFields>;
 
 /// Analyze and transform the AST.
 pub fn analyze<'a, 'b>(method_calls: MethodCalls, sql_tables: &'a SqlTables) -> SqlResult<Query<'b>> {
@@ -18,28 +20,31 @@ pub fn analyze<'a, 'b>(method_calls: MethodCalls, sql_tables: &'a SqlTables) -> 
     // TODO: vérifier que la limite est une variable de type i64.
     let mut errors = vec![];
 
+    let table = sql_tables.get(&method_calls.name);
+
     let mut filter_expression = FilterExpression::NoFilters;
     let mut order = vec![];
     let mut limit = Limit::NoLimit;
 
-    for method_call in &method_calls.calls {
-        if !sql_tables.contains_key(&method_calls.name) {
-            errors.push(Error::new(
-                format!("Table `{}` does not exist", method_calls.name),
-                method_calls.position,
-            ));
-        }
+    if !sql_tables.contains_key(&method_calls.name) {
+        errors.push(Error::new(
+            format!("Table `{}` does not exist", method_calls.name),
+            method_calls.position,
+        ));
+    }
 
+    let table_name = method_calls.name.clone();
+    for method_call in &method_calls.calls {
         match &method_call.name[..] {
             "all" => (), // TODO
             "filter" => {
-                filter_expression = try!(expression_to_filter_expression(&method_call.arguments[0]));
+                filter_expression = try!(expression_to_filter_expression(&method_call.arguments[0], &table_name, table));
             }
             "limit" => {
                 limit = try!(arguments_to_limit(&method_call.arguments[0]));
             }
             "sort" => {
-                order = try!(arguments_to_orders(&method_call.arguments));
+                order = try!(arguments_to_orders(&method_call.arguments, &table_name, table));
             }
             _ => {
                 errors.push(Error::new(
@@ -51,9 +56,8 @@ pub fn analyze<'a, 'b>(method_calls: MethodCalls, sql_tables: &'a SqlTables) -> 
     }
 
     let joins = vec![];
-    let table_name = method_calls.name.clone();
     let mut fields = vec![];
-    match sql_tables.get(&table_name) {
+    match table {
         Some(table) => {
             for field in table.keys() {
                 fields.push(field.clone());
@@ -61,21 +65,24 @@ pub fn analyze<'a, 'b>(method_calls: MethodCalls, sql_tables: &'a SqlTables) -> 
         },
         None => (),
     }
-    Ok(Query::Select {
+    res(Query::Select {
         fields: fields,
         filter: filter_expression,
         joins: joins,
         limit: limit,
         order: order,
         table: table_name,
-    })
+    }, errors)
 }
 
-fn argument_to_order(arg: &Expr) -> SqlResult<Order> {
-    fn identifier(arg: &Expr, identifier: &Expr) -> SqlResult<String> {
-        if let ExprPath(_, Path { ref segments, .. }) = identifier.node {
+fn argument_to_order(arg: &Expr, table_name: &String, table: Table) -> SqlResult<Order> {
+    fn identifier(arg: &Expr, identifier: &Expr, table_name: &String, table: Table) -> SqlResult<String> {
+        let mut errors = vec![];
+        if let ExprPath(_, Path { ref segments, span, .. }) = identifier.node {
             if segments.len() == 1 {
-                return Ok(segments[0].identifier.to_string());
+                let identifier = segments[0].identifier.to_string();
+                check_field(&identifier, span, table_name, table, &mut errors);
+                return res(identifier, errors);
             }
         }
         Err(vec![Error {
@@ -88,12 +95,13 @@ fn argument_to_order(arg: &Expr) -> SqlResult<Order> {
     let order =
         match arg.node {
             ExprUnary(UnNeg, ref expr) => {
-                let ident = try!(identifier(arg, expr));
+                let ident = try!(identifier(arg, expr, table_name, table));
                 Order::Descending(ident)
             }
             ExprPath(None, ref path) => {
-                let ident = path.segments[0].identifier.to_string();
-                Order::Ascending(ident)
+                let identifier = path.segments[0].identifier.to_string();
+                check_field(&identifier, path.span, table_name, table, &mut errors);
+                Order::Ascending(identifier)
             }
             _ => {
                 errors.push(Error::new(
@@ -138,12 +146,12 @@ fn arguments_to_limit(expression: &P<Expr>) -> SqlResult<Limit> {
     res(limit, errors)
 }
 
-fn arguments_to_orders(arguments: &Vec<P<Expr>>) -> SqlResult<Vec<Order>> {
+fn arguments_to_orders(arguments: &Vec<P<Expr>>, table_name: &String, table: Table) -> SqlResult<Vec<Order>> {
     let mut orders = vec![];
     let mut errors = vec![];
 
     for arg in arguments {
-        match argument_to_order(arg) {
+        match argument_to_order(arg, table_name, table) {
             Ok(order) => orders.push(order),
             Err(ref mut errs) => errors.append(errs),
         }
@@ -200,9 +208,24 @@ fn binop_to_relational_operator(binop: BinOp_) -> RelationalOperator {
     }
 }
 
+fn check_field(identifier: &Identifier, position: Span, table_name: &String, table: Table, errors: &mut Vec<Error>) {
+    match table {
+        Some(fields) => {
+            if !fields.contains_key(identifier) {
+                errors.push(Error::new(
+                        format!("Table {} does not contain a field named {}", table_name, identifier),
+                        position
+                        ));
+            }
+        },
+        None => (),
+    }
+}
+
 /// Convert a Rust expression to a `FilterExpression`.
-fn expression_to_filter_expression(arg: &P<Expr>) -> SqlResult<FilterExpression> {
+fn expression_to_filter_expression(arg: &P<Expr>, table_name: &String, table: Table) -> SqlResult<FilterExpression> {
     let mut errors = vec![];
+
     let dummy = FilterExpression::NoFilters;
     let filter =
         match arg.node {
@@ -210,6 +233,7 @@ fn expression_to_filter_expression(arg: &P<Expr>) -> SqlResult<FilterExpression>
                 match expr1.node {
                     ExprPath(None, ref path) => {
                         let identifier = path.segments[0].identifier.to_string();
+                        check_field(&identifier, path.span, table_name, table, &mut errors);
                         FilterExpression::Filter(Filter {
                             operand1: identifier,
                             operator: binop_to_relational_operator(op),
@@ -217,8 +241,8 @@ fn expression_to_filter_expression(arg: &P<Expr>) -> SqlResult<FilterExpression>
                         })
                     }
                     ExprBinary(_, _, _) => {
-                        let filter1 = try!(expression_to_filter_expression(expr1));
-                        let filter2 = try!(expression_to_filter_expression(expr2));
+                        let filter1 = try!(expression_to_filter_expression(expr1, table_name, table));
+                        let filter2 = try!(expression_to_filter_expression(expr2, table_name, table));
                         FilterExpression::Filters(Filters {
                             operand1: Box::new(filter1),
                             operator: binop_to_logical_operator(op),
