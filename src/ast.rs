@@ -129,7 +129,6 @@ pub struct TypedField {
 
 /// Get the query type.
 pub fn query_type(query: &Query) -> QueryType {
-    // TODO: Index
     match query {
         &Query::Select { ref limit, .. } => {
             match *limit {

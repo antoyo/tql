@@ -31,7 +31,7 @@ pub fn analyze<'a, 'b>(method_calls: MethodCalls, sql_tables: &'a SqlTables) -> 
         }
 
         match &method_call.name[..] {
-            "collect" => (), // TODO
+            "all" => (), // TODO
             "filter" => {
                 filter_expression = try!(expression_to_filter_expression(&method_call.arguments[0]));
             }
