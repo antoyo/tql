@@ -6,6 +6,7 @@
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::fmt::{self, Display, Formatter};
 use std::mem;
 
 /// An SQL query argument.
@@ -30,8 +31,19 @@ pub type SqlTables = HashMap<String, SqlFields>;
 #[derive(Debug, Eq, PartialEq)]
 pub enum Type {
     Dummy,
-    Int,
+    I32,
     String,
+}
+
+impl Display for Type {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let typ = match *self {
+            Type::Dummy => "",
+            Type::I32 => "i32",
+            Type::String => "String",
+        };
+        write!(f, "{}", typ)
+    }
 }
 
 /// Returns the global state.

@@ -48,7 +48,7 @@ pub struct Filters {
 }
 
 /// An SQL LIMIT clause.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Limit {
     EndRange(Expression),
     Index(Expression),

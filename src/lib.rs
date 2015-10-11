@@ -8,6 +8,7 @@
 // FIXME: remplacer format!() par .to_string() quand c’est possible.
 // FIXME: enlever les clone() inutiles.
 // FIXME: utiliser des fermetures à la place de fonctions internes.
+// FIXME: utiliser use self au lieu de deux lignes.
 // TODO: rendre les messages d’erreur plus semblables à ceux de Rust.
 // TODO: rendre le moins d’identifiants publiques.
 // TODO: supporter plusieurs SGBDs.
@@ -144,6 +145,7 @@ fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, _: &MetaItem, item: &Annotatable
 
     if let &Annotatable::Item(ref item) = item {
         if let ItemStruct(ref struct_def, _) = item.node {
+            // TODO: vérifier le type des champs de la structure.
             let table_name = item.ident.to_string();
             let fields = fields_vec_to_hashmap(&struct_def.fields);
             sql_tables.insert(table_name, fields);
@@ -281,7 +283,7 @@ fn to_sql(cx: &mut ExtCtxt, args: &[TokenTree]) -> SqlResult<SqlQueryWithArgs> {
     let sql_tables = singleton();
     let method_calls = try!(parse(&expression));
     let mut query = try!(analyze(method_calls, sql_tables));
-    query = optimize(query);
+    optimize(&mut query);
     let sql = query.to_sql();
     Ok((sql, query_type(&query), arguments(cx, query)))
 }

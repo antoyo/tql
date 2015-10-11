@@ -3,6 +3,7 @@ extern crate rustc_front;
 use rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
 use rustc::lint::LintContext;
 use rustc::middle::ty::{Ty, TypeAndMut, TyS, TypeVariants};
+use rustc::middle::ty::error::TypeError;
 use self::rustc_front::hir::Expr;
 use self::rustc_front::hir::Expr_::{self, ExprAddrOf, ExprMethodCall, ExprVec};
 use syntax::ast::Attribute;
@@ -107,7 +108,8 @@ impl LateLintPass for SqlError {
                                         hi: BytePos(field.high),
                                         expn_id: NO_EXPANSION,
                                     };
-                                    cx.span_lint(SQL_LINT, position, &format!("{} should have type {:?}, but have type {:?}", field.name, table.get(&field.name).unwrap(), types[i]));
+                                    cx.sess().span_err_with_code(position, &format!("mismatched types:\n expected `{}`,    found `{:?}`", table.get(&field.name).unwrap(), types[i]), "E0308");
+                                    cx.sess().fileline_note(expr.span, "in this expansion of sql! (defined in tql)");
                                 }
                             },
                             None => (),
@@ -123,7 +125,7 @@ impl LateLintPass for SqlError {
 fn same_type(field_type: &Type, expected_type: &TyS) -> bool {
     match expected_type.sty {
         TypeVariants::TyInt(TyI32) => {
-            *field_type == Type::Int
+            *field_type == Type::I32
         },
         TypeVariants::TyRef(_, TypeAndMut { ty, .. }) => {
             // TODO: supporter les références de références.

@@ -17,7 +17,7 @@ fn field_ty_to_type(ty: &Ty) -> Type {
                 typ = Type::String
             }
             else if ident == "i32" {
-                typ = Type::Int
+                typ = Type::I32
 
             }
         }

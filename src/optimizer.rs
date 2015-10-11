@@ -33,18 +33,13 @@ fn evaluate(expression: &Expression) -> u64 {
     }
 }
 
-pub fn optimize(query: Query) -> Query {
+pub fn optimize(query: &mut Query) {
     match query {
         // TODO: utiliser la syntaxe de mise à jour.
-        Select { fields, filter, joins, limit, order, table } => Select {
-            fields: fields,
-            filter: filter,
-            joins: joins,
-            limit: optimize_limit(limit),
-            order: order,
-            table: table,
+        &mut Select { ref mut limit, .. } => {
+            *limit = optimize_limit(limit.clone());
         },
-        _ => query,
+        _ => (),
     }
 }
 
