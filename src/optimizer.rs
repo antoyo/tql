@@ -12,23 +12,23 @@ use ast::Query::Select;
 use plugin::number_literal;
 
 pub fn all_literal(expression: &Expression) -> bool {
-    match expression {
-        &ExprLit(_) => true,
-        &ExprBinary(_, ref expr1, ref expr2) => all_literal(&expr1.node) && all_literal(&expr2.node),
+    match expression.node {
+        ExprLit(_) => true,
+        ExprBinary(_, ref expr1, ref expr2) => all_literal(expr1) && all_literal(expr2),
         _ => false,
     }
 }
 
 fn evaluate(expression: &Expression) -> u64 {
-    match *expression {
+    match expression.node {
         ExprLit(ref literal) => {
             match literal.node {
                 LitInt(number, _) => number,
                 _ => 0,
             }
         },
-        ExprBinary(op, ref expr1, ref expr2) if op.node == BiAdd => evaluate(&expr1.node) + evaluate(&expr2.node),
-        ExprBinary(op, ref expr1, ref expr2) if op.node == BiSub => evaluate(&expr1.node) - evaluate(&expr2.node),
+        ExprBinary(op, ref expr1, ref expr2) if op.node == BiAdd => evaluate(expr1) + evaluate(expr2),
+        ExprBinary(op, ref expr1, ref expr2) if op.node == BiSub => evaluate(expr1) - evaluate(expr2),
         _ => 0,
     }
 }

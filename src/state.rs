@@ -8,6 +8,18 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::mem;
 
+/// An SQL query argument.
+pub struct SqlArg {
+    pub high: u32,
+    pub low: u32,
+    pub name: String,
+}
+
+pub struct SqlArgs {
+    pub arguments: Vec<Option<SqlArg>>,
+    pub table_name: String,
+}
+
 /// A collection of fields.
 pub type SqlFields = BTreeMap<String, Type>;
 
@@ -15,7 +27,7 @@ pub type SqlFields = BTreeMap<String, Type>;
 pub type SqlTables = HashMap<String, SqlFields>;
 
 /// A field type.
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Type {
     Dummy,
     Int,
@@ -33,5 +45,22 @@ pub fn singleton() -> &'static mut SqlTables {
             hash_map = mem::transmute(Box::new(map));
         }
         &mut *hash_map
+    }
+}
+
+/// Returns the global lint state.
+pub fn lint_singleton() -> &'static mut SqlArgs {
+    // FIXME: make this thread safe.
+    static mut vector: *mut SqlArgs = 0 as *mut SqlArgs;
+
+    let args = SqlArgs {
+        arguments: vec![],
+        table_name: "".to_string(),
+    };
+    unsafe {
+        if vector == 0 as *mut SqlArgs {
+            vector = mem::transmute(Box::new(args));
+        }
+        &mut *vector
     }
 }

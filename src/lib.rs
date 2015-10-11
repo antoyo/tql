@@ -2,7 +2,7 @@
 //!
 //! The SQL is generated at compile time via a procedural macro.
 
-#![feature(plugin_registrar, quote, rustc_private)]
+#![feature(box_syntax, plugin_registrar, quote, rustc_private)]
 
 // FIXME: unreachable!() fait planter le compilateur.
 // FIXME: remplacer format!() par .to_string() quand c’est possible.
@@ -21,17 +21,20 @@
 // erreurs aux bons endroits).
 // TODO: peut-être utiliser Spanned pour conserver la position dans l’AST.
 
+#[macro_use]
 extern crate rustc;
 extern crate syntax;
 
+use rustc::lint::LateLintPassObject;
 use rustc::plugin::Registry;
 use syntax::ast::{Expr, Field, Ident, MetaItem, TokenTree};
 use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Item_::ItemStruct;
-use syntax::codemap::{DUMMY_SP, Span, Spanned};
+use syntax::codemap::{DUMMY_SP, BytePos, Span, Spanned};
 use syntax::ext::base::{Annotatable, DummyResult, ExtCtxt, MacEager, MacResult};
 use syntax::ext::base::SyntaxExtension::MultiDecorator;
 use syntax::ext::build::AstBuilder;
+use syntax::feature_gate::AttributeType::Whitelisted;
 use syntax::parse::token::{InternedString, Token, intern, str_to_ident};
 use syntax::ptr::P;
 
@@ -45,8 +48,11 @@ pub mod parser;
 pub mod plugin;
 pub mod sql;
 pub mod state;
+pub mod type_analyzer;
 
-pub type SqlQueryWithArgs = (String, QueryType, Vec<P<Expr>>);
+type Arg = (Option<String>, P<Expr>);
+type Args = Vec<Arg>;
+pub type SqlQueryWithArgs = (String, QueryType, Args);
 
 use analyzer::analyze;
 use ast::{Expression, FilterExpression, Limit, Query, QueryType, query_type};
@@ -55,34 +61,26 @@ use error::{Error, SqlResult};
 use gen::ToSql;
 use optimizer::optimize;
 use parser::parse;
-use plugin::to_expr;
 use state::singleton;
+use type_analyzer::SqlError;
 
 /// Extract the Rust `Expression`s from the `Query`.
-fn arguments(cx: &mut ExtCtxt, query: Query) -> Vec<P<Expr>> {
+fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
     let mut arguments = vec![];
 
-    fn is_literal(expr: &P<Expr>) -> bool {
-        match expr.node {
-            ExprLit(_) => true,
-            _ => false,
-        }
+    fn add_expr(arguments: &mut Args, arg: Arg) {
+        arguments.push(arg);
     }
 
-    fn add_expr(arguments: &mut Vec<P<Expr>>, expr: P<Expr>) {
-        if !is_literal(&expr) {
-            arguments.push(expr);
-        }
+    fn add(arguments: &mut Args, field_name: Option<String>, expr: Expression) {
+        let arg = (field_name, expr);
+        add_expr(arguments, arg);
     }
 
-    fn add(arguments: &mut Vec<P<Expr>>, expr: Expression) {
-        add_expr(arguments, to_expr(expr))
-    }
-
-    fn add_filter_arguments(filter: FilterExpression, arguments: &mut Vec<P<Expr>>) {
+    fn add_filter_arguments(filter: FilterExpression, arguments: &mut Args) {
         match filter {
             FilterExpression::Filter(filter) => {
-                add(arguments, filter.operand2);
+                add(arguments, Some(filter.operand1), filter.operand2);
             },
             FilterExpression::Filters(filters) => {
                 add_filter_arguments(*filters.operand1, arguments);
@@ -92,20 +90,20 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Vec<P<Expr>> {
         }
     }
 
-    fn add_limit_arguments(cx: &mut ExtCtxt, limit: Limit, arguments: &mut Vec<P<Expr>>) {
+    fn add_limit_arguments(cx: &mut ExtCtxt, limit: Limit, arguments: &mut Args) {
         match limit {
-            Limit::EndRange(expression) => add(arguments, expression),
-            Limit::Index(expression) => add(arguments, expression),
+            Limit::EndRange(expression) => add(arguments, None, expression),
+            Limit::Index(expression) => add(arguments, None, expression),
             Limit::LimitOffset(_, _) => (),
             Limit::NoLimit => (),
             Limit::Range(expression1, expression2) => {
                 let offset = expression1.clone();
-                add(arguments, expression1);
-                let expr2 = to_expr(expression2);
-                let offset = to_expr(offset);
-                add_expr(arguments, quote_expr!(cx, $expr2 - $offset));
+                add(arguments, None, expression1);
+                let expr2 = expression2;
+                let offset = offset;
+                add_expr(arguments, (None, quote_expr!(cx, $expr2 - $offset)));
             },
-            Limit::StartRange(expression) => add(arguments, expression),
+            Limit::StartRange(expression) => add(arguments, None, expression),
         }
     }
 
@@ -183,6 +181,7 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
     let sql_tables = singleton();
     let table = sql_tables.get(&table_ident.to_string()).unwrap();
     let mut fields = vec![];
+    let mut meta_field_words = vec![];
     // TODO: prendre en compte l’ID.
     let mut index = 0usize;
 
@@ -202,18 +201,46 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
 
     let mut arg_refs = vec![];
 
-    for arg in arguments {
+    for (field_name, arg) in arguments {
+        let pos = arg.span;
+
+        match field_name {
+            Some(name) => {
+                let (low, high) =
+                    match (pos.lo, pos.hi) {
+                        (BytePos(low), BytePos(high)) => (low, high),
+                    };
+                let low = InternedString::new_from_name(str_to_ident(&low.to_string()).name);
+                let high = InternedString::new_from_name(str_to_ident(&high.to_string()).name);
+                let list = vec![str_to_ident(&name).name.as_str(), low, high];
+                let mut meta_list = vec![];
+                for el in list {
+                    meta_list.push(cx.meta_word(DUMMY_SP, el));
+                }
+                meta_field_words.push(cx.meta_list(DUMMY_SP, InternedString::new_from_name(table_ident.name), meta_list));
+            },
+            None => {
+                meta_field_words.push(cx.meta_word(DUMMY_SP, InternedString::new("None")));
+            },
+        }
+
         match arg.node {
             // Do not add literal arguments as they are in the final string literal.
             ExprLit(_) => (),
-            _ => arg_refs.push(cx.expr_addr_of(DUMMY_SP, arg)),
+            _ => {
+                arg_refs.push(cx.expr_addr_of(DUMMY_SP, arg));
+            },
         }
     }
     let args_expr = cx.expr_vec(DUMMY_SP, arg_refs);
+    let sql_fields_attribute = cx.meta_list(DUMMY_SP, InternedString::new("sql_fields"), meta_field_words);
 
     let expr = match query_type {
         QueryType::SelectMulti => {
             quote_expr!(cx, {
+                #[$sql_fields_attribute]
+                #[allow(dead_code)]
+                const FIELD: i32 = 3141592;
                 let result = $ident.prepare($string).unwrap();
                 result.query(&$args_expr).unwrap().iter().map(|row| {
                     $struct_expr
@@ -222,6 +249,9 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
         },
         QueryType::SelectOne => {
             quote_expr!(cx, {
+                #[$sql_fields_attribute]
+                #[allow(dead_code)]
+                const FIELD: i32 = 3141592;
                 let result = $ident.prepare($string).unwrap();
                 result.query(&$args_expr).unwrap().iter().next().map(|row| {
                     $struct_expr
@@ -260,5 +290,7 @@ fn to_sql(cx: &mut ExtCtxt, args: &[TokenTree]) -> SqlResult<SqlQueryWithArgs> {
 pub fn plugin_registrar(reg: &mut Registry) {
     reg.register_macro("to_sql", expand_to_sql);
     reg.register_macro("sql", expand_sql);
+    reg.register_attribute("sql_fields".to_string(), Whitelisted);
     reg.register_syntax_extension(intern("sql_table"), MultiDecorator(Box::new(expand_sql_table)));
+    reg.register_late_lint_pass(box SqlError as LateLintPassObject);
 }

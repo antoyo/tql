@@ -1,8 +1,9 @@
 //! Abstract syntax tree for SQL generation.
 
-use syntax::ast::Expr_;
+use syntax::ast::Expr;
+use syntax::ptr::P;
 
-pub type Expression = Expr_;
+pub type Expression = P<Expr>;
 pub type FieldList = Vec<Identifier>;
 pub type Identifier = String;
 pub type Type = String;

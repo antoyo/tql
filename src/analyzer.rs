@@ -119,17 +119,17 @@ fn arguments_to_limit(expression: &P<Expr>) -> SqlResult<Limit> {
     let limit =
         match expression.node {
             ExprRange(None, Some(ref range_end)) => {
-                Limit::EndRange(range_end.node.clone())
+                Limit::EndRange(range_end.clone())
             }
             ExprRange(Some(ref range_start), None) => {
-                Limit::StartRange(range_start.node.clone())
+                Limit::StartRange(range_start.clone())
             }
             ExprRange(Some(ref range_start), Some(ref range_end)) => {
                 // TODO: vérifier que range_start < range_end.
-                Limit::Range(range_start.node.clone(), range_end.node.clone())
+                Limit::Range(range_start.clone(), range_end.clone())
             }
             ExprLit(_) | ExprPath(_, _) | ExprCall(_, _) | ExprMethodCall(_, _, _) | ExprBinary(_, _, _) | ExprUnary(_, _) | ExprCast(_, _)  => {
-                Limit::Index(expression.node.clone())
+                Limit::Index(expression.clone())
             }
             _ => {
                 errors.push(Error::new(
@@ -237,7 +237,7 @@ fn expression_to_filter_expression(arg: &P<Expr>, table_name: &String, table: Ta
                         FilterExpression::Filter(Filter {
                             operand1: identifier,
                             operator: binop_to_relational_operator(op),
-                            operand2: expr2.node.clone(),
+                            operand2: expr2.clone(),
                         })
                     }
                     ExprBinary(_, _, _) => {

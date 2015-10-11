@@ -2,10 +2,8 @@
 
 use std::str::from_utf8;
 
-use syntax::ast::Expr;
 use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
-use syntax::ptr::P;
 
 use ast::{Expression, FieldList, Filter, Filters, FilterExpression, Identifier, Limit, LogicalOperator, Order, RelationalOperator, Query};
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
@@ -15,15 +13,9 @@ pub trait ToSql {
     fn to_sql(&self) -> String;
 }
 
-impl ToSql for P<Expr> {
-    fn to_sql(&self) -> String {
-        self.node.to_sql()
-    }
-}
-
 impl ToSql for Expression {
     fn to_sql(&self) -> String {
-        match *self {
+        match self.node {
             ExprLit(ref literal) => {
                 match literal.node {
                     // TODO: ne pas utiliser unwrap().
