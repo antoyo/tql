@@ -11,10 +11,15 @@ use ast::Limit::{EndRange, Index, LimitOffset, Range, StartRange};
 use ast::Query::Select;
 use plugin::number_literal;
 
-pub fn all_literal(expression: &Expression) -> bool {
+fn all_integer_literal(expression: &Expression) -> bool {
     match expression.node {
-        ExprLit(_) => true,
-        ExprBinary(_, ref expr1, ref expr2) => all_literal(expr1) && all_literal(expr2),
+        ExprLit(ref literal) => {
+            match literal.node {
+                LitInt(_, _) => true,
+                _ => false,
+            }
+        },
+        ExprBinary(_, ref expr1, ref expr2) => all_integer_literal(expr1) && all_integer_literal(expr2),
         _ => false,
     }
 }
@@ -52,7 +57,7 @@ fn optimize_limit(limit: Limit) -> Limit {
             Index(try_simplify(expression))
         },
         Range(ref expression1, ref expression2) => {
-            if all_literal(expression1) && all_literal(expression2) {
+            if all_integer_literal(expression1) && all_integer_literal(expression2) {
                 let offset = evaluate(expression1);
                 let expr2 = evaluate(expression2);
                 let limit = expr2 - offset;
@@ -70,7 +75,7 @@ fn optimize_limit(limit: Limit) -> Limit {
 }
 
 fn try_simplify(expression: &Expression) -> Expression {
-    if all_literal(expression) {
+    if all_integer_literal(expression) {
         number_literal(evaluate(expression))
     }
     else {

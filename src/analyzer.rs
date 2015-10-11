@@ -2,22 +2,24 @@
 
 use syntax::ast::{BinOp_, Expr, Path};
 use syntax::ast::Expr_::{ExprBinary, ExprCall, ExprCast, ExprLit, ExprMethodCall, ExprPath, ExprRange, ExprUnary};
+use syntax::ast::FloatTy;
+use syntax::ast::IntTy;
+use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
+use syntax::ast::LitIntType::{SignedIntLit, UnsignedIntLit, UnsuffixedIntLit};
 use syntax::ast::UnOp::UnNeg;
 use syntax::codemap::{Span, Spanned};
 use syntax::ptr::P;
 
-use ast::{Filter, FilterExpression, Filters, Identifier, Limit, LogicalOperator, Order, RelationalOperator, Query};
-use ast::Limit::{EndRange, Index, NoLimit, Range, StartRange};
+use ast::{Expression, Filter, FilterExpression, Filters, Identifier, Limit, LogicalOperator, Order, RelationalOperator, Query};
+use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use error::{Error, SqlResult, res};
 use parser::MethodCalls;
-use state::{SqlFields, SqlTables};
-
-type Table<'a> = Option<&'a SqlFields>;
+use state::{SqlFields, SqlTables, Type, singleton};
+use string::find_near;
 
 /// Analyze and transform the AST.
 pub fn analyze<'a, 'b>(method_calls: MethodCalls, sql_tables: &'a SqlTables) -> SqlResult<Query<'b>> {
     // TODO: vérifier que la suite d’appels de méthode est valide.
-    // TODO: vérifier que la limite est une variable de type i64.
     let mut errors = vec![];
 
     let table = sql_tables.get(&method_calls.name);
@@ -34,17 +36,21 @@ pub fn analyze<'a, 'b>(method_calls: MethodCalls, sql_tables: &'a SqlTables) -> 
     }
 
     let table_name = method_calls.name.clone();
-    for method_call in &method_calls.calls {
+    for method_call in method_calls.calls {
         match &method_call.name[..] {
             "all" => (), // TODO
             "filter" => {
-                filter_expression = try!(expression_to_filter_expression(&method_call.arguments[0], &table_name, table));
+                if let Some(table) = table {
+                    filter_expression = try!(expression_to_filter_expression(&method_call.arguments[0], &table_name, table));
+                }
             }
             "limit" => {
-                limit = try!(arguments_to_limit(&method_call.arguments[0]));
+                limit = try!(arguments_to_limit(method_call.arguments[0].clone()));
             }
             "sort" => {
-                order = try!(arguments_to_orders(&method_call.arguments, &table_name, table));
+                if let Some(table) = table {
+                    order = try!(arguments_to_orders(&method_call.arguments, &table_name, table));
+                }
             }
             _ => {
                 errors.push(Error::new(
@@ -57,14 +63,12 @@ pub fn analyze<'a, 'b>(method_calls: MethodCalls, sql_tables: &'a SqlTables) -> 
 
     let joins = vec![];
     let mut fields = vec![];
-    match table {
-        Some(table) => {
-            for field in table.keys() {
-                fields.push(field.clone());
-            }
-        },
-        None => (),
+    if let Some(table) = table {
+        for field in table.keys() {
+            fields.push(field.clone());
+        }
     }
+
     res(Query::Select {
         fields: fields,
         filter: filter_expression,
@@ -75,8 +79,56 @@ pub fn analyze<'a, 'b>(method_calls: MethodCalls, sql_tables: &'a SqlTables) -> 
     }, errors)
 }
 
-fn argument_to_order(arg: &Expr, table_name: &String, table: Table) -> SqlResult<Order> {
-    fn identifier(arg: &Expr, identifier: &Expr, table_name: &String, table: Table) -> SqlResult<String> {
+fn analyze_filter_types(filter: &FilterExpression, table_name: &String, errors: &mut Vec<Error>) {
+    // TODO: vérifier que les opérateurs sont utilisé avec les bons types.
+    match *filter {
+        FilterExpression::Filter(ref filter) => {
+            let tables = singleton();
+            // TODO: ne pas utiliser unwrap().
+            let table = tables.get(table_name).unwrap();
+            let field_type = table.get(&filter.operand1).unwrap();
+            check_type(field_type, &filter.operand2, errors);
+        },
+        FilterExpression::Filters(ref filters) => {
+            analyze_filter_types(&*filters.operand1, table_name, errors);
+            analyze_filter_types(&*filters.operand2, table_name, errors);
+        },
+        FilterExpression::NoFilters => (),
+    }
+}
+
+fn analyze_limit_types(limit: &Limit, errors: &mut Vec<Error>) {
+    match *limit {
+        EndRange(ref expression) => check_type(&Type::I64, expression, errors),
+        Index(ref expression) => check_type(&Type::I64, expression, errors),
+        LimitOffset(ref expression1, ref expression2) => {
+            check_type(&Type::I64, expression1, errors);
+            check_type(&Type::I64, expression2, errors);
+        },
+        NoLimit => (),
+        Range(ref expression1, ref expression2) => {
+            check_type(&Type::I64, expression1, errors);
+            check_type(&Type::I64, expression2, errors);
+        },
+        StartRange(ref expression) => check_type(&Type::I64, expression, errors),
+    }
+}
+
+/// Analyze the literal types in the `Query`.
+pub fn analyze_types(query: Query) -> SqlResult<Query> {
+    let mut errors = vec![];
+    match query {
+        Query::Select { ref filter, ref limit, ref table, .. } => {
+            analyze_filter_types(filter, table, &mut errors);
+            analyze_limit_types(limit, &mut errors);
+        },
+        _ => (), // TODO
+    }
+    res(query, errors)
+}
+
+fn argument_to_order<'a>(arg: &Expr, table_name: &String, table: &SqlFields) -> SqlResult<'a, Order> {
+    fn identifier<'a>(arg: &Expr, identifier: &Expr, table_name: &String, table: &SqlFields) -> SqlResult<'a, String> {
         let mut errors = vec![];
         if let ExprPath(_, Path { ref segments, span, .. }) = identifier.node {
             if segments.len() == 1 {
@@ -85,10 +137,10 @@ fn argument_to_order(arg: &Expr, table_name: &String, table: Table) -> SqlResult
                 return res(identifier, errors);
             }
         }
-        Err(vec![Error {
-            message: "Expected an identifier".to_string(),
-            position: arg.span,
-        }])
+        Err(vec![Error::new(
+            "Expected an identifier".to_string(),
+            arg.span,
+        )])
     }
 
     let mut errors = vec![];
@@ -114,7 +166,7 @@ fn argument_to_order(arg: &Expr, table_name: &String, table: Table) -> SqlResult
     res(order, errors)
 }
 
-fn arguments_to_limit(expression: &P<Expr>) -> SqlResult<Limit> {
+fn arguments_to_limit<'a>(expression: P<Expr>) -> SqlResult<'a, Limit> {
     let mut errors = vec![];
     let limit =
         match expression.node {
@@ -146,7 +198,7 @@ fn arguments_to_limit(expression: &P<Expr>) -> SqlResult<Limit> {
     res(limit, errors)
 }
 
-fn arguments_to_orders(arguments: &Vec<P<Expr>>, table_name: &String, table: Table) -> SqlResult<Vec<Order>> {
+fn arguments_to_orders<'a>(arguments: &Vec<P<Expr>>, table_name: &String, table: &SqlFields) -> SqlResult<'a, Vec<Order>> {
     let mut orders = vec![];
     let mut errors = vec![];
 
@@ -208,22 +260,39 @@ fn binop_to_relational_operator(binop: BinOp_) -> RelationalOperator {
     }
 }
 
-fn check_field(identifier: &Identifier, position: Span, table_name: &String, table: Table, errors: &mut Vec<Error>) {
-    match table {
-        Some(fields) => {
-            if !fields.contains_key(identifier) {
-                errors.push(Error::new(
-                        format!("Table {} does not contain a field named {}", table_name, identifier),
-                        position
-                        ));
-            }
-        },
-        None => (),
+fn check_field(identifier: &Identifier, position: Span, table_name: &String, table: &SqlFields, errors: &mut Vec<Error>) {
+    if !table.contains_key(identifier) {
+        errors.push(Error::new(
+            format!("attempted access of field `{}` on type `{}`, but no field with that name was found", identifier, table_name),
+            position
+        ));
+        let field_names = table.keys().map(Clone::clone).collect();
+        if let Some(name) = find_near(identifier, field_names) {
+            errors.push(Error::new_help(
+                format!("did you mean {}?", name),
+                position
+            ));
+        }
+    }
+}
+
+fn check_type(field_type: &Type, expression: &Expression, errors: &mut Vec<Error>) {
+    if !same_type(field_type, expression) {
+        let literal_type = get_type(expression);
+        errors.push(Error::new_with_code(
+            format!("mismatched types:\n expected `{}`,\n    found `{}`", field_type, literal_type),
+            expression.span,
+            "E0308",
+        ));
+        errors.push(Error::new_note(
+            "in this expansion of sql! (defined in tql)".to_string(),
+            expression.span, // TODO: mettre la position de l’appel de macro sql!.
+        ));
     }
 }
 
 /// Convert a Rust expression to a `FilterExpression`.
-fn expression_to_filter_expression(arg: &P<Expr>, table_name: &String, table: Table) -> SqlResult<FilterExpression> {
+fn expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &String, table: &SqlFields) -> SqlResult<'a, FilterExpression> {
     let mut errors = vec![];
 
     let dummy = FilterExpression::NoFilters;
@@ -268,4 +337,52 @@ fn expression_to_filter_expression(arg: &P<Expr>, table_name: &String, table: Ta
         };
 
     res(filter, errors)
+}
+
+fn get_type(expression: &Expression) -> &str {
+    match expression.node {
+        ExprLit(ref literal) => {
+            match literal.node {
+                LitBool(_) => "bool",
+                LitByte(_) => "u8",
+                LitByteStr(_) => "Vec<u8>",
+                LitChar(_) => "char",
+                LitFloat(_, FloatTy::TyF32) => "f32",
+                LitFloat(_, FloatTy::TyF64) => "f64",
+                LitFloatUnsuffixed(_) => "floating-point variable",
+                LitInt(_, int_type) =>
+                    match int_type {
+                        SignedIntLit(IntTy::TyI32, _) => "i32",
+                        _ => "", // TODO
+                    }
+                ,
+                LitStr(_, _) => "String",
+            }
+        }
+        _ => "",
+    }
+}
+
+fn same_type(field_type: &Type, expression: &Expression) -> bool {
+    match expression.node {
+        ExprLit(ref literal) => {
+            match literal.node {
+                LitBool(_) => *field_type == Type::Bool,
+                LitByte(_) => *field_type == Type::U8,
+                LitByteStr(_) => *field_type == Type::ByteString,
+                LitChar(_) => *field_type == Type::Char,
+                LitFloat(_, FloatTy::TyF32) => *field_type == Type::F32,
+                LitFloat(_, FloatTy::TyF64) => *field_type == Type::F64,
+                LitFloatUnsuffixed(_) => *field_type == Type::F32 || *field_type == Type::F64,
+                LitInt(_, int_type) =>
+                    match int_type {
+                        SignedIntLit(IntTy::TyI32, _) => *field_type == Type::I32,
+                        _ => true, // TODO
+                    }
+                ,
+                LitStr(_, _) => *field_type == Type::String,
+            }
+        }
+        _ => true,
+    }
 }

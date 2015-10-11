@@ -10,12 +10,14 @@ use std::fmt::{self, Display, Formatter};
 use std::mem;
 
 /// An SQL query argument.
+#[derive(Debug)]
 pub struct SqlArg {
     pub high: u32,
     pub low: u32,
     pub name: String,
 }
 
+#[derive(Debug)]
 pub struct SqlArgs {
     pub arguments: Vec<Option<SqlArg>>,
     pub table_name: String,
@@ -30,17 +32,31 @@ pub type SqlTables = HashMap<String, SqlFields>;
 /// A field type.
 #[derive(Debug, Eq, PartialEq)]
 pub enum Type {
+    Bool,
+    ByteString,
+    Char,
     Dummy,
+    F32,
+    F64,
     I32,
+    I64,
     String,
+    U8,
 }
 
 impl Display for Type {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let typ = match *self {
+            Type::Bool => "bool",
+            Type::ByteString => "Vec<u8>",
+            Type::Char => "char",
             Type::Dummy => "",
+            Type::F32 => "f32",
+            Type::F64 => "f64",
             Type::I32 => "i32",
+            Type::I64 => "i64",
             Type::String => "String",
+            Type::U8 => "u8",
         };
         write!(f, "{}", typ)
     }

@@ -49,16 +49,17 @@ pub mod parser;
 pub mod plugin;
 pub mod sql;
 pub mod state;
+pub mod string;
 pub mod type_analyzer;
 
-type Arg = (Option<String>, P<Expr>);
+type Arg = (String, P<Expr>);
 type Args = Vec<Arg>;
 pub type SqlQueryWithArgs = (String, QueryType, Args);
 
-use analyzer::analyze;
+use analyzer::{analyze, analyze_types};
 use ast::{Expression, FilterExpression, Limit, Query, QueryType, query_type};
 use attribute::fields_vec_to_hashmap;
-use error::{Error, SqlResult};
+use error::{Error, ErrorType, SqlResult};
 use gen::ToSql;
 use optimizer::optimize;
 use parser::parse;
@@ -70,10 +71,14 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
     let mut arguments = vec![];
 
     fn add_expr(arguments: &mut Args, arg: Arg) {
-        arguments.push(arg);
+        let (_, expression) = arg.clone();
+        match expression.node {
+            ExprLit(_) => (),
+            _ => arguments.push(arg),
+        }
     }
 
-    fn add(arguments: &mut Args, field_name: Option<String>, expr: Expression) {
+    fn add(arguments: &mut Args, field_name: String, expr: Expression) {
         let arg = (field_name, expr);
         add_expr(arguments, arg);
     }
@@ -81,7 +86,7 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
     fn add_filter_arguments(filter: FilterExpression, arguments: &mut Args) {
         match filter {
             FilterExpression::Filter(filter) => {
-                add(arguments, Some(filter.operand1), filter.operand2);
+                add(arguments, filter.operand1, filter.operand2);
             },
             FilterExpression::Filters(filters) => {
                 add_filter_arguments(*filters.operand1, arguments);
@@ -93,18 +98,18 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
 
     fn add_limit_arguments(cx: &mut ExtCtxt, limit: Limit, arguments: &mut Args) {
         match limit {
-            Limit::EndRange(expression) => add(arguments, None, expression),
-            Limit::Index(expression) => add(arguments, None, expression),
+            Limit::EndRange(expression) => add(arguments, "i64".to_string(), expression),
+            Limit::Index(expression) => add(arguments, "i64".to_string(), expression),
             Limit::LimitOffset(_, _) => (),
             Limit::NoLimit => (),
             Limit::Range(expression1, expression2) => {
                 let offset = expression1.clone();
-                add(arguments, None, expression1);
+                add(arguments, "i64".to_string(), expression1);
                 let expr2 = expression2;
                 let offset = offset;
-                add_expr(arguments, (None, quote_expr!(cx, $expr2 - $offset)));
+                add_expr(arguments, ("i64".to_string(), quote_expr!(cx, $expr2 - $offset)));
             },
-            Limit::StartRange(expression) => add(arguments, None, expression),
+            Limit::StartRange(expression) => add(arguments, "i64".to_string(), expression),
         }
     }
 
@@ -206,24 +211,15 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
     for (field_name, arg) in arguments {
         let pos = arg.span;
 
-        match field_name {
-            Some(name) => {
-                let (low, high) =
-                    match (pos.lo, pos.hi) {
-                        (BytePos(low), BytePos(high)) => (low, high),
-                    };
-                let low = InternedString::new_from_name(str_to_ident(&low.to_string()).name);
-                let high = InternedString::new_from_name(str_to_ident(&high.to_string()).name);
-                let list = vec![str_to_ident(&name).name.as_str(), low, high];
-                let mut meta_list = vec![];
-                for el in list {
-                    meta_list.push(cx.meta_word(DUMMY_SP, el));
-                }
-                meta_field_words.push(cx.meta_list(DUMMY_SP, InternedString::new_from_name(table_ident.name), meta_list));
-            },
-            None => {
-                meta_field_words.push(cx.meta_word(DUMMY_SP, InternedString::new("None")));
-            },
+        let (low, high) =
+            match (pos.lo, pos.hi) {
+                (BytePos(low), BytePos(high)) => (low, high),
+            };
+        let low = InternedString::new_from_name(str_to_ident(&low.to_string()).name);
+        let high = InternedString::new_from_name(str_to_ident(&high.to_string()).name);
+        let list = vec![str_to_ident(&field_name).name.as_str(), low, high];
+        for el in list {
+            meta_field_words.push(cx.meta_word(DUMMY_SP, el));
         }
 
         match arg.node {
@@ -235,7 +231,8 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
         }
     }
     let args_expr = cx.expr_vec(DUMMY_SP, arg_refs);
-    let sql_fields_attribute = cx.meta_list(DUMMY_SP, InternedString::new("sql_fields"), meta_field_words);
+    let meta_list = cx.meta_list(DUMMY_SP, InternedString::new_from_name(table_ident.name), meta_field_words);
+    let sql_fields_attribute = cx.meta_list(DUMMY_SP, InternedString::new("sql_fields"), vec![meta_list]);
 
     let expr = match query_type {
         QueryType::SelectMulti => {
@@ -272,18 +269,32 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
 }
 
 fn span_errors(errors: Vec<Error>, cx: &mut ExtCtxt) {
-    for &Error {ref message, position} in &errors {
-        cx.span_err(position, &message);
+    for &Error {code, ref message, position, ref typ} in &errors {
+        match *typ {
+            ErrorType::Error => {
+                match code {
+                    Some(code) => cx.parse_sess.span_diagnostic.span_err_with_code(position, &message, code),
+                    None => cx.span_err(position, &message),
+                }
+            },
+            ErrorType::Help => {
+                cx.parse_sess.span_diagnostic.fileline_help(position, &message);
+            },
+            ErrorType::Note => {
+                cx.parse_sess.span_diagnostic.fileline_note(position, &message);
+            },
+        }
     }
 }
 
-fn to_sql(cx: &mut ExtCtxt, args: &[TokenTree]) -> SqlResult<SqlQueryWithArgs> {
+fn to_sql<'a>(cx: &mut ExtCtxt, args: &[TokenTree]) -> SqlResult<'a, SqlQueryWithArgs> {
     let mut parser = cx.new_parser_from_tts(args);
     let expression = (*parser.parse_expr()).clone();
     let sql_tables = singleton();
-    let method_calls = try!(parse(&expression));
+    let method_calls = try!(parse(expression));
     let mut query = try!(analyze(method_calls, sql_tables));
     optimize(&mut query);
+    query = try!(analyze_types(query));
     let sql = query.to_sql();
     Ok((sql, query_type(&query), arguments(cx, query)))
 }
