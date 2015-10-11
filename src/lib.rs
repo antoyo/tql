@@ -9,6 +9,9 @@
 // FIXME: enlever les clone() inutiles.
 // FIXME: utiliser des fermetures à la place de fonctions internes.
 // FIXME: utiliser use self au lieu de deux lignes.
+// TODO: pour les clés étrangères, vérifier s’il serait possible de les déterminer en mettant des
+// champs dans les différentes structures (Person.address: Address et Address.person: Person ou
+// Person.children: Vec<Person>, Person.mother: Person et Person.father: Person).
 // TODO: créer différents types pour String.
 // TODO: rendre les messages d’erreur plus semblables à ceux de Rust.
 // TODO: rendre le moins d’identifiants publiques.
@@ -64,7 +67,7 @@ use error::{Error, ErrorType, SqlResult};
 use gen::ToSql;
 use optimizer::optimize;
 use parser::parse;
-use state::singleton;
+use state::{SqlArg, SqlArgs, lint_singleton, singleton};
 use type_analyzer::SqlError;
 
 /// Extract the Rust `Expression`s from the `Query`.
@@ -187,9 +190,9 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
     let ident = Ident::new(intern("connection"), table_ident.ctxt);
     // TODO: utiliser un itérateur.
     let sql_tables = singleton();
-    let table = sql_tables.get(&table_ident.to_string()).unwrap();
+    let table_name = table_ident.to_string();
+    let table = sql_tables.get(&table_name).unwrap();
     let mut fields = vec![];
-    let mut meta_field_words = vec![];
     // TODO: prendre en compte l’ID.
     let mut index = 0usize;
 
@@ -208,6 +211,8 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
     let struct_expr = cx.expr_struct(sp, cx.path_ident(sp, table_ident), fields);
 
     let mut arg_refs = vec![];
+    let mut sql_args = vec![];
+    let calls = lint_singleton();
 
     for (field_name, arg) in arguments {
         let pos = arg.span;
@@ -216,12 +221,11 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
             match (pos.lo, pos.hi) {
                 (BytePos(low), BytePos(high)) => (low, high),
             };
-        let low = InternedString::new_from_name(str_to_ident(&low.to_string()).name);
-        let high = InternedString::new_from_name(str_to_ident(&high.to_string()).name);
-        let list = vec![str_to_ident(&field_name).name.as_str(), low, high];
-        for el in list {
-            meta_field_words.push(cx.meta_word(DUMMY_SP, el));
-        }
+        sql_args.push(SqlArg {
+            high: high,
+            low: low,
+            name: field_name,
+        });
 
         match arg.node {
             // Do not add literal arguments as they are in the final string literal.
@@ -231,16 +235,18 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
             },
         }
     }
+
+    let BytePos(low) = sp.lo;
+    calls.insert(low, SqlArgs {
+        arguments: sql_args,
+        table_name: table_name,
+    });
+
     let args_expr = cx.expr_vec(DUMMY_SP, arg_refs);
-    let meta_list = cx.meta_list(DUMMY_SP, InternedString::new_from_name(table_ident.name), meta_field_words);
-    let sql_fields_attribute = cx.meta_list(DUMMY_SP, InternedString::new("sql_fields"), vec![meta_list]);
 
     let expr = match query_type {
         QueryType::SelectMulti => {
             quote_expr!(cx, {
-                #[$sql_fields_attribute]
-                #[allow(dead_code)]
-                const FIELD: i32 = 3141592;
                 let result = $ident.prepare($string).unwrap();
                 result.query(&$args_expr).unwrap().iter().map(|row| {
                     $struct_expr
@@ -249,9 +255,6 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
         },
         QueryType::SelectOne => {
             quote_expr!(cx, {
-                #[$sql_fields_attribute]
-                #[allow(dead_code)]
-                const FIELD: i32 = 3141592;
                 let result = $ident.prepare($string).unwrap();
                 result.query(&$args_expr).unwrap().iter().next().map(|row| {
                     $struct_expr

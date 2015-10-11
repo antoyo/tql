@@ -5,12 +5,10 @@ use rustc::lint::LintContext;
 use rustc::middle::ty::{Ty, TypeAndMut, TyS, TypeVariants};
 use self::rustc_front::hir::Expr;
 use self::rustc_front::hir::Expr_::{self, ExprAddrOf, ExprMethodCall, ExprVec};
-use syntax::ast::Attribute;
 use syntax::ast::IntTy::{TyI32, TyI64};
-use syntax::ast::MetaItem_::{MetaList, MetaWord};
 use syntax::codemap::{NO_EXPANSION, BytePos, Span};
 
-use state::{SqlArg, Type, lint_singleton, singleton};
+use state::{Type, lint_singleton, singleton};
 use string::find_near;
 
 declare_lint!(SQL_LINT, Forbid, "Err about SQL type errors");
@@ -47,48 +45,6 @@ fn argument_types<'a>(cx: &'a LateContext, arguments: &'a Expr_) -> Vec<Ty<'a>> 
 }
 
 impl LateLintPass for SqlError {
-    fn check_attribute(&mut self, _: &LateContext, attribute: &Attribute) {
-        match attribute.node.value.node {
-            MetaList(ref name, ref fields) => {
-                if let Some(_) = name.matches("sql_fields").next() {
-                    let arguments = lint_singleton();
-                    arguments.arguments.clear();
-                    for field in fields {
-                        match field.node {
-                            MetaList(ref name, ref items) => {
-                                arguments.table_name = name.to_string();
-                                let mut args = vec![];
-                                for item in items {
-                                    match item.node {
-                                        MetaWord(ref arg) => {
-                                            args.push(arg.to_string());
-                                        },
-                                        _ => (),
-                                    }
-                                }
-                                let mut index = 0;
-                                while args.len() - index >= 3 {
-                                    arguments.arguments.push(Some(SqlArg {
-                                        // TODO: ne pas utiliser unwrap().
-                                        high: args[index + 2].parse().unwrap(),
-                                        low: args[index + 1].parse().unwrap(),
-                                        name: args[index].clone(),
-                                    }));
-                                    index += 3;
-                                }
-                            },
-                            MetaWord(_) => {
-                                arguments.arguments.push(None);
-                            },
-                            _ => (),
-                        }
-                    }
-                }
-            },
-            _ => (),
-        }
-    }
-
     fn check_expr(&mut self, cx: &LateContext, expr: &Expr) {
         let tables = singleton();
         match expr.node {
@@ -96,12 +52,13 @@ impl LateLintPass for SqlError {
                 let method_name = name.node.to_string();
                 if method_name == "query" {
                     let types = argument_types(cx, &arguments[1].node);
-                    let fields = lint_singleton();
-
-                    if let Some(table) = tables.get(&fields.table_name) {
-                        for i in 0..types.len() {
-                            match fields.arguments[i] {
-                                Some(ref field) => {
+                    let calls = lint_singleton();
+                    let BytePos(low) = expr.span.lo;
+                    match calls.get(&low) {
+                        Some(fields) => {
+                            if let Some(table) = tables.get(&fields.table_name) {
+                                for i in 0..types.len() {
+                                    let field = &fields.arguments[i];
                                     let position = Span {
                                         lo: BytePos(field.low),
                                         hi: BytePos(field.high),
@@ -115,11 +72,8 @@ impl LateLintPass for SqlError {
                                     }
                                     else {
                                         cx.sess().span_err(position, &format!("attempted access of field `{}` on type `{}`, but no field with that name was found", field.name, fields.table_name));
-                                        let field_names = fields.arguments.iter().filter_map(|arg| {
-                                            match *arg {
-                                                Some(ref arg) => Some(arg.name.clone()),
-                                                None => None,
-                                            }
+                                        let field_names = fields.arguments.iter().map(|arg| {
+                                            arg.name.clone()
                                         }).collect();
                                         match find_near(&field.name, &field_names) {
                                             Some(name) => {
@@ -128,13 +82,11 @@ impl LateLintPass for SqlError {
                                             None => (),
                                         }
                                     }
-                                },
-                                None => (),
+                                }
                             }
-                        }
+                        },
+                        None => (), // TODO
                     }
-                    fields.arguments.clear();
-                    fields.table_name = "".to_string();
                 }
             },
             _ => (),

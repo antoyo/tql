@@ -17,11 +17,15 @@ pub struct SqlArg {
     pub name: String,
 }
 
+/// A collection of SQL query arguments.
 #[derive(Debug)]
 pub struct SqlArgs {
-    pub arguments: Vec<Option<SqlArg>>,
+    pub arguments: Vec<SqlArg>,
     pub table_name: String,
 }
+
+/// A collection of query calls (with their arguments).
+pub type SqlCalls = HashMap<u32, SqlArgs>;
 
 /// A collection of fields.
 pub type SqlFields = BTreeMap<String, Type>;
@@ -77,18 +81,15 @@ pub fn singleton() -> &'static mut SqlTables {
 }
 
 /// Returns the global lint state.
-pub fn lint_singleton() -> &'static mut SqlArgs {
+pub fn lint_singleton() -> &'static mut SqlCalls {
     // FIXME: make this thread safe.
-    static mut vector: *mut SqlArgs = 0 as *mut SqlArgs;
+    static mut hash_map: *mut SqlCalls = 0 as *mut SqlCalls;
 
-    let args = SqlArgs {
-        arguments: vec![],
-        table_name: "".to_string(),
-    };
+    let map: SqlCalls = HashMap::new();
     unsafe {
-        if vector == 0 as *mut SqlArgs {
-            vector = mem::transmute(Box::new(args));
+        if hash_map == 0 as *mut SqlCalls {
+            hash_map = mem::transmute(Box::new(map));
         }
-        &mut *vector
+        &mut *hash_map
     }
 }
