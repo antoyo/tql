@@ -42,10 +42,12 @@ pub enum Type {
     Dummy,
     F32,
     F64,
+    I8,
+    I16,
     I32,
     I64,
     String,
-    U8,
+    U32,
 }
 
 impl Display for Type {
@@ -57,10 +59,12 @@ impl Display for Type {
             Type::Dummy => "",
             Type::F32 => "f32",
             Type::F64 => "f64",
+            Type::I8 => "i8",
+            Type::I16 => "i16",
             Type::I32 => "i32",
             Type::I64 => "i64",
             Type::String => "String",
-            Type::U8 => "u8",
+            Type::U32 => "u32",
         };
         write!(f, "{}", typ)
     }

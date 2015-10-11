@@ -6,6 +6,7 @@ use syntax::ast::FloatTy;
 use syntax::ast::IntTy;
 use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
 use syntax::ast::LitIntType::{SignedIntLit, UnsignedIntLit, UnsuffixedIntLit};
+use syntax::ast::UintTy;
 use syntax::ast::UnOp::UnNeg;
 use syntax::codemap::{Span, Spanned};
 use syntax::ptr::P;
@@ -380,8 +381,17 @@ fn get_type(expression: &Expression) -> &str {
                 LitFloatUnsuffixed(_) => "floating-point variable",
                 LitInt(_, int_type) =>
                     match int_type {
+                        SignedIntLit(IntTy::TyIs, _) => "isize",
+                        SignedIntLit(IntTy::TyI8, _) => "i8",
+                        SignedIntLit(IntTy::TyI16, _) => "i16",
                         SignedIntLit(IntTy::TyI32, _) => "i32",
-                        _ => "", // TODO
+                        SignedIntLit(IntTy::TyI64, _) => "i64",
+                        UnsignedIntLit(UintTy::TyUs) => "usize",
+                        UnsignedIntLit(UintTy::TyU8) => "u8",
+                        UnsignedIntLit(UintTy::TyU16) => "u16",
+                        UnsignedIntLit(UintTy::TyU32) => "u32",
+                        UnsignedIntLit(UintTy::TyU64) => "u64",
+                        UnsuffixedIntLit(_) => "integral variable",
                     }
                 ,
                 LitStr(_, _) => "String",
@@ -396,7 +406,7 @@ fn same_type(field_type: &Type, expression: &Expression) -> bool {
         ExprLit(ref literal) => {
             match literal.node {
                 LitBool(_) => *field_type == Type::Bool,
-                LitByte(_) => *field_type == Type::U8,
+                LitByte(_) => false,
                 LitByteStr(_) => *field_type == Type::ByteString,
                 LitChar(_) => *field_type == Type::Char,
                 LitFloat(_, FloatTy::TyF32) => *field_type == Type::F32,
@@ -404,13 +414,19 @@ fn same_type(field_type: &Type, expression: &Expression) -> bool {
                 LitFloatUnsuffixed(_) => *field_type == Type::F32 || *field_type == Type::F64,
                 LitInt(_, int_type) =>
                     match int_type {
+                        SignedIntLit(IntTy::TyIs, _) => false,
+                        SignedIntLit(IntTy::TyI8, _) => *field_type == Type::I8,
+                        SignedIntLit(IntTy::TyI16, _) => *field_type == Type::I16,
                         SignedIntLit(IntTy::TyI32, _) => *field_type == Type::I32,
-                        _ => true, // TODO
+                        SignedIntLit(IntTy::TyI64, _) => *field_type == Type::I64,
+                        UnsignedIntLit(UintTy::TyU32) => *field_type == Type::U32,
+                        UnsignedIntLit(_) => false,
+                        UnsuffixedIntLit(_) => *field_type == Type::I32 || *field_type == Type::U32,
                     }
                 ,
                 LitStr(_, _) => *field_type == Type::String,
             }
         }
-        _ => true,
+        _ => true, // Returns true, because the type checking for non-literal is done later.
     }
 }
