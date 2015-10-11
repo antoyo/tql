@@ -121,7 +121,7 @@ impl LateLintPass for SqlError {
                                                 None => None,
                                             }
                                         }).collect();
-                                        match find_near(&field.name, field_names) {
+                                        match find_near(&field.name, &field_names) {
                                             Some(name) => {
                                                 cx.sess().span_help(position, &format!("did you mean `{}`?", name));
                                             },

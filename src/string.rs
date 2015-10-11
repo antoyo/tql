@@ -1,5 +1,7 @@
+//! String proximity lookup function.
+
 /// Finds a near match of `str_to_check` in `strings`.
-pub fn find_near(str_to_check: &String, strings: Vec<String>) -> Option<String> {
+pub fn find_near(str_to_check: &String, strings: &Vec<String>) -> Option<String> {
     let mut result = None;
     let mut best_distance = str_to_check.len();
     for string in strings {
@@ -7,7 +9,7 @@ pub fn find_near(str_to_check: &String, strings: Vec<String>) -> Option<String> 
         if distance < best_distance {
             best_distance = distance;
             if distance < 3 {
-                result = Some(string);
+                result = Some(string.clone());
             }
         }
     }

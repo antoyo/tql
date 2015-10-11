@@ -29,13 +29,35 @@ pub fn analyze<'a, 'b>(method_calls: MethodCalls, sql_tables: &'a SqlTables) -> 
     let mut limit = Limit::NoLimit;
 
     if !sql_tables.contains_key(&method_calls.name) {
-        errors.push(Error::new(
-            format!("Table `{}` does not exist", method_calls.name),
+        errors.push(Error::new_with_code(
+            format!("`{}` does not name an SQL table", method_calls.name),
             method_calls.position,
+            "E0422",
         ));
+        let tables = sql_tables.keys().map(Clone::clone).collect();
+        if let Some(name) = find_near(&method_calls.name, &tables) {
+            errors.push(Error::new_help(
+                format!("did you mean {}?", name),
+                method_calls.position,
+            ));
+        }
+        else {
+            errors.push(Error::new_help(
+                format!("did you forget to add the #[sql_table] attribute on the {} struct?", method_calls.name),
+                method_calls.position,
+            ));
+        }
     }
 
     let table_name = method_calls.name.clone();
+
+    // TODO: tenir ce vecteur à jour.
+    let methods = vec![
+        "all".to_string(),
+        "filter".to_string(),
+        "limit".to_string(),
+        "sort".to_string(),
+    ];
     for method_call in method_calls.calls {
         match &method_call.name[..] {
             "all" => (), // TODO
@@ -54,9 +76,15 @@ pub fn analyze<'a, 'b>(method_calls: MethodCalls, sql_tables: &'a SqlTables) -> 
             }
             _ => {
                 errors.push(Error::new(
-                    format!("Unknown method {}", method_call.name),
+                    format!("no method named `{}` found in tql", method_call.name),
                     method_call.position,
                 ));
+                if let Some(name) = find_near(&method_call.name, &methods) {
+                    errors.push(Error::new_help(
+                        format!("did you mean {}?", name),
+                        method_call.position,
+                    ));
+                }
             }
         }
     }
@@ -267,7 +295,7 @@ fn check_field(identifier: &Identifier, position: Span, table_name: &String, tab
             position
         ));
         let field_names = table.keys().map(Clone::clone).collect();
-        if let Some(name) = find_near(identifier, field_names) {
+        if let Some(name) = find_near(identifier, &field_names) {
             errors.push(Error::new_help(
                 format!("did you mean {}?", name),
                 position

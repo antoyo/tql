@@ -9,6 +9,7 @@
 // FIXME: enlever les clone() inutiles.
 // FIXME: utiliser des fermetures à la place de fonctions internes.
 // FIXME: utiliser use self au lieu de deux lignes.
+// TODO: créer différents types pour String.
 // TODO: rendre les messages d’erreur plus semblables à ceux de Rust.
 // TODO: rendre le moins d’identifiants publiques.
 // TODO: supporter plusieurs SGBDs.
