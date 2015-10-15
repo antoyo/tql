@@ -9,9 +9,10 @@ doc = false
 
 [lib]
 name = "tql"
-crate-type = ["dylib"]
 doc = true
-plugin = true
 
 [dependencies]
 postgres = "0.10.0"
+
+[dependencies.tql_macros]
+path = "tql_macros"

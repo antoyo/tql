@@ -1,0 +1,10 @@
+[package]
+name = "tql_macros"
+version = "0.1.0"
+authors = ["Antoni Boucher <Antoni.Boucher@USherbrooke.ca>"]
+
+[lib]
+name = "tql_macros"
+crate-type = ["dylib"]
+doc = true
+plugin = true

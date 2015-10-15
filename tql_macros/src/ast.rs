@@ -47,6 +47,15 @@ pub struct Filters {
     pub operand2: Box<FilterExpression>,
 }
 
+/// A `Join` with another `table` via a specific `field`.
+#[derive(Clone, Debug)]
+pub struct Join {
+    pub left_field: Identifier,
+    pub left_table: Identifier,
+    pub right_field: Identifier,
+    pub right_table: Identifier,
+}
+
 /// An SQL LIMIT clause.
 #[derive(Clone, Debug)]
 pub enum Limit {
@@ -102,7 +111,7 @@ pub enum Query<'a> {
     Select {
         fields: FieldList,
         filter: FilterExpression,
-        joins: Vec<Identifier>,
+        joins: Vec<Join>,
         limit: Limit,
         order: Vec<Order>,
         table: Identifier,

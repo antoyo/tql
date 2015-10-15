@@ -5,7 +5,7 @@ use std::str::from_utf8;
 use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
 
-use ast::{Expression, FieldList, Filter, Filters, FilterExpression, Identifier, Limit, LogicalOperator, Order, RelationalOperator, Query};
+use ast::{Expression, FieldList, Filter, Filters, FilterExpression, Identifier, Join, Limit, LogicalOperator, Order, RelationalOperator, Query};
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use sql::escape;
 
@@ -59,6 +59,23 @@ impl ToSql for FilterExpression {
 impl ToSql for Filters {
     fn to_sql(&self) -> String {
         self.operand1.to_sql() + " " + &self.operator.to_sql() + " " + &self.operand2.to_sql()
+    }
+}
+
+impl ToSql for Join {
+    fn to_sql(&self) -> String {
+        " INNER JOIN ".to_string() + &self.right_table + " ON " + &self.left_table + "." + &self.left_field + "_id = " + &self.right_table + "." + &self.right_field
+    }
+}
+
+impl ToSql for [Join] {
+    fn to_sql(&self) -> String {
+        if self.len() > 0 {
+            self.iter().map(ToSql::to_sql).collect::<Vec<_>>().join(" ")
+        }
+        else {
+            "".to_string()
+        }
     }
 }
 
@@ -123,7 +140,7 @@ impl<'a> ToSql for Query<'a> {
                     &FilterExpression::Filters(_) => " WHERE ",
                     &FilterExpression::NoFilters => "",
                 };
-                replace_placeholder(format!("SELECT {} FROM {}{}{}{}{}", fields.to_sql(), table, where_clause, filter.to_sql(), order.to_sql(), limit.to_sql()))
+                replace_placeholder(format!("SELECT {} FROM {}{}{}{}{}{}", fields.to_sql(), table, joins.to_sql(), where_clause, filter.to_sql(), order.to_sql(), limit.to_sql()))
             },
             Query::Update { .. } => "".to_string(), // TODO
         }
