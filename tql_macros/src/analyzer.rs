@@ -192,7 +192,7 @@ fn arguments_to_joints<'a>(arguments: &[P<Expr>], table_name: &str, table: &SqlF
     res(joins, errors)
 }
 
-fn arguments_to_limit<'a>(expression: P<Expr>) -> SqlResult<'a, Limit> {
+fn arguments_to_limit<'a, 'b>(expression: &'b P<Expr>) -> SqlResult<'a, Limit> {
     let mut errors = vec![];
     let limit =
         match expression.node {
@@ -458,7 +458,7 @@ fn get_type(expression: &Expression) -> &str {
 
 pub fn has_joins(joins: &[Join], name: &str) -> bool {
     joins.iter()
-        .map(|join| join.left_field.clone())
+        .map(|join| &join.left_field)
         .any(|field_name| field_name == name)
 }
 
@@ -482,7 +482,7 @@ fn process_methods<'a>(calls: &[MethodCall], table: &SqlFields, table_name: &str
                 });
             },
             "limit" => {
-                try(arguments_to_limit(method_call.arguments[0].clone()), &mut errors, |new_limit| {
+                try(arguments_to_limit(&method_call.arguments[0]), &mut errors, |new_limit| {
                     limit = new_limit;
                 });
             },

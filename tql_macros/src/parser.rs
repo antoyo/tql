@@ -5,6 +5,7 @@ use syntax::ast::Expr_::{ExprIndex, ExprMethodCall, ExprPath};
 use syntax::codemap::{Span, Spanned};
 use syntax::ptr::P;
 
+use ast::Expression;
 use error::{Error, SqlResult, res};
 
 /// A method call.
@@ -31,7 +32,7 @@ impl MethodCalls {
 }
 
 /// Convert a method call expression to a simpler vector-based structure.
-pub fn parse<'a>(expression: Expr) -> SqlResult<'a, MethodCalls> {
+pub fn parse<'a>(expression: Expression) -> SqlResult<'a, MethodCalls> {
     let mut errors = vec![];
     let mut calls = MethodCalls {
         calls: vec![],
@@ -39,7 +40,7 @@ pub fn parse<'a>(expression: Expr) -> SqlResult<'a, MethodCalls> {
         position: expression.span,
     };
 
-    fn expr_to_vec<'a>(expression: &'a Expr, calls: &mut MethodCalls, errors: &mut Vec<Error>) {
+    fn expr_to_vec<'a>(expression: &Expression, calls: &mut MethodCalls, errors: &mut Vec<Error>) {
         match expression.node {
             ExprMethodCall(Spanned { node: object, span: method_span}, _, ref arguments) => {
                 expr_to_vec(&arguments[0], calls, errors);

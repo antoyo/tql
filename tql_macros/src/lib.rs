@@ -11,7 +11,7 @@
 // modifications (dans le cas où l’ID existe).
 // TODO: utiliser tous les segments au lieu de juste segments[0].
 // FIXME: unreachable!() fait planter le compilateur.
-// FIXME: remplacer format!() par .to_string() quand c’est possible.
+// FIXME: remplacer format!() par .to_owned() quand c’est possible.
 // FIXME: enlever les clone() inutiles.
 // FIXME: utiliser des fermetures à la place de fonctions internes.
 // FIXME: utiliser use self au lieu de deux lignes.
@@ -74,11 +74,14 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
     let mut arguments = vec![];
 
     fn add_expr(arguments: &mut Args, arg: Arg) {
-        let (_, expression) = arg.clone();
-        match expression.node {
-            ExprLit(_) => (),
-            _ => arguments.push(arg),
+        // TODO: essayer d’améliorer cela.
+        {
+            let (_, ref expression) = arg;
+            if let ExprLit(_) = expression.node {
+                return;
+            }
         }
+        arguments.push(arg);
     }
 
     fn add(arguments: &mut Args, field_name: String, expr: Expression) {
@@ -109,7 +112,6 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
                 let offset = expression1.clone();
                 add(arguments, "i64".to_owned(), expression1);
                 let expr2 = expression2;
-                let offset = offset;
                 add_expr(arguments, ("i64".to_owned(), quote_expr!(cx, $expr2 - $offset)));
             },
             Limit::StartRange(expression) => add(arguments, "i64".to_owned(), expression),
@@ -349,7 +351,7 @@ fn span_errors(errors: Vec<Error>, cx: &mut ExtCtxt) {
 
 fn to_sql<'a>(cx: &mut ExtCtxt, args: &[TokenTree]) -> SqlResult<'a, SqlQueryWithArgs> {
     let mut parser = cx.new_parser_from_tts(args);
-    let expression = (*parser.parse_expr()).clone();
+    let expression = parser.parse_expr();
     let sql_tables = singleton();
     let method_calls = try!(parse(expression));
     let mut query = try!(analyze(method_calls, sql_tables));

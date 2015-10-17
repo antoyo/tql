@@ -1,7 +1,7 @@
 //! String proximity lookup function.
 
 /// Finds a near match of `str_to_check` in `strings`.
-pub fn find_near<'a, T: Iterator<Item = &'a String>>(str_to_check: &str, strings: T) -> Option<String> {
+pub fn find_near<'a, T: Iterator<Item = &'a String>>(str_to_check: &str, strings: T) -> Option<&'a String> {
     let mut result = None;
     let mut best_distance = str_to_check.len();
     for string in strings {
@@ -9,7 +9,7 @@ pub fn find_near<'a, T: Iterator<Item = &'a String>>(str_to_check: &str, strings
         if distance < best_distance {
             best_distance = distance;
             if distance < 3 {
-                result = Some(string.clone());
+                result = Some(string);
             }
         }
     }

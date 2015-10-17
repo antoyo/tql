@@ -44,14 +44,14 @@ pub fn optimize(query: &mut Query) {
         Delete { .. } => (), // TODO
         Insert { .. } => (), // TODO
         Select { ref mut limit, .. } => {
-            *limit = optimize_limit(limit.clone());
+            *limit = optimize_limit(limit);
         },
         Update { .. } => (), // TODO
     }
 }
 
-fn optimize_limit(limit: Limit) -> Limit {
-    match limit {
+fn optimize_limit(limit: &Limit) -> Limit {
+    match *limit {
         EndRange(ref expression) => {
             EndRange(try_simplify(expression))
         },
@@ -72,7 +72,7 @@ fn optimize_limit(limit: Limit) -> Limit {
         StartRange(ref expression) => {
             StartRange(try_simplify(expression))
         },
-        limit => limit,
+        ref limit => limit.clone(),
     }
 }
 
