@@ -4,9 +4,8 @@
 
 #![feature(box_syntax, plugin, plugin_registrar, quote, rustc_private)]
 #![plugin(clippy)]
+#![warn(option_unwrap_used, result_unwrap_used)]
 
-// TODO: mettre la construction de l’AST des requêtes dans parser (ou créer deux fichier parser)
-// pour la séparer de l’analyse sémantique.
 // TODO: paramétriser le type ForeignKey et PrimaryKey pour que la macro puisse choisir de mettre
 // le type en question ou rien (dans le cas où la jointure n’est pas faite) ou empêcher les
 // modifications (dans le cas où l’ID existe).

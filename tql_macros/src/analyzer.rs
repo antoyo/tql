@@ -11,110 +11,38 @@ use syntax::ast::UnOp::UnNeg;
 use syntax::codemap::{DUMMY_SP, Span, Spanned};
 use syntax::ptr::P;
 
-use ast::{Expression, Filter, FilterExpression, Filters, Join, Limit, LogicalOperator, Order, RelationalOperator, Query};
+use ast::{Expression, Filter, FilterExpression, Filters, Identifier, Join, Limit, LogicalOperator, Order, RelationalOperator, Query};
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use error::{Error, SqlResult, res};
-use parser::MethodCalls;
+use parser::{MethodCall, MethodCalls};
 use state::{SqlFields, SqlTables, Type, singleton};
 use string::find_near;
 
 /// Analyze and transform the AST.
-// TODO: séparer cette fonction en plus petites fonctions.
 pub fn analyze<'a, 'b>(method_calls: MethodCalls, sql_tables: &'a SqlTables) -> SqlResult<Query<'b>> {
-    // TODO: vérifier que la suite d’appels de méthode est valide.
+    // TODO: vérifier que la suite d’appels de méthode est valide (de même que l’ordre pour filter).
     let mut errors = vec![];
 
-    let table = sql_tables.get(&method_calls.name);
-
-    let mut filter_expression = FilterExpression::NoFilters;
-    let mut order = vec![];
-    let mut limit = Limit::NoLimit;
-    let mut joins = vec![];
-
-    if !sql_tables.contains_key(&method_calls.name) {
-        unknown_table_error(&method_calls.name, method_calls.position, sql_tables, &mut errors);
-    }
-
     let table_name = method_calls.name;
+    let table = sql_tables.get(&table_name);
+    let calls = &method_calls.calls;
 
-    // TODO: tenir ce vecteur à jour.
-    let methods = vec![
-        "all".to_owned(),
-        "filter".to_owned(),
-        "join".to_owned(),
-        "limit".to_owned(),
-        "sort".to_owned(),
-    ];
-    for method_call in method_calls.calls {
-        match &method_call.name[..] {
-            "all" => (), // TODO
-            "filter" => {
-                if let Some(table) = table {
-                    filter_expression = try!(expression_to_filter_expression(&method_call.arguments[0], &table_name, table));
-                }
-            },
-            "join" => {
-                if let Some(table) = table {
-                    let mut new_joins = try!(arguments_to_joints(&method_call.arguments, &table_name, table));
-                    joins.append(&mut new_joins);
-                }
-            },
-            "limit" => {
-                limit = try!(arguments_to_limit(method_call.arguments[0].clone()));
-            },
-            "sort" => {
-                if let Some(table) = table {
-                    order = try!(arguments_to_orders(&method_call.arguments, &table_name, table));
-                }
-            },
-            _ => {
-                errors.push(Error::new(
-                    format!("no method named `{}` found in tql", method_call.name),
-                    method_call.position,
-                ));
-                if let Some(name) = find_near(&method_call.name, methods.iter()) {
-                    errors.push(Error::new_help(
-                        format!("did you mean {}?", name),
-                        method_call.position,
-                    ));
-                }
-            },
-        }
+    if !sql_tables.contains_key(&table_name) {
+        unknown_table_error(&table_name, method_calls.position, sql_tables, &mut errors);
     }
 
-    let mut fields = vec![];
-    if let Some(table) = table {
-        for (field, typ) in table {
-            match *typ {
-                // TODO: faire attention aux conflits de nom.
-                Type::Custom(ref foreign_table) => {
-                    let table_name = foreign_table;
-                    match sql_tables.get(foreign_table) {
-                        Some(foreign_table) => {
-                            if has_joins(&joins, field) {
-                                for (field, typ) in foreign_table {
-                                    match *typ {
-                                        Type::Custom(_) | Type::Dummy => (), // Do not add foreign key recursively.
-                                        _ => {
-                                            fields.push(table_name.clone() + "." + &field.clone());
-                                        },
-                                    }
-                                }
-                            }
-                        },
-                        None => {
-                            // TODO: utiliser la vraie position.
-                            unknown_table_error(foreign_table, DUMMY_SP, &sql_tables, &mut errors);
-                        },
-                    }
-                },
-                Type::Dummy => (),
-                _ => {
-                    fields.push(table_name.clone() + "." + &field.clone());
-                },
-            }
-        }
-    }
+    check_methods(&calls, &mut errors);
+
+    let (fields, filter_expression, joins, limit, order) =
+        match table {
+            Some(table) => {
+                let (filter_expression, joins, limit, order) = try!(process_methods(&calls, table, &table_name));
+                let fields = get_query_fields(table, &table_name, &joins, sql_tables, &mut errors);
+                (fields, filter_expression, joins, limit, order)
+
+            },
+            None => (vec![], FilterExpression::NoFilters, vec![], Limit::NoLimit, vec![]),
+        };
 
     res(Query::Select {
         fields: fields,
@@ -256,10 +184,9 @@ fn arguments_to_joints<'a>(arguments: &[P<Expr>], table_name: &str, table: &SqlF
     let mut errors = vec![];
 
     for arg in arguments {
-        match argument_to_join(arg, table_name, table) {
-            Ok(join) => joins.push(join),
-            Err(ref mut errs) => errors.append(errs),
-        }
+        try(argument_to_join(arg, table_name, table), &mut errors, |join| {
+            joins.push(join);
+        });
     }
 
     res(joins, errors)
@@ -302,10 +229,9 @@ fn arguments_to_orders<'a>(arguments: &[P<Expr>], table_name: &str, table: &SqlF
     let mut errors = vec![];
 
     for arg in arguments {
-        match argument_to_order(arg, table_name, table) {
-            Ok(order) => orders.push(order),
-            Err(ref mut errs) => errors.append(errs),
-        }
+        try(argument_to_order(arg, table_name, table), &mut errors, |order| {
+            orders.push(order);
+        });
     }
 
     res(orders, errors)
@@ -375,6 +301,30 @@ fn check_field(identifier: &str, position: Span, table_name: &str, table: &SqlFi
     }
 }
 
+fn check_methods(calls: &[MethodCall], errors: &mut Vec<Error>) {
+    let methods = vec![
+        "all".to_owned(),
+        "filter".to_owned(),
+        "join".to_owned(),
+        "limit".to_owned(),
+        "sort".to_owned(),
+    ];
+    for method_call in calls {
+        if !methods.contains(&method_call.name) {
+            errors.push(Error::new(
+                format!("no method named `{}` found in tql", method_call.name),
+                method_call.position,
+            ));
+            if let Some(name) = find_near(&method_call.name, methods.iter()) {
+                errors.push(Error::new_help(
+                    format!("did you mean {}?", name),
+                    method_call.position,
+                ));
+            }
+        }
+    }
+}
+
 fn check_type(field_type: &Type, expression: &Expression, errors: &mut Vec<Error>) {
     if !same_type(field_type, expression) {
         let literal_type = get_type(expression);
@@ -438,6 +388,41 @@ fn expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &str, table: &
     res(filter, errors)
 }
 
+fn get_query_fields(table: &SqlFields, table_name: &str, joins: &[Join], sql_tables: &SqlTables, errors: &mut Vec<Error>) -> Vec<Identifier> {
+    let mut fields = vec![];
+    for (field, typ) in table {
+        match *typ {
+            // TODO: faire attention aux conflits de nom.
+            Type::Custom(ref foreign_table) => {
+                let table_name = foreign_table;
+                match sql_tables.get(foreign_table) {
+                    Some(foreign_table) => {
+                        if has_joins(&joins, field) {
+                            for (field, typ) in foreign_table {
+                                match *typ {
+                                    Type::Custom(_) | Type::Dummy => (), // Do not add foreign key recursively.
+                                    _ => {
+                                        fields.push(table_name.clone() + "." + &field);
+                                    },
+                                }
+                            }
+                        }
+                    },
+                    None => {
+                        // TODO: utiliser la vraie position.
+                        unknown_table_error(foreign_table, DUMMY_SP, &sql_tables, errors);
+                    },
+                }
+            },
+            Type::Dummy => (),
+            _ => {
+                fields.push(table_name.to_owned() + "." + &field);
+            },
+        }
+    }
+    fields
+}
+
 fn get_type(expression: &Expression) -> &str {
     match expression.node {
         ExprLit(ref literal) => {
@@ -477,6 +462,41 @@ pub fn has_joins(joins: &[Join], name: &str) -> bool {
         .any(|field_name| field_name == name)
 }
 
+fn process_methods<'a>(calls: &[MethodCall], table: &SqlFields, table_name: &str) -> SqlResult<'a, (FilterExpression, Vec<Join>, Limit, Vec<Order>)> {
+    let mut errors = vec![];
+    let mut filter_expression = FilterExpression::NoFilters;
+    let mut joins = vec![];
+    let mut limit = Limit::NoLimit;
+    let mut order = vec![];
+    for method_call in calls {
+        match &method_call.name[..] {
+            "all" => (), // TODO
+            "filter" => {
+                try(expression_to_filter_expression(&method_call.arguments[0], &table_name, table), &mut errors, |filter| {
+                    filter_expression = filter;
+                });
+            },
+            "join" => {
+                try(arguments_to_joints(&method_call.arguments, &table_name, table), &mut errors, |mut new_joins| {
+                    joins.append(&mut new_joins);
+                });
+            },
+            "limit" => {
+                try(arguments_to_limit(method_call.arguments[0].clone()), &mut errors, |new_limit| {
+                    limit = new_limit;
+                });
+            },
+            "sort" => {
+                try(arguments_to_orders(&method_call.arguments, &table_name, table), &mut errors, |new_order| {
+                    order = new_order;
+                });
+            },
+            _ => (), // Nothing to do since check_methods() check for unknown method.
+        }
+    }
+    res((filter_expression, joins, limit, order), errors)
+}
+
 fn same_type(field_type: &Type, expression: &Expression) -> bool {
     match expression.node {
         ExprLit(ref literal) => {
@@ -504,6 +524,15 @@ fn same_type(field_type: &Type, expression: &Expression) -> bool {
             }
         }
         _ => true, // Returns true, because the type checking for non-literal is done later.
+    }
+}
+
+/// If `result` is an `Err`, add the errors to `errors`.
+/// Otherwise, execute the closure.
+fn try<'a, F: FnMut(T), T>(mut result: Result<T, Vec<Error<'a>>>, errors: &mut Vec<Error<'a>>, mut fn_using_result: F) {
+    match result {
+        Ok(value) => fn_using_result(value),
+        Err(ref mut errs) => errors.append(errs),
     }
 }
 
