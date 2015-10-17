@@ -11,7 +11,7 @@ use syntax::ast::UnOp::UnNeg;
 use syntax::codemap::{DUMMY_SP, Span, Spanned};
 use syntax::ptr::P;
 
-use ast::{Expression, Filter, FilterExpression, Filters, Identifier, Join, Limit, LogicalOperator, Order, RelationalOperator, Query};
+use ast::{Expression, Filter, FilterExpression, Filters, Join, Limit, LogicalOperator, Order, RelationalOperator, Query};
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use error::{Error, SqlResult, res};
 use parser::MethodCalls;
@@ -35,15 +35,15 @@ pub fn analyze<'a, 'b>(method_calls: MethodCalls, sql_tables: &'a SqlTables) -> 
         unknown_table_error(&method_calls.name, method_calls.position, sql_tables, &mut errors);
     }
 
-    let table_name = method_calls.name.clone();
+    let table_name = method_calls.name;
 
     // TODO: tenir ce vecteur à jour.
     let methods = vec![
-        "all".to_string(),
-        "filter".to_string(),
-        "join".to_string(),
-        "limit".to_string(),
-        "sort".to_string(),
+        "all".to_owned(),
+        "filter".to_owned(),
+        "join".to_owned(),
+        "limit".to_owned(),
+        "sort".to_owned(),
     ];
     for method_call in method_calls.calls {
         match &method_call.name[..] {
@@ -72,7 +72,7 @@ pub fn analyze<'a, 'b>(method_calls: MethodCalls, sql_tables: &'a SqlTables) -> 
                     format!("no method named `{}` found in tql", method_call.name),
                     method_call.position,
                 ));
-                if let Some(name) = find_near(&method_call.name, &methods) {
+                if let Some(name) = find_near(&method_call.name, methods.iter()) {
                     errors.push(Error::new_help(
                         format!("did you mean {}?", name),
                         method_call.position,
@@ -126,7 +126,7 @@ pub fn analyze<'a, 'b>(method_calls: MethodCalls, sql_tables: &'a SqlTables) -> 
     }, errors)
 }
 
-fn analyze_filter_types(filter: &FilterExpression, table_name: &String, errors: &mut Vec<Error>) {
+fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors: &mut Vec<Error>) {
     // TODO: vérifier que les opérateurs sont utilisé avec les bons types.
     match *filter {
         FilterExpression::Filter(ref filter) => {
@@ -165,22 +165,25 @@ fn analyze_limit_types(limit: &Limit, errors: &mut Vec<Error>) {
 pub fn analyze_types(query: Query) -> SqlResult<Query> {
     let mut errors = vec![];
     match query {
+        Query::CreateTable { .. } => (), // TODO
+        Query::Delete { .. } => (), // TODO
+        Query::Insert { .. } => (), // TODO
         Query::Select { ref filter, ref limit, ref table, .. } => {
-            analyze_filter_types(filter, table, &mut errors);
+            analyze_filter_types(filter, &table, &mut errors);
             analyze_limit_types(limit, &mut errors);
         },
-        _ => (), // TODO
+        Query::Update { .. } => (), // TODO
     }
     res(query, errors)
 }
 
-fn argument_to_join<'a>(arg: &Expr, table_name: &String, table: &SqlFields) -> SqlResult<'a, Join> {
+fn argument_to_join<'a>(arg: &Expr, table_name: &str, table: &SqlFields) -> SqlResult<'a, Join> {
     let mut errors = vec![];
     let mut join = Join {
-        left_field: "".to_string(),
-        left_table: "".to_string(),
-        right_field: "".to_string(),
-        right_table: "".to_string(),
+        left_field: "".to_owned(),
+        left_table: "".to_owned(),
+        right_field: "".to_owned(),
+        right_table: "".to_owned(),
     };
 
     match arg.node {
@@ -191,8 +194,8 @@ fn argument_to_join<'a>(arg: &Expr, table_name: &String, table: &SqlFields) -> S
                 Some(related_table_name) => {
                     join = Join {
                         left_field: identifier,
-                        left_table: table_name.clone(),
-                        right_field: "id".to_string(),
+                        left_table: table_name.to_owned(),
+                        right_field: "id".to_owned(),
                         right_table: related_table_name.to_string(),
                     };
                 },
@@ -201,7 +204,7 @@ fn argument_to_join<'a>(arg: &Expr, table_name: &String, table: &SqlFields) -> S
         }
         _ => {
             errors.push(Error::new(
-                "Expected identifier".to_string(),
+                "Expected identifier".to_owned(),
                 arg.span,
             ));
         }
@@ -209,8 +212,8 @@ fn argument_to_join<'a>(arg: &Expr, table_name: &String, table: &SqlFields) -> S
     res(join, errors)
 }
 
-fn argument_to_order<'a>(arg: &Expr, table_name: &String, table: &SqlFields) -> SqlResult<'a, Order> {
-    fn identifier<'a>(arg: &Expr, identifier: &Expr, table_name: &String, table: &SqlFields) -> SqlResult<'a, String> {
+fn argument_to_order<'a>(arg: &Expr, table_name: &str, table: &SqlFields) -> SqlResult<'a, Order> {
+    fn identifier<'a>(arg: &Expr, identifier: &Expr, table_name: &str, table: &SqlFields) -> SqlResult<'a, String> {
         let mut errors = vec![];
         if let ExprPath(_, Path { ref segments, span, .. }) = identifier.node {
             if segments.len() == 1 {
@@ -220,7 +223,7 @@ fn argument_to_order<'a>(arg: &Expr, table_name: &String, table: &SqlFields) -> 
             }
         }
         Err(vec![Error::new(
-            "Expected an identifier".to_string(),
+            "Expected an identifier".to_owned(),
             arg.span,
         )])
     }
@@ -239,16 +242,16 @@ fn argument_to_order<'a>(arg: &Expr, table_name: &String, table: &SqlFields) -> 
             }
             _ => {
                 errors.push(Error::new(
-                    "Expected - or identifier".to_string(),
+                    "Expected - or identifier".to_owned(),
                     arg.span,
                 ));
-                Order::Ascending("".to_string())
+                Order::Ascending("".to_owned())
             }
         };
     res(order, errors)
 }
 
-fn arguments_to_joints<'a>(arguments: &Vec<P<Expr>>, table_name: &String, table: &SqlFields) -> SqlResult<'a, Vec<Join>> {
+fn arguments_to_joints<'a>(arguments: &[P<Expr>], table_name: &str, table: &SqlFields) -> SqlResult<'a, Vec<Join>> {
     let mut joins = vec![];
     let mut errors = vec![];
 
@@ -281,7 +284,7 @@ fn arguments_to_limit<'a>(expression: P<Expr>) -> SqlResult<'a, Limit> {
             }
             _ => {
                 errors.push(Error::new(
-                    "Expected index range or number expression".to_string(),
+                    "Expected index range or number expression".to_owned(),
                     expression.span,
                 ));
                 Limit::NoLimit
@@ -294,7 +297,7 @@ fn arguments_to_limit<'a>(expression: P<Expr>) -> SqlResult<'a, Limit> {
     res(limit, errors)
 }
 
-fn arguments_to_orders<'a>(arguments: &Vec<P<Expr>>, table_name: &String, table: &SqlFields) -> SqlResult<'a, Vec<Order>> {
+fn arguments_to_orders<'a>(arguments: &[P<Expr>], table_name: &str, table: &SqlFields) -> SqlResult<'a, Vec<Order>> {
     let mut orders = vec![];
     let mut errors = vec![];
 
@@ -356,14 +359,14 @@ fn binop_to_relational_operator(binop: BinOp_) -> RelationalOperator {
     }
 }
 
-fn check_field(identifier: &Identifier, position: Span, table_name: &String, table: &SqlFields, errors: &mut Vec<Error>) {
+fn check_field(identifier: &str, position: Span, table_name: &str, table: &SqlFields, errors: &mut Vec<Error>) {
     if !table.contains_key(identifier) {
         errors.push(Error::new(
             format!("attempted access of field `{}` on type `{}`, but no field with that name was found", identifier, table_name),
             position
         ));
-        let field_names = table.keys().map(Clone::clone).collect();
-        if let Some(name) = find_near(identifier, &field_names) {
+        let field_names = table.keys();
+        if let Some(name) = find_near(identifier, field_names) {
             errors.push(Error::new_help(
                 format!("did you mean {}?", name),
                 position
@@ -381,14 +384,14 @@ fn check_type(field_type: &Type, expression: &Expression, errors: &mut Vec<Error
             "E0308",
         ));
         errors.push(Error::new_note(
-            "in this expansion of sql! (defined in tql)".to_string(),
+            "in this expansion of sql! (defined in tql)".to_owned(),
             expression.span, // TODO: mettre la position de l’appel de macro sql!.
         ));
     }
 }
 
 /// Convert a Rust expression to a `FilterExpression`.
-fn expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &String, table: &SqlFields) -> SqlResult<'a, FilterExpression> {
+fn expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &str, table: &SqlFields) -> SqlResult<'a, FilterExpression> {
     let mut errors = vec![];
 
     let dummy = FilterExpression::NoFilters;
@@ -416,7 +419,7 @@ fn expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &String, table
                     }
                     _ => {
                         errors.push(Error::new(
-                            "Expected && or ||".to_string(),
+                            "Expected && or ||".to_owned(),
                             span,
                         ));
                         dummy
@@ -425,7 +428,7 @@ fn expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &String, table
             }
             _ => {
                 errors.push(Error::new(
-                    "Expected binary operation".to_string(),
+                    "Expected binary operation".to_owned(),
                     arg.span,
                 ));
                 dummy
@@ -468,8 +471,10 @@ fn get_type(expression: &Expression) -> &str {
     }
 }
 
-pub fn has_joins(joins: &Vec<Join>, name: &str) -> bool {
-    joins.iter().map(|join| join.left_field.clone()).any(|field_name| field_name == name.to_string())
+pub fn has_joins(joins: &[Join], name: &str) -> bool {
+    joins.iter()
+        .map(|join| join.left_field.clone())
+        .any(|field_name| field_name == name)
 }
 
 fn same_type(field_type: &Type, expression: &Expression) -> bool {
@@ -502,14 +507,14 @@ fn same_type(field_type: &Type, expression: &Expression) -> bool {
     }
 }
 
-fn unknown_table_error(table_name: &String, position: Span, sql_tables: &SqlTables, errors: &mut Vec<Error>) {
+fn unknown_table_error(table_name: &str, position: Span, sql_tables: &SqlTables, errors: &mut Vec<Error>) {
     errors.push(Error::new_with_code(
         format!("`{}` does not name an SQL table", table_name),
         position,
         "E0422",
     ));
-    let tables = sql_tables.keys().map(Clone::clone).collect();
-    if let Some(name) = find_near(&table_name, &tables) {
+    let tables = sql_tables.keys();
+    if let Some(name) = find_near(&table_name, tables) {
         errors.push(Error::new_help(
             format!("did you mean {}?", name),
             position,

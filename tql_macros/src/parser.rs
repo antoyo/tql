@@ -35,7 +35,7 @@ pub fn parse<'a>(expression: Expr) -> SqlResult<'a, MethodCalls> {
     let mut errors = vec![];
     let mut calls = MethodCalls {
         calls: vec![],
-        name:  "".to_string(),
+        name:  "".to_owned(),
         position: expression.span,
     };
 
@@ -61,14 +61,14 @@ pub fn parse<'a>(expression: Expr) -> SqlResult<'a, MethodCalls> {
             ExprIndex(ref expr1, ref expr2) => {
                 expr_to_vec(expr1, calls, errors);
                 calls.push(MethodCall {
-                    name: "limit".to_string(),
+                    name: "limit".to_owned(),
                     arguments: vec![expr2.clone()],
                     position: expr2.span,
                 });
             }
             _ => {
                 errors.push(Error::new(
-                    "Expected method call".to_string(),
+                    "Expected method call".to_owned(),
                     expression.span,
                 ));
             }

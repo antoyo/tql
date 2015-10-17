@@ -20,16 +20,16 @@ impl ToSql for Expression {
                 match literal.node {
                     // TODO: ne pas utiliser unwrap().
                     LitBool(boolean) => boolean.to_string().to_uppercase(),
-                    LitByte(byte) => "'".to_string() + &escape((byte as char).to_string()) + "'",
-                    LitByteStr(ref bytestring) => "'".to_string() + &escape(from_utf8(&bytestring[..]).unwrap().to_string()) + "'",
-                    LitChar(character) => "'".to_string() + &escape(character.to_string()) + "'",
+                    LitByte(byte) => "'".to_owned() + &escape((byte as char).to_string()) + "'",
+                    LitByteStr(ref bytestring) => "'".to_owned() + &escape(from_utf8(&bytestring[..]).unwrap().to_owned()) + "'",
+                    LitChar(character) => "'".to_owned() + &escape(character.to_string()) + "'",
                     LitFloat(ref float, _) => float.to_string(),
                     LitFloatUnsuffixed(ref float) => float.to_string(),
                     LitInt(number, _) => number.to_string(),
-                    LitStr(ref string, _) => "'".to_string() + &escape(string.to_string()) + "'",
+                    LitStr(ref string, _) => "'".to_owned() + &escape(string.to_string()) + "'",
                 }
             },
-            _ => "?".to_string(),
+            _ => "?".to_owned(),
         }
     }
 }
@@ -51,7 +51,7 @@ impl ToSql for FilterExpression {
         match *self {
             FilterExpression::Filter(ref filter) => filter.to_sql(),
             FilterExpression::Filters(ref filters) => filters.to_sql(),
-            FilterExpression::NoFilters => "".to_string(),
+            FilterExpression::NoFilters => "".to_owned(),
         }
     }
 }
@@ -64,7 +64,7 @@ impl ToSql for Filters {
 
 impl ToSql for Join {
     fn to_sql(&self) -> String {
-        " INNER JOIN ".to_string() + &self.right_table + " ON " + &self.left_table + "." + &self.left_field + "_id = " + &self.right_table + "." + &self.right_field
+        " INNER JOIN ".to_owned() + &self.right_table + " ON " + &self.left_table + "." + &self.left_field + "_id = " + &self.right_table + "." + &self.right_field
     }
 }
 
@@ -74,7 +74,7 @@ impl ToSql for [Join] {
             self.iter().map(ToSql::to_sql).collect::<Vec<_>>().join(" ")
         }
         else {
-            "".to_string()
+            "".to_owned()
         }
     }
 }
@@ -88,12 +88,12 @@ impl ToSql for Identifier {
 impl ToSql for Limit {
     fn to_sql(&self) -> String {
         match *self {
-            EndRange(ref expression) => " LIMIT ".to_string() + &expression.to_sql(),
-            Index(ref expression) => " OFFSET ".to_string() + &expression.to_sql() + " LIMIT 1",
-            LimitOffset(ref expression1, ref expression2) => " OFFSET ".to_string() + &expression2.to_sql() + " LIMIT " + &expression1.to_sql(),
-            NoLimit => "".to_string(),
-            Range(ref expression1, ref expression2) => " OFFSET ".to_string() + &expression1.to_sql() + " LIMIT " + &expression2.to_sql(),
-            StartRange(ref expression) => " OFFSET ".to_string() + &expression.to_sql(),
+            EndRange(ref expression) => " LIMIT ".to_owned() + &expression.to_sql(),
+            Index(ref expression) => " OFFSET ".to_owned() + &expression.to_sql() + " LIMIT 1",
+            LimitOffset(ref expression1, ref expression2) => " OFFSET ".to_owned() + &expression2.to_sql() + " LIMIT " + &expression1.to_sql(),
+            NoLimit => "".to_owned(),
+            Range(ref expression1, ref expression2) => " OFFSET ".to_owned() + &expression1.to_sql() + " LIMIT " + &expression2.to_sql(),
+            StartRange(ref expression) => " OFFSET ".to_owned() + &expression.to_sql(),
         }
     }
 }
@@ -101,9 +101,9 @@ impl ToSql for Limit {
 impl ToSql for LogicalOperator {
     fn to_sql(&self) -> String {
         match *self {
-            LogicalOperator::And => "AND".to_string(),
-            LogicalOperator::Not => "NOT".to_string(),
-            LogicalOperator::Or => "OR".to_string(),
+            LogicalOperator::And => "AND".to_owned(),
+            LogicalOperator::Not => "NOT".to_owned(),
+            LogicalOperator::Or => "OR".to_owned(),
         }
     }
 }
@@ -120,10 +120,10 @@ impl ToSql for Order {
 impl ToSql for [Order] {
     fn to_sql(&self) -> String {
         if self.len() > 0 {
-            " ORDER BY ".to_string() + &self.iter().map(ToSql::to_sql).collect::<Vec<_>>().join(", ")
+            " ORDER BY ".to_owned() + &self.iter().map(ToSql::to_sql).collect::<Vec<_>>().join(", ")
         }
         else {
-            "".to_string()
+            "".to_owned()
         }
     }
 }
@@ -131,18 +131,18 @@ impl ToSql for [Order] {
 impl<'a> ToSql for Query<'a> {
     fn to_sql(&self) -> String {
         match *self {
-            Query::CreateTable { .. } => "".to_string(), // TODO
-            Query::Delete { .. } => "".to_string(), // TODO
-            Query::Insert { .. } => "".to_string(), // TODO
+            Query::CreateTable { .. } => "".to_owned(), // TODO
+            Query::Delete { .. } => "".to_owned(), // TODO
+            Query::Insert { .. } => "".to_owned(), // TODO
             Query::Select{ref fields, ref filter, ref joins, ref limit, ref order, ref table} => {
-                let where_clause = match filter {
-                    &FilterExpression::Filter(_) => " WHERE ",
-                    &FilterExpression::Filters(_) => " WHERE ",
-                    &FilterExpression::NoFilters => "",
+                let where_clause = match *filter {
+                    FilterExpression::Filter(_) => " WHERE ",
+                    FilterExpression::Filters(_) => " WHERE ",
+                    FilterExpression::NoFilters => "",
                 };
                 replace_placeholder(format!("SELECT {} FROM {}{}{}{}{}{}", fields.to_sql(), table, joins.to_sql(), where_clause, filter.to_sql(), order.to_sql(), limit.to_sql()))
             },
-            Query::Update { .. } => "".to_string(), // TODO
+            Query::Update { .. } => "".to_owned(), // TODO
         }
     }
 }
@@ -150,19 +150,19 @@ impl<'a> ToSql for Query<'a> {
 impl ToSql for RelationalOperator {
     fn to_sql(&self) -> String {
         match *self {
-            RelationalOperator::Equal => "=".to_string(),
-            RelationalOperator::LesserThan => "<".to_string(),
-            RelationalOperator::LesserThanEqual => "<=".to_string(),
-            RelationalOperator::NotEqual => "<>".to_string(),
-            RelationalOperator::GreaterThan => ">=".to_string(),
-            RelationalOperator::GreaterThanEqual => ">".to_string(),
+            RelationalOperator::Equal => "=".to_owned(),
+            RelationalOperator::LesserThan => "<".to_owned(),
+            RelationalOperator::LesserThanEqual => "<=".to_owned(),
+            RelationalOperator::NotEqual => "<>".to_owned(),
+            RelationalOperator::GreaterThan => ">=".to_owned(),
+            RelationalOperator::GreaterThanEqual => ">".to_owned(),
         }
     }
 }
 
 // TODO: essayer de trouver une meilleure façon de mettre les symboles ($1, $2, …) dans la requête.
 fn replace_placeholder(string: String) -> String {
-    let mut result = "".to_string();
+    let mut result = "".to_owned();
     let mut in_string = false;
     let mut skip_next = false;
     let mut index = 1;

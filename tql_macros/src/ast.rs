@@ -139,8 +139,8 @@ pub struct TypedField {
 
 /// Get the query type.
 pub fn query_type(query: &Query) -> QueryType {
-    match query {
-        &Query::Select { ref limit, .. } => {
+    match *query {
+        Query::Select { ref limit, .. } => {
             match *limit {
                 Limit::Index(_) => QueryType::SelectOne,
                 Limit::EndRange(_) | Limit::LimitOffset(_, _) | Limit::NoLimit | Limit::Range(_, _) | Limit::StartRange(_) => QueryType::SelectMulti,

@@ -2,10 +2,15 @@
 //!
 //! The SQL is generated at compile time via a procedural macro.
 
-#![feature(box_syntax, plugin_registrar, quote, rustc_private)]
+#![feature(box_syntax, plugin, plugin_registrar, quote, rustc_private)]
+#![plugin(clippy)]
 
 // TODO: mettre la construction de l’AST des requêtes dans parser (ou créer deux fichier parser)
 // pour la séparer de l’analyse sémantique.
+// TODO: paramétriser le type ForeignKey et PrimaryKey pour que la macro puisse choisir de mettre
+// le type en question ou rien (dans le cas où la jointure n’est pas faite) ou empêcher les
+// modifications (dans le cas où l’ID existe).
+// TODO: utiliser tous les segments au lieu de juste segments[0].
 // FIXME: unreachable!() fait planter le compilateur.
 // FIXME: remplacer format!() par .to_string() quand c’est possible.
 // FIXME: enlever les clone() inutiles.
@@ -33,9 +38,8 @@ use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Item_::ItemStruct;
 use syntax::codemap::{DUMMY_SP, BytePos, Span, Spanned};
 use syntax::ext::base::{Annotatable, DummyResult, ExtCtxt, MacEager, MacResult};
-use syntax::ext::base::SyntaxExtension::{MultiDecorator, MultiModifier};
+use syntax::ext::base::SyntaxExtension::MultiDecorator;
 use syntax::ext::build::AstBuilder;
-use syntax::feature_gate::AttributeType::Whitelisted;
 use syntax::parse::token::{InternedString, Token, intern, str_to_ident};
 use syntax::ptr::P;
 
@@ -98,27 +102,30 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
 
     fn add_limit_arguments(cx: &mut ExtCtxt, limit: Limit, arguments: &mut Args) {
         match limit {
-            Limit::EndRange(expression) => add(arguments, "i64".to_string(), expression),
-            Limit::Index(expression) => add(arguments, "i64".to_string(), expression),
+            Limit::EndRange(expression) => add(arguments, "i64".to_owned(), expression),
+            Limit::Index(expression) => add(arguments, "i64".to_owned(), expression),
             Limit::LimitOffset(_, _) => (),
             Limit::NoLimit => (),
             Limit::Range(expression1, expression2) => {
                 let offset = expression1.clone();
-                add(arguments, "i64".to_string(), expression1);
+                add(arguments, "i64".to_owned(), expression1);
                 let expr2 = expression2;
                 let offset = offset;
-                add_expr(arguments, ("i64".to_string(), quote_expr!(cx, $expr2 - $offset)));
+                add_expr(arguments, ("i64".to_owned(), quote_expr!(cx, $expr2 - $offset)));
             },
-            Limit::StartRange(expression) => add(arguments, "i64".to_string(), expression),
+            Limit::StartRange(expression) => add(arguments, "i64".to_owned(), expression),
         }
     }
 
     match query {
+        Query::CreateTable { .. } => (), // TODO
+        Query::Delete { .. } => (), // TODO
+        Query::Insert { .. } => (), // TODO
         Query::Select {filter, limit, ..} => {
             add_filter_arguments(filter, &mut arguments);
             add_limit_arguments(cx, limit, &mut arguments);
         },
-        _ => (),
+        Query::Update { .. } => (), // TODO
     }
 
     arguments
@@ -152,10 +159,11 @@ fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, _: &MetaItem, item: &Annotatable
         if let ItemStruct(ref struct_def, _) = item.node {
             // TODO: vérifier le type des champs de la structure.
             let table_name = item.ident.to_string();
-            let fields = fields_vec_to_hashmap(&struct_def.fields);
+            let fields = fields_vec_to_hashmap(struct_def.fields());
             sql_tables.insert(table_name, fields);
         }
         else {
+            // TODO
             cx.span_err(item.span, "Expected struct but found");
         }
     }

@@ -110,7 +110,7 @@ impl<'a> Error<'a> {
 /// Returns `Err` if there are at least one error.
 /// Otherwise, returns `Ok`.
 pub fn res<T>(result: T, errors: Vec<Error>) -> SqlResult<T> {
-    if errors.len() > 0 {
+    if !errors.is_empty() {
         Err(errors)
     }
     else {

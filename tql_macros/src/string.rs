@@ -1,7 +1,7 @@
 //! String proximity lookup function.
 
 /// Finds a near match of `str_to_check` in `strings`.
-pub fn find_near(str_to_check: &String, strings: &Vec<String>) -> Option<String> {
+pub fn find_near<'a, T: Iterator<Item = &'a String>>(str_to_check: &str, strings: T) -> Option<String> {
     let mut result = None;
     let mut best_distance = str_to_check.len();
     for string in strings {
@@ -17,8 +17,8 @@ pub fn find_near(str_to_check: &String, strings: &Vec<String>) -> Option<String>
 }
 
 /// Returns the Levensthein distance between `string1` and `string2`.
-fn levenshtein_distance(string1: &String, string2: &String) -> usize {
-    fn distance(i: usize, j: usize, d: &Vec<Vec<usize>>, string1: &String, string2: &String) -> usize {
+fn levenshtein_distance(string1: &str, string2: &str) -> usize {
+    fn distance(i: usize, j: usize, d: &[Vec<usize>], string1: &str, string2: &str) -> usize {
         match (i, j) {
             (i, 0) => i,
             (0, j) => j,

@@ -8,3 +8,6 @@ name = "tql_macros"
 crate-type = ["dylib"]
 doc = true
 plugin = true
+
+[dependencies]
+clippy = "0.0.21"

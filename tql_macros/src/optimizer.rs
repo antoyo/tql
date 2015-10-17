@@ -8,7 +8,7 @@ use syntax::ast::Lit_::LitInt;
 
 use ast::{Expression, Limit, Query};
 use ast::Limit::{EndRange, Index, LimitOffset, Range, StartRange};
-use ast::Query::Select;
+use ast::Query::{CreateTable, Delete, Insert, Select, Update};
 use plugin::number_literal;
 
 fn all_integer_literal(expression: &Expression) -> bool {
@@ -39,12 +39,14 @@ fn evaluate(expression: &Expression) -> u64 {
 }
 
 pub fn optimize(query: &mut Query) {
-    match query {
-        // TODO: utiliser la syntaxe de mise à jour.
-        &mut Select { ref mut limit, .. } => {
+    match *query {
+        CreateTable { .. } => (), // TODO
+        Delete { .. } => (), // TODO
+        Insert { .. } => (), // TODO
+        Select { ref mut limit, .. } => {
             *limit = optimize_limit(limit.clone());
         },
-        _ => (),
+        Update { .. } => (), // TODO
     }
 }
 
