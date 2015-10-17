@@ -74,12 +74,8 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
     let mut arguments = vec![];
 
     fn add_expr(arguments: &mut Args, arg: Arg) {
-        // TODO: essayer d’améliorer cela.
-        {
-            let (_, ref expression) = arg;
-            if let ExprLit(_) = expression.node {
-                return;
-            }
+        if let ExprLit(_) = arg.1.node {
+            return;
         }
         arguments.push(arg);
     }
