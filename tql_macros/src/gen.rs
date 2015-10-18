@@ -51,9 +51,9 @@ impl ToSql for FilterExpression {
         match *self {
             FilterExpression::Filter(ref filter) => filter.to_sql(),
             FilterExpression::Filters(ref filters) => filters.to_sql(),
-            FilterExpression::NegFilter(box FilterExpression::Filter(ref filter)) => "NOT ".to_owned() + &filter.to_sql(),
-            FilterExpression::NegFilter(ref filter) => "NOT (".to_owned() + &filter.to_sql() + ")",
+            FilterExpression::NegFilter(ref filter) => "NOT ".to_owned() + &filter.to_sql(),
             FilterExpression::NoFilters => "".to_owned(),
+            FilterExpression::ParenFilter(ref filter) => "(".to_owned() + &filter.to_sql() + ")"
         }
     }
 }
@@ -138,7 +138,7 @@ impl<'a> ToSql for Query<'a> {
             Query::Insert { .. } => "".to_owned(), // TODO
             Query::Select{ref fields, ref filter, ref joins, ref limit, ref order, ref table} => {
                 let where_clause = match *filter {
-                    FilterExpression::Filter(_) | FilterExpression::Filters(_) | FilterExpression::NegFilter(_) => " WHERE ",
+                    FilterExpression::Filter(_) | FilterExpression::Filters(_) | FilterExpression::NegFilter(_) | FilterExpression::ParenFilter(_) => " WHERE ",
                     FilterExpression::NoFilters => "",
                 };
                 replace_placeholder(format!("SELECT {} FROM {}{}{}{}{}{}", fields.to_sql(), table, joins.to_sql(), where_clause, filter.to_sql(), order.to_sql(), limit.to_sql()))

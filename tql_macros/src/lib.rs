@@ -109,6 +109,9 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
                 add_filter_arguments(filter, arguments);
             },
             FilterExpression::NoFilters => (),
+            FilterExpression::ParenFilter(box filter) => {
+                add_filter_arguments(filter, arguments);
+            },
         }
     }
 

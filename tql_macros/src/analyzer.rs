@@ -73,6 +73,9 @@ fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors: &mu
             analyze_filter_types(filter, table_name, errors);
         },
         FilterExpression::NoFilters => (),
+        FilterExpression::ParenFilter(ref filter) => {
+            analyze_filter_types(filter, table_name, errors);
+        }
     }
 }
 
@@ -352,7 +355,7 @@ fn expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &str, table: &
     let dummy = FilterExpression::NoFilters;
     let filter =
         match arg.node {
-            ExprBinary(Spanned { node: op, span }, ref expr1, ref expr2) => {
+            ExprBinary(Spanned { node: op, .. }, ref expr1, ref expr2) => {
                 match expr1.node {
                     ExprPath(None, ref path) => {
                         let identifier = path.segments[0].identifier.to_string();
@@ -362,8 +365,8 @@ fn expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &str, table: &
                             operator: binop_to_relational_operator(op),
                             operand2: expr2.clone(),
                         })
-                    }
-                    ExprBinary(_, _, _) => {
+                    },
+                    ExprBinary(_, _, _) | ExprUnary(UnNot, _) | ExprParen(_) => {
                         // TODO: accumuler les erreurs au lieu d’arrêter à la première.
                         let filter1 = try!(expression_to_filter_expression(expr1, table_name, table));
                         let filter2 = try!(expression_to_filter_expression(expr2, table_name, table));
@@ -372,14 +375,14 @@ fn expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &str, table: &
                             operator: binop_to_logical_operator(op),
                             operand2: Box::new(filter2),
                         })
-                    }
+                    },
                     _ => {
                         errors.push(Error::new(
-                            "Expected && or ||".to_owned(),
-                            span,
+                            "Expected identifier or binary operation".to_owned(),
+                            expr1.span,
                         ));
                         dummy
-                    }
+                    },
                 }
             },
             ExprUnary(UnNot, ref expr) => {
@@ -388,7 +391,7 @@ fn expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &str, table: &
             },
             ExprParen(ref expr) => {
                 let filter = try!(expression_to_filter_expression(expr, table_name, table));
-                filter
+                FilterExpression::ParenFilter(box filter)
             },
             _ => {
                 errors.push(Error::new(

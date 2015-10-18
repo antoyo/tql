@@ -35,6 +35,7 @@ pub enum FilterExpression {
     Filters(Filters),
     NegFilter(Box<FilterExpression>),
     NoFilters,
+    ParenFilter(Box<FilterExpression>),
 }
 
 /// A `Filters` is used to combine `FilterExpression`s with a `LogicalOperator`.
@@ -69,7 +70,7 @@ pub enum Limit {
 }
 
 /// `LogicalOperator` to combine `Filter`s.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum LogicalOperator {
     And,
     Not,

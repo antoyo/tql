@@ -233,4 +233,12 @@ fn main() {
     println!(to_sql!(Person.filter(!(field2 < 100))));
     let people = sql!(Person.filter(!(field2 < 100)));
     show_people(people);
+
+    println!(to_sql!(Person.filter(field1 == "value2" || field2 < 100 && field1 == "value1")));
+    let people = sql!(Person.filter(field1 == "value2" || field2 < 100 && field1 == "value1"));
+    show_people(people);
+
+    println!(to_sql!(Person.filter((field1 == "value2" || field2 < 100) && field1 == "value1")));
+    let people = sql!(Person.filter((field1 == "value2" || field2 < 100) && field1 == "value1"));
+    show_people(people);
 }
