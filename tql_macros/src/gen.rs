@@ -5,12 +5,24 @@ use std::str::from_utf8;
 use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
 
-use ast::{Expression, FieldList, Filter, Filters, FilterExpression, Identifier, Join, Limit, LogicalOperator, Order, RelationalOperator, Query};
+use ast::{Assignment, Expression, FieldList, Filter, Filters, FilterExpression, Identifier, Join, Limit, LogicalOperator, Order, RelationalOperator, Query};
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use sql::escape;
 
 pub trait ToSql {
     fn to_sql(&self) -> String;
+}
+
+impl ToSql for Assignment {
+    fn to_sql(&self) -> String {
+        self.identifier.to_sql() + " = " + &self.value.to_sql()
+    }
+}
+
+impl ToSql for [Assignment] {
+    fn to_sql(&self) -> String {
+        self.into_iter().map(ToSql::to_sql).collect::<Vec<_>>().join(", ")
+    }
 }
 
 impl ToSql for Expression {
@@ -113,8 +125,8 @@ impl ToSql for LogicalOperator {
 impl ToSql for Order {
     fn to_sql(&self) -> String {
         match *self {
-            Order::Ascending(ref field) => field.clone(),
-            Order::Descending(ref field) => field.clone() + " DESC",
+            Order::Ascending(ref field) => field.to_sql(),
+            Order::Descending(ref field) => field.to_sql() + " DESC",
         }
     }
 }
@@ -130,20 +142,20 @@ impl ToSql for [Order] {
     }
 }
 
-impl<'a> ToSql for Query<'a> {
+impl ToSql for Query {
     fn to_sql(&self) -> String {
         match *self {
             Query::CreateTable { .. } => "".to_owned(), // TODO
             Query::Delete { .. } => "".to_owned(), // TODO
             Query::Insert { .. } => "".to_owned(), // TODO
             Query::Select{ref fields, ref filter, ref joins, ref limit, ref order, ref table} => {
-                let where_clause = match *filter {
-                    FilterExpression::Filter(_) | FilterExpression::Filters(_) | FilterExpression::NegFilter(_) | FilterExpression::ParenFilter(_) => " WHERE ",
-                    FilterExpression::NoFilters => "",
-                };
+                let where_clause = filter_to_where_clause(filter);
                 replace_placeholder(format!("SELECT {} FROM {}{}{}{}{}{}", fields.to_sql(), table, joins.to_sql(), where_clause, filter.to_sql(), order.to_sql(), limit.to_sql()))
             },
-            Query::Update { .. } => "".to_owned(), // TODO
+            Query::Update { ref assignments, ref filter, ref table } => {
+                let where_clause = filter_to_where_clause(filter);
+                replace_placeholder(format!("UPDATE {} SET {}{}{}", table, assignments.to_sql(), where_clause, filter.to_sql()))
+            },
         }
     }
 }
@@ -158,6 +170,13 @@ impl ToSql for RelationalOperator {
             RelationalOperator::GreaterThan => ">=".to_owned(),
             RelationalOperator::GreaterThanEqual => ">".to_owned(),
         }
+    }
+}
+
+fn filter_to_where_clause(filter: &FilterExpression) -> &str {
+    match *filter {
+        FilterExpression::Filter(_) | FilterExpression::Filters(_) | FilterExpression::NegFilter(_) | FilterExpression::ParenFilter(_) => " WHERE ",
+        FilterExpression::NoFilters => "",
     }
 }
 

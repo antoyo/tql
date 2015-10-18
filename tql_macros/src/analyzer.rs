@@ -1,7 +1,7 @@
 //! Semantic analyzer.
 
 use syntax::ast::{BinOp_, Expr, Path};
-use syntax::ast::Expr_::{ExprBinary, ExprCall, ExprCast, ExprLit, ExprMethodCall, ExprParen, ExprPath, ExprRange, ExprUnary};
+use syntax::ast::Expr_::{ExprAssign, ExprBinary, ExprCall, ExprCast, ExprLit, ExprMethodCall, ExprParen, ExprPath, ExprRange, ExprUnary};
 use syntax::ast::FloatTy;
 use syntax::ast::IntTy;
 use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
@@ -11,7 +11,7 @@ use syntax::ast::UnOp::{UnNeg, UnNot};
 use syntax::codemap::{DUMMY_SP, Span, Spanned};
 use syntax::ptr::P;
 
-use ast::{Expression, Filter, FilterExpression, Filters, Identifier, Join, Limit, LogicalOperator, Order, RelationalOperator, Query};
+use ast::{Assignment, Expression, Filter, FilterExpression, Filters, Identifier, Join, Limit, LogicalOperator, Order, RelationalOperator, Query};
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use error::{Error, SqlResult, res};
 use parser::{MethodCall, MethodCalls};
@@ -19,8 +19,15 @@ use plugin::number_literal;
 use state::{SqlFields, SqlTables, Type, singleton};
 use string::find_near;
 
+enum SqlQueryType {
+    Select,
+    Update,
+}
+
+type QueryData = (FilterExpression, Vec<Join>, Limit, Vec<Order>, Vec<Assignment>, SqlQueryType);
+
 /// Analyze and transform the AST.
-pub fn analyze<'a, 'b>(method_calls: MethodCalls, sql_tables: &'a SqlTables) -> SqlResult<Query<'b>> {
+pub fn analyze(method_calls: MethodCalls, sql_tables: &SqlTables) -> SqlResult<Query> {
     // TODO: vérifier que la suite d’appels de méthode est valide (de même que l’ordre pour filter).
     let mut errors = vec![];
 
@@ -34,25 +41,18 @@ pub fn analyze<'a, 'b>(method_calls: MethodCalls, sql_tables: &'a SqlTables) -> 
 
     check_methods(&calls, &mut errors);
 
-    let (fields, filter_expression, joins, limit, order) =
+    let (fields, filter_expression, joins, limit, order, assignments, query_type) =
         match table {
             Some(table) => {
-                let (filter_expression, joins, limit, order) = try!(process_methods(&calls, table, &table_name));
+                let (filter_expression, joins, limit, order, assignments, query_type) = try!(process_methods(&calls, table, &table_name));
                 let fields = get_query_fields(table, &table_name, &joins, sql_tables, &mut errors);
-                (fields, filter_expression, joins, limit, order)
+                (fields, filter_expression, joins, limit, order, assignments, query_type)
 
             },
-            None => (vec![], FilterExpression::NoFilters, vec![], Limit::NoLimit, vec![]),
+            None => (vec![], FilterExpression::NoFilters, vec![], Limit::NoLimit, vec![], vec![], SqlQueryType::Select),
         };
 
-    res(Query::Select {
-        fields: fields,
-        filter: filter_expression,
-        joins: joins,
-        limit: limit,
-        order: order,
-        table: table_name,
-    }, errors)
+    res(new_query(fields, filter_expression, joins, limit, order, assignments, query_type, table_name), errors)
 }
 
 fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors: &mut Vec<Error>) {
@@ -97,7 +97,7 @@ fn analyze_limit_types(limit: &Limit, errors: &mut Vec<Error>) {
 }
 
 /// Analyze the literal types in the `Query`.
-pub fn analyze_types(query: Query) -> SqlResult<Query> {
+pub fn analyze_types<'a>(query: Query) -> SqlResult<'a, Query> {
     let mut errors = vec![];
     match query {
         Query::CreateTable { .. } => (), // TODO
@@ -112,7 +112,35 @@ pub fn analyze_types(query: Query) -> SqlResult<Query> {
     res(query, errors)
 }
 
-fn argument_to_join<'a>(arg: &Expr, table_name: &str, table: &SqlFields) -> SqlResult<'a, Join> {
+fn argument_to_assignment<'a>(arg: &Expression, table_name: &str, table: &SqlFields) -> SqlResult<'a, Assignment> {
+    let mut errors = vec![];
+    let mut assignment = Assignment {
+        identifier: "".to_owned(),
+        value: number_literal(0),
+    };
+    if let ExprAssign(ref expr1, ref expr2) = arg.node {
+        assignment.value = expr2.clone();
+        if let ExprPath(_, ref path) = expr1.node {
+            assignment.identifier = path.segments[0].identifier.to_string();
+            check_field(&assignment.identifier, path.span, table_name, table, &mut errors);
+        }
+        else {
+            errors.push(Error::new(
+                "Expected identifier".to_owned(),
+                arg.span,
+            ));
+        }
+    }
+    else {
+        errors.push(Error::new(
+            "Expected assignment".to_owned(),
+            arg.span,
+        ));
+    }
+    res(assignment, errors)
+}
+
+fn argument_to_join<'a>(arg: &Expression, table_name: &str, table: &SqlFields) -> SqlResult<'a, Join> {
     let mut errors = vec![];
     let mut join = Join {
         left_field: "".to_owned(),
@@ -147,8 +175,8 @@ fn argument_to_join<'a>(arg: &Expr, table_name: &str, table: &SqlFields) -> SqlR
     res(join, errors)
 }
 
-fn argument_to_order<'a>(arg: &Expr, table_name: &str, table: &SqlFields) -> SqlResult<'a, Order> {
-    fn identifier<'a>(arg: &Expr, identifier: &Expr, table_name: &str, table: &SqlFields) -> SqlResult<'a, String> {
+fn argument_to_order<'a>(arg: &Expression, table_name: &str, table: &SqlFields) -> SqlResult<'a, Order> {
+    fn identifier<'a>(arg: &Expression, identifier: &Expr, table_name: &str, table: &SqlFields) -> SqlResult<'a, String> {
         let mut errors = vec![];
         if let ExprPath(_, Path { ref segments, span, .. }) = identifier.node {
             if segments.len() == 1 {
@@ -167,7 +195,7 @@ fn argument_to_order<'a>(arg: &Expr, table_name: &str, table: &SqlFields) -> Sql
     let order =
         match arg.node {
             ExprUnary(UnNeg, ref expr) => {
-                let ident = try!(identifier(arg, expr, table_name, table));
+                let ident = try!(identifier(&arg, expr, table_name, table));
                 Order::Descending(ident)
             }
             ExprPath(None, ref path) => {
@@ -184,19 +212,6 @@ fn argument_to_order<'a>(arg: &Expr, table_name: &str, table: &SqlFields) -> Sql
             }
         };
     res(order, errors)
-}
-
-fn arguments_to_joints<'a>(arguments: &[P<Expr>], table_name: &str, table: &SqlFields) -> SqlResult<'a, Vec<Join>> {
-    let mut joins = vec![];
-    let mut errors = vec![];
-
-    for arg in arguments {
-        try(argument_to_join(arg, table_name, table), &mut errors, |join| {
-            joins.push(join);
-        });
-    }
-
-    res(joins, errors)
 }
 
 fn arguments_to_limit<'a, 'b>(expression: &'b P<Expr>) -> SqlResult<'a, Limit> {
@@ -229,19 +244,6 @@ fn arguments_to_limit<'a, 'b>(expression: &'b P<Expr>) -> SqlResult<'a, Limit> {
     // la requête (optimisation).
 
     res(limit, errors)
-}
-
-fn arguments_to_orders<'a>(arguments: &[P<Expr>], table_name: &str, table: &SqlFields) -> SqlResult<'a, Vec<Order>> {
-    let mut orders = vec![];
-    let mut errors = vec![];
-
-    for arg in arguments {
-        try(argument_to_order(arg, table_name, table), &mut errors, |order| {
-            orders.push(order);
-        });
-    }
-
-    res(orders, errors)
 }
 
 /// Convert a `BinOp_` to an SQL `LogicalOperator`.
@@ -316,6 +318,7 @@ fn check_methods(calls: &[MethodCall], errors: &mut Vec<Error>) {
         "join".to_owned(),
         "limit".to_owned(),
         "sort".to_owned(),
+        "update".to_owned(),
     ];
     for method_call in calls {
         if !methods.contains(&method_call.name) {
@@ -346,6 +349,19 @@ fn check_type(field_type: &Type, expression: &Expression, errors: &mut Vec<Error
             expression.span, // TODO: mettre la position de l’appel de macro sql!.
         ));
     }
+}
+
+fn convert_arguments<'a, F: Fn(&Expression, &str, &SqlFields) -> SqlResult<'a, Type>, Type>(arguments: &[P<Expr>], table_name: &str, table: &SqlFields, convert_argument: F) -> SqlResult<'a, Vec<Type>> {
+    let mut items = vec![];
+    let mut errors = vec![];
+
+    for arg in arguments {
+        try(convert_argument(arg, table_name, table), &mut errors, |item| {
+            items.push(item);
+        });
+    }
+
+    res(items, errors)
 }
 
 /// Convert a Rust expression to a `FilterExpression`.
@@ -498,12 +514,34 @@ pub fn has_joins(joins: &[Join], name: &str) -> bool {
         .any(|field_name| field_name == name)
 }
 
-fn process_methods<'a>(calls: &[MethodCall], table: &SqlFields, table_name: &str) -> SqlResult<'a, (FilterExpression, Vec<Join>, Limit, Vec<Order>)> {
+fn new_query(fields: Vec<Identifier>, filter_expression: FilterExpression, joins: Vec<Join>, limit: Limit, order: Vec<Order>, assignments: Vec<Assignment>, query_type: SqlQueryType, table_name: String) -> Query {
+    match query_type {
+        SqlQueryType::Select =>
+            Query::Select {
+                fields: fields,
+                filter: filter_expression,
+                joins: joins,
+                limit: limit,
+                order: order,
+                table: table_name,
+            },
+        SqlQueryType::Update =>
+            Query::Update {
+                assignments: assignments,
+                filter: filter_expression,
+                table: table_name,
+            },
+    }
+}
+
+fn process_methods<'a>(calls: &[MethodCall], table: &SqlFields, table_name: &str) -> SqlResult<'a, QueryData> {
     let mut errors = vec![];
+    let mut assignments = vec![];
     let mut filter_expression = FilterExpression::NoFilters;
     let mut joins = vec![];
     let mut limit = Limit::NoLimit;
     let mut order = vec![];
+    let mut query_type = SqlQueryType::Select;
     for method_call in calls {
         match &method_call.name[..] {
             "all" => (), // TODO
@@ -519,7 +557,7 @@ fn process_methods<'a>(calls: &[MethodCall], table: &SqlFields, table_name: &str
                 });
             },
             "join" => {
-                try(arguments_to_joints(&method_call.arguments, &table_name, table), &mut errors, |mut new_joins| {
+                try(convert_arguments(&method_call.arguments, &table_name, table, argument_to_join), &mut errors, |mut new_joins| {
                     joins.append(&mut new_joins);
                 });
             },
@@ -529,14 +567,20 @@ fn process_methods<'a>(calls: &[MethodCall], table: &SqlFields, table_name: &str
                 });
             },
             "sort" => {
-                try(arguments_to_orders(&method_call.arguments, &table_name, table), &mut errors, |new_order| {
+                try(convert_arguments(&method_call.arguments, &table_name, table, argument_to_order), &mut errors, |new_order| {
                     order = new_order;
                 });
+            },
+            "update" => {
+                try(convert_arguments(&method_call.arguments, &table_name, table, argument_to_assignment), &mut errors, |assigns| {
+                    assignments = assigns;
+                });
+                query_type = SqlQueryType::Update;
             },
             _ => (), // Nothing to do since check_methods() check for unknown method.
         }
     }
-    res((filter_expression, joins, limit, order), errors)
+    res((filter_expression, joins, limit, order, assignments, query_type), errors)
 }
 
 fn same_type(field_type: &Type, expression: &Expression) -> bool {

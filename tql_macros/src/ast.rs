@@ -97,9 +97,9 @@ pub enum RelationalOperator {
 
 /// An SQL `Query`.
 #[derive(Debug)]
-pub enum Query<'a> {
+pub enum Query {
     CreateTable {
-        fields: &'a[TypedField],
+        fields: Vec<TypedField>,
         table: Identifier,
     },
     Delete {
@@ -119,7 +119,7 @@ pub enum Query<'a> {
         table: Identifier,
     },
     Update {
-        assignments: &'a[Assignment],
+        assignments: Vec<Assignment>,
         filter: FilterExpression,
         table: Identifier,
     },

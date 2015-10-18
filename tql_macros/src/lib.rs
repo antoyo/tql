@@ -9,6 +9,8 @@
 // TODO: paramétriser le type ForeignKey et PrimaryKey pour que la macro puisse choisir de mettre
 // le type en question ou rien (dans le cas où la jointure n’est pas faite) ou empêcher les
 // modifications (dans le cas où l’ID existe).
+// TODO: ajouter une étape entre l’optimisation et la génération de code pour produire une
+// structure qui facilitera la génération du code.
 // TODO: utiliser tous les segments au lieu de juste segments[0].
 // FIXME: unreachable!() fait planter le compilateur.
 // FIXME: remplacer format!() par .to_owned() quand c’est possible.
@@ -25,6 +27,7 @@
 // TODO: utiliser une compilation en 2 passes pour détecter les champs utilisés et les jointures
 // utiles (peut-être possible avec un lint plugin).
 // TODO: peut-être utiliser Spanned pour conserver la position dans l’AST.
+// TODO: permetre les opérateurs += et autre pour un update.
 // TODO: supporter la comparaison avec une clé étrangère :
 // impl postgres::types::ToSql for ForeignTable {
 //    fn to_sql<W: std::io::Write + ?Sized>(&self, ty: &postgres::types::Type, out: &mut W, ctx: &postgres::types::SessionInfo) -> postgres::Result<postgres::types::IsNull> {
@@ -71,13 +74,13 @@ type Args = Vec<Arg>;
 pub type SqlQueryWithArgs = (String, QueryType, Args, Vec<Join>);
 
 use analyzer::{analyze, analyze_types, has_joins};
-use ast::{Expression, FilterExpression, Join, Limit, Query, QueryType, query_type};
+use ast::{Assignment, Expression, FilterExpression, Join, Limit, Query, QueryType, query_type};
 use attribute::fields_vec_to_hashmap;
 use error::{Error, ErrorType, SqlResult};
 use gen::ToSql;
 use optimizer::optimize;
 use parser::parse;
-use state::{SqlArg, SqlArgs, Type, lint_singleton, singleton};
+use state::{SqlArg, SqlArgs, SqlFields, SqlTables, Type, lint_singleton, singleton};
 use type_analyzer::SqlError;
 
 /// Extract the Rust `Expression`s from the `Query`.
@@ -94,6 +97,12 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
     fn add(arguments: &mut Args, field_name: String, expr: Expression) {
         let arg = (field_name, expr);
         add_expr(arguments, arg);
+    }
+
+    fn add_assignments(assignments: Vec<Assignment>, arguments: &mut Args) {
+        for assign in assignments {
+            add(arguments, assign.identifier, assign.value);
+        }
     }
 
     fn add_filter_arguments(filter: FilterExpression, arguments: &mut Args) {
@@ -139,7 +148,10 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
             add_filter_arguments(filter, &mut arguments);
             add_limit_arguments(cx, limit, &mut arguments);
         },
-        Query::Update { .. } => (), // TODO
+        Query::Update { assignments, filter, .. } => {
+            add_filter_arguments(filter, &mut arguments);
+            add_assignments(assignments, &mut arguments);
+        },
     }
 
     arguments
@@ -200,21 +212,88 @@ fn expand_to_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResul
     }
 }
 
-// TODO: séparer cette fonction en plus petite fonction.
 fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args: SqlQueryWithArgs) -> Box<MacResult + 'static> {
-    // TODO: générer un code différent en fonction du query_type.
     let (sql, query_type, arguments, joins) = sql_query_with_args;
     let string_literal = intern(&sql);
-    let string = cx.expr_str(sp, InternedString::new_from_name(string_literal));
+    let sql_query = cx.expr_str(sp, InternedString::new_from_name(string_literal));
     let ident = Ident::new(intern("connection"), table_ident.ctxt);
-    // TODO: utiliser un itérateur.
     let sql_tables = singleton();
     let table_name = table_ident.to_string();
     let table = sql_tables.get(&table_name).unwrap();
-    let mut fields = vec![];
-    // TODO: prendre en compte l’ID.
-    let mut index = 0usize;
+    let fields = get_query_fields(cx, sp, table, sql_tables, joins);
+    let struct_expr = cx.expr_struct(sp, cx.path_ident(sp, table_ident), fields);
+    let args_expr = get_query_arguments(cx, sp, table_name, arguments);
+    let expr = gen_query_expr(cx, ident, sql_query, args_expr, struct_expr, query_type);
+    MacEager::expr(expr)
+}
 
+fn gen_query_expr(cx: &mut ExtCtxt, ident: Ident, sql_query: Expression, args_expr: Expression, struct_expr: Expression, query_type: QueryType) -> Expression {
+    match query_type {
+        QueryType::SelectMulti => {
+            quote_expr!(cx, {
+                let result = $ident.prepare($sql_query).unwrap();
+                // TODO: retourner un itérateur au lieu d’un vecteur.
+                result.query(&$args_expr).unwrap().iter().map(|row| {
+                    $struct_expr
+                }).collect::<Vec<_>>()
+            })
+        },
+        QueryType::SelectOne => {
+            quote_expr!(cx, {
+                let result = $ident.prepare($sql_query).unwrap();
+                result.query(&$args_expr).unwrap().iter().next().map(|row| {
+                    $struct_expr
+                })
+            })
+        },
+        QueryType::Exec => {
+            quote_expr!(cx, {
+                let result = $ident.prepare($sql_query).unwrap();
+                result.execute(&$args_expr)
+            })
+        },
+    }
+}
+
+fn get_query_arguments(cx: &mut ExtCtxt, sp: Span, table_name: String, arguments: Args) -> Expression {
+    let mut arg_refs = vec![];
+    let mut sql_args = vec![];
+    let calls = lint_singleton();
+
+    for (field_name, arg) in arguments {
+        let pos = arg.span;
+
+        let (low, high) =
+            match (pos.lo, pos.hi) {
+                (BytePos(low), BytePos(high)) => (low, high),
+            };
+        sql_args.push(SqlArg {
+            high: high,
+            low: low,
+            name: field_name,
+        });
+
+        match arg.node {
+            // Do not add literal arguments as they are in the final string literal.
+            ExprLit(_) => (),
+            _ => {
+                arg_refs.push(cx.expr_addr_of(DUMMY_SP, arg));
+            },
+        }
+    }
+
+    let BytePos(low) = sp.lo;
+    calls.insert(low, SqlArgs {
+        arguments: sql_args,
+        table_name: table_name.to_owned(),
+    });
+
+    cx.expr_vec(DUMMY_SP, arg_refs)
+}
+
+fn get_query_fields(cx: &mut ExtCtxt, sp: Span, table: &SqlFields, sql_tables: &SqlTables, joins: Vec<Join>) -> Vec<Field> {
+    let mut fields = vec![];
+    let mut index = 0usize;
     for (name, typ) in table {
         match *typ {
             Type::Custom(ref foreign_table) => {
@@ -277,69 +356,7 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
             },
         }
     }
-
-    let struct_expr = cx.expr_struct(sp, cx.path_ident(sp, table_ident), fields);
-
-    let mut arg_refs = vec![];
-    let mut sql_args = vec![];
-    let calls = lint_singleton();
-
-    for (field_name, arg) in arguments {
-        let pos = arg.span;
-
-        let (low, high) =
-            match (pos.lo, pos.hi) {
-                (BytePos(low), BytePos(high)) => (low, high),
-            };
-        sql_args.push(SqlArg {
-            high: high,
-            low: low,
-            name: field_name,
-        });
-
-        match arg.node {
-            // Do not add literal arguments as they are in the final string literal.
-            ExprLit(_) => (),
-            _ => {
-                arg_refs.push(cx.expr_addr_of(DUMMY_SP, arg));
-            },
-        }
-    }
-
-    let BytePos(low) = sp.lo;
-    calls.insert(low, SqlArgs {
-        arguments: sql_args,
-        table_name: table_name,
-    });
-
-    let args_expr = cx.expr_vec(DUMMY_SP, arg_refs);
-
-    let expr = match query_type {
-        QueryType::SelectMulti => {
-            quote_expr!(cx, {
-                let result = $ident.prepare($string).unwrap();
-                result.query(&$args_expr).unwrap().iter().map(|row| {
-                    $struct_expr
-                }).collect::<Vec<_>>()
-            })
-        },
-        QueryType::SelectOne => {
-            quote_expr!(cx, {
-                let result = $ident.prepare($string).unwrap();
-                result.query(&$args_expr).unwrap().iter().next().map(|row| {
-                    $struct_expr
-                })
-            })
-        },
-        QueryType::Exec => {
-            quote_expr!(cx, {
-                let result = $ident.prepare($string).unwrap();
-                result.execute(&$args_expr)
-            })
-        },
-    };
-
-    MacEager::expr(expr)
+    fields
 }
 
 fn span_errors(errors: Vec<Error>, cx: &mut ExtCtxt) {
