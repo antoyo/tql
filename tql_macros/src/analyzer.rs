@@ -15,6 +15,7 @@ use ast::{Expression, Filter, FilterExpression, Filters, Identifier, Join, Limit
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use error::{Error, SqlResult, res};
 use parser::{MethodCall, MethodCalls};
+use plugin::number_literal;
 use state::{SqlFields, SqlTables, Type, singleton};
 use string::find_near;
 
@@ -389,6 +390,25 @@ fn expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &str, table: &
     res(filter, errors)
 }
 
+fn get_expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &str, table: &SqlFields) -> SqlResult<'a, (FilterExpression, Limit)> {
+    match arg.node {
+        ExprLit(_) | ExprPath(_, _) => {
+            let filter = FilterExpression::Filter(Filter {
+                operand1: "id".to_owned(),
+                operator: RelationalOperator::Equal,
+                operand2: arg.clone(),
+            });
+            res((filter, Limit::NoLimit), vec![])
+        },
+        _ => {
+            match expression_to_filter_expression(arg, table_name, table) {
+                Ok(filter) => res((filter, Limit::Index(number_literal(0))), vec![]),
+                Err(errors) => res((FilterExpression::NoFilters, Limit::NoLimit), errors),
+            }
+        },
+    }
+}
+
 fn get_query_fields(table: &SqlFields, table_name: &str, joins: &[Join], sql_tables: &SqlTables, errors: &mut Vec<Error>) -> Vec<Identifier> {
     let mut fields = vec![];
     for (field, typ) in table {
@@ -478,10 +498,9 @@ fn process_methods<'a>(calls: &[MethodCall], table: &SqlFields, table_name: &str
                 });
             },
             "get" => {
-                filter_expression = FilterExpression::Filter(Filter {
-                    operand1: "id".to_owned(),
-                    operator: RelationalOperator::Equal,
-                    operand2: method_call.arguments[0].clone(),
+                try(get_expression_to_filter_expression(&method_call.arguments[0], &table_name, table), &mut errors, |(filter, new_limit)| {
+                    filter_expression = filter;
+                    limit = new_limit;
                 });
             },
             "join" => {

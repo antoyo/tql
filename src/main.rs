@@ -210,4 +210,13 @@ fn main() {
     let index = 3i32;
     let person = sql!(Person.get(index));
     show_person_option(person);
+
+    let person = sql!(Person.get(field2 == 24));
+    show_person_option(person);
+
+    let person = sql!(Person.get(field2 == 24 && field1 == "value2"));
+    show_person_option(person);
+
+    let person = sql!(Person.get(field2 == 24 && field1 == "value3"));
+    show_person_option(person);
 }

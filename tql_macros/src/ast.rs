@@ -142,9 +142,9 @@ pub struct TypedField {
 pub fn query_type(query: &Query) -> QueryType {
     match *query {
         Query::Select { ref filter, ref limit, ref table, .. } => {
+            let mut typ = QueryType::SelectMulti;
             if let FilterExpression::Filter(ref filter) = *filter {
                 let tables = singleton();
-                let mut typ = QueryType::SelectMulti;
                 match tables.get(table) {
                     Some(table) => {
                         if let Some(&Type::Serial) = table.get(&filter.operand1) {
@@ -153,14 +153,11 @@ pub fn query_type(query: &Query) -> QueryType {
                     },
                     None => (), // Unreachable.
                 }
-                typ
             }
-            else {
-                match *limit {
-                    Limit::Index(_) => QueryType::SelectOne,
-                    Limit::EndRange(_) | Limit::LimitOffset(_, _) | Limit::NoLimit | Limit::Range(_, _) | Limit::StartRange(_) => QueryType::SelectMulti,
-                }
+            if let Limit::Index(_) = *limit {
+                typ = QueryType::SelectOne;
             }
+            typ
         },
         _ => QueryType::Exec,
     }
