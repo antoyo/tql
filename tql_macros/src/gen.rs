@@ -46,6 +46,12 @@ impl ToSql for Expression {
     }
 }
 
+impl ToSql for [Expression] {
+    fn to_sql(&self) -> String {
+        self.iter().map(ToSql::to_sql).collect::<Vec<_>>().join(", ")
+    }
+}
+
 impl ToSql for FieldList {
     fn to_sql(&self) -> String {
         self.join(", ")
@@ -147,7 +153,11 @@ impl ToSql for Query {
         match *self {
             Query::CreateTable { .. } => "".to_owned(), // TODO
             Query::Delete { .. } => "".to_owned(), // TODO
-            Query::Insert { .. } => "".to_owned(), // TODO
+            Query::Insert { ref assignments, ref table } => {
+                let fields: Vec<_> = assignments.iter().map(|assign| assign.identifier.clone()).collect();
+                let values: Vec<_> = assignments.iter().map(|assign| assign.value.clone()).collect();
+                replace_placeholder(format!("INSERT INTO {}({}) VALUES({})", table, fields.to_sql(), values.to_sql()))
+            },
             Query::Select{ref fields, ref filter, ref joins, ref limit, ref order, ref table} => {
                 let where_clause = filter_to_where_clause(filter);
                 replace_placeholder(format!("SELECT {} FROM {}{}{}{}{}{}", fields.to_sql(), table, joins.to_sql(), where_clause, filter.to_sql(), order.to_sql(), limit.to_sql()))

@@ -20,6 +20,7 @@ use state::{SqlFields, SqlTables, Type, singleton};
 use string::find_near;
 
 enum SqlQueryType {
+    Insert,
     Select,
     Update,
 }
@@ -315,6 +316,7 @@ fn check_methods(calls: &[MethodCall], errors: &mut Vec<Error>) {
         "all".to_owned(),
         "filter".to_owned(),
         "get".to_owned(),
+        "insert".to_owned(),
         "join".to_owned(),
         "limit".to_owned(),
         "sort".to_owned(),
@@ -516,6 +518,11 @@ pub fn has_joins(joins: &[Join], name: &str) -> bool {
 
 fn new_query(fields: Vec<Identifier>, filter_expression: FilterExpression, joins: Vec<Join>, limit: Limit, order: Vec<Order>, assignments: Vec<Assignment>, query_type: SqlQueryType, table_name: String) -> Query {
     match query_type {
+        SqlQueryType::Insert =>
+            Query::Insert {
+                assignments: assignments,
+                table: table_name,
+            },
         SqlQueryType::Select =>
             Query::Select {
                 fields: fields,
@@ -555,6 +562,12 @@ fn process_methods<'a>(calls: &[MethodCall], table: &SqlFields, table_name: &str
                     filter_expression = filter;
                     limit = new_limit;
                 });
+            },
+            "insert" => {
+                try(convert_arguments(&method_call.arguments, &table_name, table, argument_to_assignment), &mut errors, |assigns| {
+                    assignments = assigns;
+                });
+                query_type = SqlQueryType::Insert;
             },
             "join" => {
                 try(convert_arguments(&method_call.arguments, &table_name, table, argument_to_join), &mut errors, |mut new_joins| {

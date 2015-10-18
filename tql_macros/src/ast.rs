@@ -107,7 +107,7 @@ pub enum Query {
         table: Identifier,
     },
     Insert {
-        fields: FieldList,
+        assignments: Vec<Assignment>,
         table: Identifier,
     },
     Select {
