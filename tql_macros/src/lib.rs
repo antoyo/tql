@@ -2,7 +2,7 @@
 //!
 //! The SQL is generated at compile time via a procedural macro.
 
-#![feature(box_syntax, plugin, plugin_registrar, quote, rustc_private)]
+#![feature(box_patterns, box_syntax, plugin, plugin_registrar, quote, rustc_private)]
 #![plugin(clippy)]
 #![warn(option_unwrap_used, result_unwrap_used)]
 
@@ -104,6 +104,9 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
             FilterExpression::Filters(filters) => {
                 add_filter_arguments(*filters.operand1, arguments);
                 add_filter_arguments(*filters.operand2, arguments);
+            },
+            FilterExpression::NegFilter(box filter) => {
+                add_filter_arguments(filter, arguments);
             },
             FilterExpression::NoFilters => (),
         }

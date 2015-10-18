@@ -1,13 +1,13 @@
 //! Semantic analyzer.
 
 use syntax::ast::{BinOp_, Expr, Path};
-use syntax::ast::Expr_::{ExprBinary, ExprCall, ExprCast, ExprLit, ExprMethodCall, ExprPath, ExprRange, ExprUnary};
+use syntax::ast::Expr_::{ExprBinary, ExprCall, ExprCast, ExprLit, ExprMethodCall, ExprParen, ExprPath, ExprRange, ExprUnary};
 use syntax::ast::FloatTy;
 use syntax::ast::IntTy;
 use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
 use syntax::ast::LitIntType::{SignedIntLit, UnsignedIntLit, UnsuffixedIntLit};
 use syntax::ast::UintTy;
-use syntax::ast::UnOp::UnNeg;
+use syntax::ast::UnOp::{UnNeg, UnNot};
 use syntax::codemap::{DUMMY_SP, Span, Spanned};
 use syntax::ptr::P;
 
@@ -68,6 +68,9 @@ fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors: &mu
         FilterExpression::Filters(ref filters) => {
             analyze_filter_types(&*filters.operand1, table_name, errors);
             analyze_filter_types(&*filters.operand2, table_name, errors);
+        },
+        FilterExpression::NegFilter(ref filter) => {
+            analyze_filter_types(filter, table_name, errors);
         },
         FilterExpression::NoFilters => (),
     }
@@ -361,6 +364,7 @@ fn expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &str, table: &
                         })
                     }
                     ExprBinary(_, _, _) => {
+                        // TODO: accumuler les erreurs au lieu d’arrêter à la première.
                         let filter1 = try!(expression_to_filter_expression(expr1, table_name, table));
                         let filter2 = try!(expression_to_filter_expression(expr2, table_name, table));
                         FilterExpression::Filters(Filters {
@@ -377,14 +381,22 @@ fn expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &str, table: &
                         dummy
                     }
                 }
-            }
+            },
+            ExprUnary(UnNot, ref expr) => {
+                let filter = try!(expression_to_filter_expression(expr, table_name, table));
+                FilterExpression::NegFilter(box filter)
+            },
+            ExprParen(ref expr) => {
+                let filter = try!(expression_to_filter_expression(expr, table_name, table));
+                filter
+            },
             _ => {
                 errors.push(Error::new(
                     "Expected binary operation".to_owned(),
                     arg.span,
                 ));
                 dummy
-            }
+            },
         };
 
     res(filter, errors)

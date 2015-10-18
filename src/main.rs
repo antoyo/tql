@@ -219,4 +219,18 @@ fn main() {
 
     let person = sql!(Person.get(field2 == 24 && field1 == "value3"));
     show_person_option(person);
+
+    let people = sql!(Person.filter(field2 > 10).sort(field2)[1..3]);
+    show_people(people);
+
+    let people = sql!(Person.filter((field2 < 100 && field1 == "value1")));
+    show_people(people);
+
+    println!(to_sql!(Person.filter(!(field2 < 100 && field1 == "value1"))));
+    let people = sql!(Person.filter(!(field2 < 100 && field1 == "value1")));
+    show_people(people);
+
+    println!(to_sql!(Person.filter(!(field2 < 100))));
+    let people = sql!(Person.filter(!(field2 < 100)));
+    show_people(people);
 }

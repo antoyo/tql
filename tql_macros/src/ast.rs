@@ -31,9 +31,9 @@ pub struct Filter {
 /// Either a single `Filter`, `Filters` or `NoFilters`.
 #[derive(Debug)]
 pub enum FilterExpression {
-    // TODO: aussi permettre les appels de méthode.
     Filter(Filter),
     Filters(Filters),
+    NegFilter(Box<FilterExpression>),
     NoFilters,
 }
 
