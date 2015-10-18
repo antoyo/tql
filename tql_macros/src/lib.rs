@@ -25,6 +25,17 @@
 // TODO: utiliser une compilation en 2 passes pour détecter les champs utilisés et les jointures
 // utiles (peut-être possible avec un lint plugin).
 // TODO: peut-être utiliser Spanned pour conserver la position dans l’AST.
+// TODO: supporter la comparaison avec une clé étrangère :
+// impl postgres::types::ToSql for ForeignTable {
+//    fn to_sql<W: std::io::Write + ?Sized>(&self, ty: &postgres::types::Type, out: &mut W, ctx: &postgres::types::SessionInfo) -> postgres::Result<postgres::types::IsNull> {
+//        try!(out.write(self.id.to_string().as_bytes()));
+//        Ok(postgres::types::IsNull::No)
+//    }
+//
+//    accepts!(postgres::types::Type::Oid);
+//
+//    to_sql_checked!();
+//}
 
 #[macro_use]
 extern crate rustc;
@@ -205,7 +216,6 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
                 match sql_tables.get(foreign_table) {
                     Some(foreign_table) => {
                         if has_joins(&joins, name) {
-                            // TODO: seulement aller chercher les champs s’il y a une jointure.
                             let mut foreign_fields = vec![];
                             for (field, typ) in foreign_table {
                                 match *typ {

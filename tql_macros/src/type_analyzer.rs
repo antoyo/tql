@@ -106,6 +106,10 @@ fn same_type(field_type: &Type, expected_type: &TyS) -> bool {
                 _ => false,
             }
         },
+        TypeVariants::TyStruct(_, _) => {
+            // TODO: supporter la comparaison d’une clé étrangère.
+            false
+        },
         _ => false,
     }
 }

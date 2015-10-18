@@ -13,27 +13,40 @@ fn field_ty_to_type(ty: &Ty) -> Type {
     if let TyPath(None, Path { ref segments, .. }) = ty.node {
         if segments.len() == 1 {
             let ident = segments[0].identifier.to_string();
-            if ident == "String" {
-                typ = Type::String;
-            }
-            else if ident == "i32" {
-                typ = Type::I32;
-            }
-            // TODO
-            // else if ident == "" {
-            // }
-            else if ident == "ForeignKey" {
-                if let AngleBracketedParameters(AngleBracketedParameterData { ref types, .. }) = segments[0].parameters {
-                    match types.first() {
-                        Some(ty) => {
-                            if let TyPath(None, Path { ref segments, .. }) = ty.node {
-                                typ = Type::Custom(segments[0].identifier.to_string());
+            typ =
+                match &ident[..] {
+                    "String" => {
+                        Type::String
+                    },
+                    "i32" => {
+                        Type::I32
+                    },
+                    "u32" => {
+                        Type::U32
+                    },
+                    "ForeignKey" => {
+                        if let AngleBracketedParameters(AngleBracketedParameterData { ref types, .. }) = segments[0].parameters {
+                            match types.first() {
+                                Some(ty) => {
+                                    if let TyPath(None, Path { ref segments, .. }) = ty.node {
+                                        Type::Custom(segments[0].identifier.to_string())
+                                    }
+                                    else {
+                                        Type::Dummy // TODO
+                                    }
+                                },
+                                None => Type::Dummy, // TODO
                             }
-                        },
-                        None => (), // TODO
-                    }
-                }
-            }
+                        }
+                        else {
+                            Type::Dummy // TODO
+                        }
+                    },
+                    "PrimaryKey" => {
+                        Type::I32
+                    },
+                    _ => Type::Dummy,
+                };
         }
     }
     typ
