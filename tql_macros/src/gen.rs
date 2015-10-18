@@ -152,7 +152,10 @@ impl ToSql for Query {
     fn to_sql(&self) -> String {
         match *self {
             Query::CreateTable { .. } => "".to_owned(), // TODO
-            Query::Delete { .. } => "".to_owned(), // TODO
+            Query::Delete { ref filter, ref table } => {
+                let where_clause = filter_to_where_clause(filter);
+                replace_placeholder(format!("DELETE FROM {} {}{}", table, where_clause, filter.to_sql()))
+            },
             Query::Insert { ref assignments, ref table } => {
                 let fields: Vec<_> = assignments.iter().map(|assign| assign.identifier.clone()).collect();
                 let values: Vec<_> = assignments.iter().map(|assign| assign.value.clone()).collect();

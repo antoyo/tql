@@ -20,6 +20,7 @@ use state::{SqlFields, SqlTables, Type, singleton};
 use string::find_near;
 
 enum SqlQueryType {
+    Delete,
     Insert,
     Select,
     Update,
@@ -314,6 +315,7 @@ fn check_field(identifier: &str, position: Span, table_name: &str, table: &SqlFi
 fn check_methods(calls: &[MethodCall], errors: &mut Vec<Error>) {
     let methods = vec![
         "all".to_owned(),
+        "delete".to_owned(),
         "filter".to_owned(),
         "get".to_owned(),
         "insert".to_owned(),
@@ -518,6 +520,11 @@ pub fn has_joins(joins: &[Join], name: &str) -> bool {
 
 fn new_query(fields: Vec<Identifier>, filter_expression: FilterExpression, joins: Vec<Join>, limit: Limit, order: Vec<Order>, assignments: Vec<Assignment>, query_type: SqlQueryType, table_name: String) -> Query {
     match query_type {
+        SqlQueryType::Delete =>
+            Query::Delete {
+                filter: filter_expression,
+                table: table_name,
+            },
         SqlQueryType::Insert =>
             Query::Insert {
                 assignments: assignments,
@@ -551,13 +558,20 @@ fn process_methods<'a>(calls: &[MethodCall], table: &SqlFields, table_name: &str
     let mut query_type = SqlQueryType::Select;
     for method_call in calls {
         match &method_call.name[..] {
-            "all" => (), // TODO
+            "all" => {
+                // TODO: vérifier qu’aucun argument n’a été passé à la méthode.
+            },
+            "delete" => {
+                // TODO: vérifier qu’aucun argument n’a été passé à la méthode.
+                query_type = SqlQueryType::Delete;
+            },
             "filter" => {
                 try(expression_to_filter_expression(&method_call.arguments[0], &table_name, table), &mut errors, |filter| {
                     filter_expression = filter;
                 });
             },
             "get" => {
+                // TODO: la méthode get() accepte d’être utilisée sans argument.
                 try(get_expression_to_filter_expression(&method_call.arguments[0], &table_name, table), &mut errors, |(filter, new_limit)| {
                     filter_expression = filter;
                     limit = new_limit;
