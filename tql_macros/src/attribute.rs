@@ -43,7 +43,7 @@ fn field_ty_to_type(ty: &Ty) -> Type {
                         }
                     },
                     "PrimaryKey" => {
-                        Type::I32
+                        Type::Serial
                     },
                     _ => Type::Dummy,
                 };

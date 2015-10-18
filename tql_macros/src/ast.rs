@@ -3,10 +3,11 @@
 use syntax::ast::Expr;
 use syntax::ptr::P;
 
+use state::{Type, singleton};
+
 pub type Expression = P<Expr>;
 pub type FieldList = Vec<Identifier>;
 pub type Identifier = String;
-pub type Type = String;
 
 /// `Assignment` for use in SQL Update `Query`.
 #[derive(Debug)]
@@ -134,16 +135,31 @@ pub enum QueryType {
 #[derive(Debug)]
 pub struct TypedField {
     identifier: Identifier,
-    typ: Type,
+    typ: String,
 }
 
 /// Get the query type.
 pub fn query_type(query: &Query) -> QueryType {
     match *query {
-        Query::Select { ref limit, .. } => {
-            match *limit {
-                Limit::Index(_) => QueryType::SelectOne,
-                Limit::EndRange(_) | Limit::LimitOffset(_, _) | Limit::NoLimit | Limit::Range(_, _) | Limit::StartRange(_) => QueryType::SelectMulti,
+        Query::Select { ref filter, ref limit, ref table, .. } => {
+            if let FilterExpression::Filter(ref filter) = *filter {
+                let tables = singleton();
+                let mut typ = QueryType::SelectMulti;
+                match tables.get(table) {
+                    Some(table) => {
+                        if let Some(&Type::Serial) = table.get(&filter.operand1) {
+                            typ = QueryType::SelectOne;
+                        }
+                    },
+                    None => (), // Unreachable.
+                }
+                typ
+            }
+            else {
+                match *limit {
+                    Limit::Index(_) => QueryType::SelectOne,
+                    Limit::EndRange(_) | Limit::LimitOffset(_, _) | Limit::NoLimit | Limit::Range(_, _) | Limit::StartRange(_) => QueryType::SelectMulti,
+                }
             }
         },
         _ => QueryType::Exec,

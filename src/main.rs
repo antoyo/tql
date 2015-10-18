@@ -11,6 +11,7 @@ use tql::{ForeignKey, PrimaryKey};
 #[SqlTable]
 #[derive(Debug)]
 struct Person {
+    id: PrimaryKey,
     field1: String,
     field2: i32,
     address: ForeignKey<Address>,
@@ -199,4 +200,14 @@ fn main() {
         //street: "Street Ave".to_owned(),
     //};
     //sql!(Person.filter(address == address));
+
+    let person = sql!(Person.get(1));
+    show_person_option(person);
+
+    let person = sql!(Person.get(2));
+    show_person_option(person);
+
+    let index = 3i32;
+    let person = sql!(Person.get(index));
+    show_person_option(person);
 }

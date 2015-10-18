@@ -47,6 +47,7 @@ pub enum Type {
     I16,
     I32,
     I64,
+    Serial,
     String,
     U32,
 }
@@ -65,6 +66,7 @@ impl Display for Type {
             Type::I16 => "i16",
             Type::I32 => "i32",
             Type::I64 => "i64",
+            Type::Serial => "i32",
             Type::String => "String",
             Type::U32 => "u32",
         };

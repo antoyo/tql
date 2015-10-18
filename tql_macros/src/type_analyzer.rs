@@ -92,7 +92,7 @@ fn check_type(field_type: &Type, expected_type: &TyS, position: Span, note_posit
 fn same_type(field_type: &Type, expected_type: &TyS) -> bool {
     match expected_type.sty {
         TypeVariants::TyInt(TyI32) => {
-            *field_type == Type::I32
+            *field_type == Type::I32 || *field_type == Type::Serial
         },
         TypeVariants::TyInt(TyI64) => {
             *field_type == Type::I64

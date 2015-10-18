@@ -305,6 +305,7 @@ fn check_methods(calls: &[MethodCall], errors: &mut Vec<Error>) {
     let methods = vec![
         "all".to_owned(),
         "filter".to_owned(),
+        "get".to_owned(),
         "join".to_owned(),
         "limit".to_owned(),
         "sort".to_owned(),
@@ -476,6 +477,13 @@ fn process_methods<'a>(calls: &[MethodCall], table: &SqlFields, table_name: &str
                     filter_expression = filter;
                 });
             },
+            "get" => {
+                filter_expression = FilterExpression::Filter(Filter {
+                    operand1: "id".to_owned(),
+                    operator: RelationalOperator::Equal,
+                    operand2: method_call.arguments[0].clone(),
+                });
+            },
             "join" => {
                 try(arguments_to_joints(&method_call.arguments, &table_name, table), &mut errors, |mut new_joins| {
                     joins.append(&mut new_joins);
@@ -513,11 +521,11 @@ fn same_type(field_type: &Type, expression: &Expression) -> bool {
                         SignedIntLit(IntTy::TyIs, _) => false,
                         SignedIntLit(IntTy::TyI8, _) => *field_type == Type::I8,
                         SignedIntLit(IntTy::TyI16, _) => *field_type == Type::I16,
-                        SignedIntLit(IntTy::TyI32, _) => *field_type == Type::I32,
+                        SignedIntLit(IntTy::TyI32, _) => *field_type == Type::I32 || *field_type == Type::Serial,
                         SignedIntLit(IntTy::TyI64, _) => *field_type == Type::I64,
                         UnsignedIntLit(UintTy::TyU32) => *field_type == Type::U32,
                         UnsignedIntLit(_) => false,
-                        UnsuffixedIntLit(_) => *field_type == Type::I32 || *field_type == Type::U32,
+                        UnsuffixedIntLit(_) => *field_type == Type::I32 || *field_type == Type::U32 || *field_type == Type::Serial,
                     }
                 ,
                 LitStr(_, _) => *field_type == Type::String,
