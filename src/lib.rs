@@ -1,3 +1,7 @@
+//! TQL is a Rust compiler plugin providing an SQL DSL.
+//!
+//! It type check your expression at compile time and converts it to SQL.
+
 /// The `ForeignKey` is optional.
 ///
 /// There is no value when the `join()` method is not called.

@@ -9,6 +9,7 @@ use ast::{Assignment, Expression, FieldList, Filter, Filters, FilterExpression, 
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use sql::escape;
 
+/// A generic trait for converting a value to SQL.
 pub trait ToSql {
     fn to_sql(&self) -> String;
 }
@@ -30,9 +31,9 @@ impl ToSql for Expression {
         match self.node {
             ExprLit(ref literal) => {
                 match literal.node {
-                    // TODO: ne pas utiliser unwrap().
                     LitBool(boolean) => boolean.to_string().to_uppercase(),
                     LitByte(byte) => "'".to_owned() + &escape((byte as char).to_string()) + "'",
+                    // TODO: ne pas utiliser unwrap().
                     LitByteStr(ref bytestring) => "'".to_owned() + &escape(from_utf8(&bytestring[..]).unwrap().to_owned()) + "'",
                     LitChar(character) => "'".to_owned() + &escape(character.to_string()) + "'",
                     LitFloat(ref float, _) => float.to_string(),
@@ -186,6 +187,7 @@ impl ToSql for RelationalOperator {
     }
 }
 
+/// Convert a `FilterExpression` to either " WHERE " or the empty string if there are no filters.
 fn filter_to_where_clause(filter: &FilterExpression) -> &str {
     match *filter {
         FilterExpression::Filter(_) | FilterExpression::Filters(_) | FilterExpression::NegFilter(_) | FilterExpression::ParenFilter(_) => " WHERE ",
@@ -194,6 +196,7 @@ fn filter_to_where_clause(filter: &FilterExpression) -> &str {
 }
 
 // TODO: essayer de trouver une meilleure façon de mettre les symboles ($1, $2, …) dans la requête.
+/// Replace the placeholders `{}` by $# by # where # is the index of the placeholder.
 fn replace_placeholder(string: String) -> String {
     let mut result = "".to_owned();
     let mut in_string = false;

@@ -11,6 +11,7 @@ use ast::Limit::{EndRange, Index, LimitOffset, Range, StartRange};
 use ast::Query::{CreateTable, Delete, Insert, Select, Update};
 use plugin::number_literal;
 
+/// Check that all the expressions in `expression` are literal.
 fn all_integer_literal(expression: &Expression) -> bool {
     match expression.node {
         ExprLit(ref literal) => {
@@ -24,6 +25,7 @@ fn all_integer_literal(expression: &Expression) -> bool {
     }
 }
 
+/// Reduce an `expression` containing only literals to a mere literal.
 fn evaluate(expression: &Expression) -> u64 {
     match expression.node {
         ExprLit(ref literal) => {
@@ -38,6 +40,7 @@ fn evaluate(expression: &Expression) -> u64 {
     }
 }
 
+/// Optimize the query.
 pub fn optimize(query: &mut Query) {
     match *query {
         CreateTable { .. } => (), // TODO
@@ -50,6 +53,7 @@ pub fn optimize(query: &mut Query) {
     }
 }
 
+/// Optimize the limit by simplifying the expressions containing only literal.
 fn optimize_limit(limit: &Limit) -> Limit {
     match *limit {
         EndRange(ref expression) => {
@@ -76,6 +80,8 @@ fn optimize_limit(limit: &Limit) -> Limit {
     }
 }
 
+/// If `expression` only contains literal, simplify this expression.
+/// Otherwise returns it as is.
 fn try_simplify(expression: &Expression) -> Expression {
     if all_integer_literal(expression) {
         number_literal(evaluate(expression))

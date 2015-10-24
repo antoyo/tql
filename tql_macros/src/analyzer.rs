@@ -19,6 +19,7 @@ use plugin::number_literal;
 use state::{SqlFields, SqlTables, Type, singleton};
 use string::find_near;
 
+/// The type of the SQL query.
 enum SqlQueryType {
     Delete,
     Insert,
@@ -26,6 +27,7 @@ enum SqlQueryType {
     Update,
 }
 
+/// The query data gathered during the analyze.
 type QueryData = (FilterExpression, Vec<Join>, Limit, Vec<Order>, Vec<Assignment>, SqlQueryType);
 
 /// Analyze and transform the AST.
@@ -57,6 +59,7 @@ pub fn analyze(method_calls: MethodCalls, sql_tables: &SqlTables) -> SqlResult<Q
     res(new_query(fields, filter_expression, joins, limit, order, assignments, query_type, table_name), errors)
 }
 
+/// Analyze the types of the `FilterExpression`.
 fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors: &mut Vec<Error>) {
     // TODO: vérifier que les opérateurs sont utilisé avec les bons types.
     match *filter {
@@ -81,6 +84,7 @@ fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors: &mu
     }
 }
 
+/// Analyze the types of the `Limit`.
 fn analyze_limit_types(limit: &Limit, errors: &mut Vec<Error>) {
     match *limit {
         EndRange(ref expression) => check_type(&Type::I64, expression, errors),
@@ -114,6 +118,7 @@ pub fn analyze_types<'a>(query: Query) -> SqlResult<'a, Query> {
     res(query, errors)
 }
 
+/// Convert an `Expression` to an `Assignment`.
 fn argument_to_assignment<'a>(arg: &Expression, table_name: &str, table: &SqlFields) -> SqlResult<'a, Assignment> {
     let mut errors = vec![];
     let mut assignment = Assignment {
@@ -142,6 +147,7 @@ fn argument_to_assignment<'a>(arg: &Expression, table_name: &str, table: &SqlFie
     res(assignment, errors)
 }
 
+/// Convert an `Expression` to a `Join`
 fn argument_to_join<'a>(arg: &Expression, table_name: &str, table: &SqlFields) -> SqlResult<'a, Join> {
     let mut errors = vec![];
     let mut join = Join {
@@ -177,6 +183,7 @@ fn argument_to_join<'a>(arg: &Expression, table_name: &str, table: &SqlFields) -
     res(join, errors)
 }
 
+/// Convert an `Expression` to an `Order`.
 fn argument_to_order<'a>(arg: &Expression, table_name: &str, table: &SqlFields) -> SqlResult<'a, Order> {
     fn identifier<'a>(arg: &Expression, identifier: &Expr, table_name: &str, table: &SqlFields) -> SqlResult<'a, String> {
         let mut errors = vec![];
@@ -216,6 +223,7 @@ fn argument_to_order<'a>(arg: &Expression, table_name: &str, table: &SqlFields) 
     res(order, errors)
 }
 
+/// Convert a slice of `Expression` to a `Limit`.
 fn arguments_to_limit<'a, 'b>(expression: &'b P<Expr>) -> SqlResult<'a, Limit> {
     let mut errors = vec![];
     let limit =
@@ -296,6 +304,7 @@ fn binop_to_relational_operator(binop: BinOp_) -> RelationalOperator {
     }
 }
 
+/// Check if the `identifier` is a field in the struct `table_name`.
 fn check_field(identifier: &str, position: Span, table_name: &str, table: &SqlFields, errors: &mut Vec<Error>) {
     if !table.contains_key(identifier) {
         errors.push(Error::new(
@@ -312,6 +321,7 @@ fn check_field(identifier: &str, position: Span, table_name: &str, table: &SqlFi
     }
 }
 
+/// Check if the method `calls` exist.
 fn check_methods(calls: &[MethodCall], errors: &mut Vec<Error>) {
     let methods = vec![
         "all".to_owned(),
@@ -340,6 +350,7 @@ fn check_methods(calls: &[MethodCall], errors: &mut Vec<Error>) {
     }
 }
 
+/// Check if the `field_type` is compitable with the `expression`'s type.
 fn check_type(field_type: &Type, expression: &Expression, errors: &mut Vec<Error>) {
     if !same_type(field_type, expression) {
         let literal_type = get_type(expression);
@@ -355,7 +366,9 @@ fn check_type(field_type: &Type, expression: &Expression, errors: &mut Vec<Error
     }
 }
 
-fn convert_arguments<'a, F: Fn(&Expression, &str, &SqlFields) -> SqlResult<'a, Type>, Type>(arguments: &[P<Expr>], table_name: &str, table: &SqlFields, convert_argument: F) -> SqlResult<'a, Vec<Type>> {
+/// Convert the `arguments` to the `Type`.
+fn convert_arguments<'a, F, Type>(arguments: &[P<Expr>], table_name: &str, table: &SqlFields, convert_argument: F) -> SqlResult<'a, Vec<Type>>
+        where F: Fn(&Expression, &str, &SqlFields) -> SqlResult<'a, Type> {
     let mut items = vec![];
     let mut errors = vec![];
 
@@ -425,6 +438,7 @@ fn expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &str, table: &
     res(filter, errors)
 }
 
+/// Convert an expression from a `get()` method to a FilterExpression and a Limit.
 fn get_expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &str, table: &SqlFields) -> SqlResult<'a, (FilterExpression, Limit)> {
     match arg.node {
         ExprLit(_) | ExprPath(_, _) => {
@@ -435,15 +449,12 @@ fn get_expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &str, tabl
             });
             res((filter, Limit::NoLimit), vec![])
         },
-        _ => {
-            match expression_to_filter_expression(arg, table_name, table) {
-                Ok(filter) => res((filter, Limit::Index(number_literal(0))), vec![]),
-                Err(errors) => res((FilterExpression::NoFilters, Limit::NoLimit), errors),
-            }
-        },
+        _ => expression_to_filter_expression(arg, table_name, table)
+                .and_then(|filter| Ok((filter, Limit::Index(number_literal(0))))),
     }
 }
 
+/// Get the query field fully qualified names.
 fn get_query_fields(table: &SqlFields, table_name: &str, joins: &[Join], sql_tables: &SqlTables, errors: &mut Vec<Error>) -> Vec<Identifier> {
     let mut fields = vec![];
     for (field, typ) in table {
@@ -479,6 +490,7 @@ fn get_query_fields(table: &SqlFields, table_name: &str, joins: &[Join], sql_tab
     fields
 }
 
+/// Get the string representation of an literal `Expression` type.
 fn get_type(expression: &Expression) -> &str {
     match expression.node {
         ExprLit(ref literal) => {
@@ -512,12 +524,14 @@ fn get_type(expression: &Expression) -> &str {
     }
 }
 
+/// Check if there is a join in `joins` on a field named `name`.
 pub fn has_joins(joins: &[Join], name: &str) -> bool {
     joins.iter()
         .map(|join| &join.left_field)
         .any(|field_name| field_name == name)
 }
 
+/// Create a new query from all the data gathered by the method calls.
 fn new_query(fields: Vec<Identifier>, filter_expression: FilterExpression, joins: Vec<Join>, limit: Limit, order: Vec<Order>, assignments: Vec<Assignment>, query_type: SqlQueryType, table_name: String) -> Query {
     match query_type {
         SqlQueryType::Delete =>
@@ -548,6 +562,7 @@ fn new_query(fields: Vec<Identifier>, filter_expression: FilterExpression, joins
     }
 }
 
+/// Gather data about the query in the method `calls`.
 fn process_methods<'a>(calls: &[MethodCall], table: &SqlFields, table_name: &str) -> SqlResult<'a, QueryData> {
     let mut errors = vec![];
     let mut assignments = vec![];
@@ -610,6 +625,7 @@ fn process_methods<'a>(calls: &[MethodCall], table: &SqlFields, table_name: &str
     res((filter_expression, joins, limit, order, assignments, query_type), errors)
 }
 
+/// Check if an `expression` as the type `field_type`.
 fn same_type(field_type: &Type, expression: &Expression) -> bool {
     match expression.node {
         ExprLit(ref literal) => {
@@ -649,6 +665,8 @@ fn try<'a, F: FnMut(T), T>(mut result: Result<T, Vec<Error<'a>>>, errors: &mut V
     }
 }
 
+/// Add an error to the vector error about an unknown SQL table.
+/// It suggests a similar name if there exist one.
 fn unknown_table_error(table_name: &str, position: Span, sql_tables: &SqlTables, errors: &mut Vec<Error>) {
     errors.push(Error::new_with_code(
         format!("`{}` does not name an SQL table", table_name),

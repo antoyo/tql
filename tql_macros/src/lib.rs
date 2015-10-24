@@ -6,6 +6,9 @@
 #![plugin(clippy)]
 #![warn(option_unwrap_used, result_unwrap_used)]
 
+// TODO: pour la méthode insert(), vérifier que tous les champs obligatoires sont fournis.
+// TODO: Ne pas oublier de faire le cas Delete et Insert dans ce fichier (arguments) et dans
+// analyzer::analyze_types.
 // TODO: paramétriser le type ForeignKey et PrimaryKey pour que la macro puisse choisir de mettre
 // le type en question ou rien (dans le cas où la jointure n’est pas faite) ou empêcher les
 // modifications (dans le cas où l’ID existe).
@@ -84,6 +87,7 @@ use state::{SqlArg, SqlArgs, SqlFields, SqlTables, Type, lint_singleton, singlet
 use type_analyzer::SqlError;
 
 /// Extract the Rust `Expression`s from the `Query`.
+// TODO: séparer cette fonction en plusieurs fonctions.
 fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
     let mut arguments = vec![];
 
@@ -157,6 +161,9 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
     arguments
 }
 
+/// Expand the `sql!()` macro.
+/// This macro converts the Rust code provided as argument to SQL and outputs Rust code using the
+/// `postgres` library.
 fn expand_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult + 'static> {
     // TODO: si le premier paramètre n’est pas fourni, utiliser "connection".
     if let TokenTree::TtToken(_, Token::Ident(ident, _)) = args[0] {
@@ -177,6 +184,8 @@ fn expand_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult +
     }
 }
 
+/// Expand the `#[sql_table]` attribute.
+/// This attribute must be used on structs to tell tql that it represents an SQL table.
 fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, _: &MetaItem, item: &Annotatable, _: &mut FnMut(Annotatable)) {
     // Add to sql_tables.
     let mut sql_tables = singleton();
@@ -198,6 +207,9 @@ fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, _: &MetaItem, item: &Annotatable
     }
 }
 
+/// Expand the `to_sql!()` macro.
+/// This macro converts the Rust code provided as argument to SQL and ouputs it as a string
+/// expression.
 fn expand_to_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult + 'static> {
     let sql_result = to_sql(cx, args);
     match sql_result {
@@ -212,6 +224,7 @@ fn expand_to_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResul
     }
 }
 
+/// Generate the Rust code from the SQL query.
 fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args: SqlQueryWithArgs) -> Box<MacResult + 'static> {
     let (sql, query_type, arguments, joins) = sql_query_with_args;
     let string_literal = intern(&sql);
@@ -227,6 +240,7 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
     MacEager::expr(expr)
 }
 
+/// Generate the Rust code using the `postgres` library depending on the `QueryType`.
 fn gen_query_expr(cx: &mut ExtCtxt, ident: Ident, sql_query: Expression, args_expr: Expression, struct_expr: Expression, query_type: QueryType) -> Expression {
     match query_type {
         QueryType::SelectMulti => {
@@ -255,6 +269,8 @@ fn gen_query_expr(cx: &mut ExtCtxt, ident: Ident, sql_query: Expression, args_ex
     }
 }
 
+/// Get the arguments to send to the `postgres::stmt::Statement::query` or
+/// `postgres::stmt::Statement::execute` method.
 fn get_query_arguments(cx: &mut ExtCtxt, sp: Span, table_name: String, arguments: Args) -> Expression {
     let mut arg_refs = vec![];
     let mut sql_args = vec![];
@@ -291,6 +307,8 @@ fn get_query_arguments(cx: &mut ExtCtxt, sp: Span, table_name: String, arguments
     cx.expr_vec(DUMMY_SP, arg_refs)
 }
 
+/// Get the fully qualified field names.
+// TODO: séparer cette fonction en plusieurs fonctions.
 fn get_query_fields(cx: &mut ExtCtxt, sp: Span, table: &SqlFields, sql_tables: &SqlTables, joins: Vec<Join>) -> Vec<Field> {
     let mut fields = vec![];
     let mut index = 0usize;
@@ -359,9 +377,10 @@ fn get_query_fields(cx: &mut ExtCtxt, sp: Span, table: &SqlFields, sql_tables: &
     fields
 }
 
+/// Show the compilation errors.
 fn span_errors(errors: Vec<Error>, cx: &mut ExtCtxt) {
-    for &Error {code, ref message, position, ref typ} in &errors {
-        match *typ {
+    for &Error {code, ref message, position, ref kind} in &errors {
+        match *kind {
             ErrorType::Error => {
                 match code {
                     Some(code) => cx.parse_sess.span_diagnostic.span_err_with_code(position, &message, code),
@@ -378,6 +397,7 @@ fn span_errors(errors: Vec<Error>, cx: &mut ExtCtxt) {
     }
 }
 
+/// Convert the Rust code to an SQL string with its type, arguments and joins.
 fn to_sql<'a>(cx: &mut ExtCtxt, args: &[TokenTree]) -> SqlResult<'a, SqlQueryWithArgs> {
     let mut parser = cx.new_parser_from_tts(args);
     let expression = parser.parse_expr();

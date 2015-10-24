@@ -8,6 +8,7 @@ use syntax::ast::Ty_::TyPath;
 
 use state::{SqlFields, Type};
 
+/// Convert a type from the Rust AST to the SQL `Type`.
 fn field_ty_to_type(ty: &Ty) -> Type {
     let mut typ = Type::Dummy;
     if let TyPath(None, Path { ref segments, .. }) = ty.node {

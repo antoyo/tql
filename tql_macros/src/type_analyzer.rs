@@ -1,3 +1,5 @@
+//! Expression type analyzer.
+
 extern crate rustc_front;
 
 use rustc::lint::{LateContext, LateLintPass, LintArray, LintPass};
@@ -21,6 +23,7 @@ impl LintPass for SqlError {
     }
 }
 
+/// Get the types of the elements in a `Vec`.
 fn argument_types<'a>(cx: &'a LateContext, arguments: &'a Expr_) -> Vec<Ty<'a>> {
     let mut types = vec![];
     if let ExprAddrOf(_, ref argument) = *arguments {
@@ -36,6 +39,8 @@ fn argument_types<'a>(cx: &'a LateContext, arguments: &'a Expr_) -> Vec<Ty<'a>> 
 }
 
 impl LateLintPass for SqlError {
+    // TODO: faire la même chose pour la méthode execute().
+    /// Check the types of the `Vec` argument of the `postgres::stmt::Statement::query` method.
     fn check_expr(&mut self, cx: &LateContext, expr: &Expr) {
         let tables = singleton();
         if let ExprMethodCall(name, _, ref arguments) = expr.node {
@@ -82,6 +87,8 @@ impl LateLintPass for SqlError {
     }
 }
 
+/// Check that the `field_type` is the same as the `expected_type`.
+/// If not, show an error message.
 fn check_type(field_type: &Type, expected_type: &TyS, position: Span, note_position: Span, cx: &LateContext) {
     if !same_type(field_type, expected_type) {
         cx.sess().span_err_with_code(position, &format!("mismatched types:\n expected `{}`,    found `{:?}`", field_type, expected_type), "E0308");
@@ -89,6 +96,7 @@ fn check_type(field_type: &Type, expected_type: &TyS, position: Span, note_posit
     }
 }
 
+/// Comapre the `field_type` with the `expected_type`.
 fn same_type(field_type: &Type, expected_type: &TyS) -> bool {
     match expected_type.sty {
         TypeVariants::TyInt(TyI32) => {

@@ -26,6 +26,7 @@ pub struct MethodCalls {
 }
 
 impl MethodCalls {
+    /// Add a call to the method calls `Vec`.
     fn push(&mut self, call: MethodCall) {
         self.calls.push(call);
     }
@@ -40,10 +41,11 @@ pub fn parse<'a>(expression: Expression) -> SqlResult<'a, MethodCalls> {
         position: expression.span,
     };
 
-    fn expr_to_vec<'a>(expression: &Expression, calls: &mut MethodCalls, errors: &mut Vec<Error>) {
+    /// Add the calls from the `expression` into the `calls` `Vec`.
+    fn add_calls<'a>(expression: &Expression, calls: &mut MethodCalls, errors: &mut Vec<Error>) {
         match expression.node {
             ExprMethodCall(Spanned { node: object, span: method_span}, _, ref arguments) => {
-                expr_to_vec(&arguments[0], calls, errors);
+                add_calls(&arguments[0], calls, errors);
 
                 let mut arguments = arguments.clone();
                 arguments.remove(0);
@@ -60,7 +62,7 @@ pub fn parse<'a>(expression: Expression) -> SqlResult<'a, MethodCalls> {
                 }
             }
             ExprIndex(ref expr1, ref expr2) => {
-                expr_to_vec(expr1, calls, errors);
+                add_calls(expr1, calls, errors);
                 calls.push(MethodCall {
                     name: "limit".to_owned(),
                     arguments: vec![expr2.clone()],
@@ -76,6 +78,6 @@ pub fn parse<'a>(expression: Expression) -> SqlResult<'a, MethodCalls> {
         }
     }
 
-    expr_to_vec(&expression, &mut calls, &mut errors);
+    add_calls(&expression, &mut calls, &mut errors);
     res(calls, errors)
 }

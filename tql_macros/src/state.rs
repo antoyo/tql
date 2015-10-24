@@ -53,6 +53,7 @@ pub enum Type {
 }
 
 impl Display for Type {
+    /// Get a string representation of the SQL `Type`.
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let typ = match *self {
             Type::Bool => "bool",

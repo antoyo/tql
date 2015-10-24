@@ -8,9 +8,9 @@ use syntax::codemap::Span;
 /// `Error` is a type that represents an error with its position.
 pub struct Error<'a> {
     pub code: Option<&'a str>,
+    pub kind: ErrorType,
     pub message: String,
     pub position: Span,
-    pub typ: ErrorType,
 }
 
 /// `ErrorType` is an `Error` type.
@@ -39,9 +39,9 @@ impl<'a> Error<'a> {
     pub fn new(message: String, position: Span) -> Error<'a> {
         Error {
             code: None,
+            kind: ErrorType::Error,
             message: message,
             position: position,
-            typ: ErrorType::Error,
         }
     }
 
@@ -59,9 +59,9 @@ impl<'a> Error<'a> {
     pub fn new_help(message: String, position: Span) -> Error<'a> {
         Error {
             code: None,
+            kind: ErrorType::Help,
             message: message,
             position: position,
-            typ: ErrorType::Help,
         }
     }
 
@@ -79,9 +79,9 @@ impl<'a> Error<'a> {
     pub fn new_note(message: String, position: Span) -> Error<'a> {
         Error {
             code: None,
+            kind: ErrorType::Note,
             message: message,
             position: position,
-            typ: ErrorType::Note,
         }
     }
 
@@ -99,9 +99,9 @@ impl<'a> Error<'a> {
     pub fn new_with_code(message: String, position: Span, code: &'a str) -> Error<'a> {
         Error {
             code: Some(code),
+            kind: ErrorType::Error,
             message: message,
             position: position,
-            typ: ErrorType::Error,
         }
     }
 }
