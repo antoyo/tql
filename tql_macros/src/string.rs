@@ -2,6 +2,16 @@
 
 use std::cmp;
 
+/// Variadic minimum macro. It returns the minimum of its arguments.
+macro_rules! min {
+    ( $e:expr ) => {
+        $e
+    };
+    ( $e:expr, $( $rest:expr ),* ) => {
+        cmp::min($e, min!($( $rest ),*))
+    };
+}
+
 /// Finds a near match of `str_to_check` in `strings`.
 pub fn find_near<'a, T: Iterator<Item = &'a String>>(str_to_check: &str, strings: T) -> Option<&'a String> {
     let mut result = None;
@@ -32,7 +42,10 @@ fn levenshtein_distance(string1: &str, string2: &str) -> usize {
                     else {
                         1
                     };
-                cmp::min(cmp::min(d[i - 1][j] + 1, d[i][j - 1] + 1), d[i - 1][j - 1] + delta)
+                min!( d[i - 1][j] + 1
+                    , d[i][j - 1] + 1
+                    , d[i - 1][j - 1] + delta
+                    )
             },
         }
     }
