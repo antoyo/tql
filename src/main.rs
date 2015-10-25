@@ -82,10 +82,13 @@ fn show_people_with_address(people: Vec<Person>) {
 fn main() {
     let connection = get_connection();
 
+    let _ = sql!(Address.create());
     let _ = sql!(Person.create());
-    let _ = sql!(Person.insert(name = "value1", age = 42));
-    let _ = sql!(Person.insert(name = "value2", age = 24));
-    let _ = sql!(Person.insert(name = "value3", age = 12));
+    let _ = sql!(Address.insert(number = 42, street = "Street Ave"));
+    let address = sql!(Address.get(1)).unwrap();
+    let _ = sql!(Person.insert(name = "value1", age = 42, address = address));
+    let _ = sql!(Person.insert(name = "value2", age = 24, address = address));
+    let _ = sql!(Person.insert(name = "value3", age = 12, address = address));
 
     println!(to_sql!(Person.filter(name == "value1")));
     let people = sql!(Person.filter(name == "value1"));
@@ -199,13 +202,8 @@ fn main() {
     let people = sql!(Person.all().join(address));
     show_people_with_address(people);
 
-    // TODO: ceci devrait fonctionner.
-    //let address = Address {
-        //id: 1,
-        //number: 42,
-        //street: "Street Ave".to_owned(),
-    //};
-    //sql!(Person.filter(address == address));
+    let people = sql!(Person.filter(address == address));
+    show_people(people);
 
     let person = sql!(Person.get(1));
     show_person_option(person);
@@ -263,7 +261,7 @@ fn main() {
     let new_age = 42i32;
     let _ = sql!(Person.filter(id == 1).update(name = "value1", age = new_age));
 
-    let num_inserted = match sql!(Person.insert(name = "Me", age = 91)) {
+    let num_inserted = match sql!(Person.insert(name = "Me", age = 91, address = address)) {
         Ok(number) => number,
         Err(error) => {
             println!("Error: {}", error);
@@ -309,4 +307,5 @@ fn main() {
     //let _ = to_sql!(Person.all().join(address, address)); // TODO: devrait causer une erreur.
 
     let _ = sql!(Person.drop());
+    let _ = sql!(Address.drop());
 }

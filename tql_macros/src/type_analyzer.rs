@@ -148,9 +148,13 @@ fn check_type(field_type: &Type, expected_type: &TyS, position: Span, note_posit
 
 /// Comapre the `field_type` with the `expected_type`.
 fn same_type(field_type: &Type, expected_type: &TyS) -> bool {
+    //panic!(format!("{:?} - {:?}", field_type, expected_type));
     match expected_type.sty {
         TypeVariants::TyInt(TyI32) => {
-            *field_type == Type::I32 || *field_type == Type::Serial
+            match *field_type {
+                Type::I32 | Type::Serial | Type::Custom(_) => true,
+                _ => false,
+            }
         },
         TypeVariants::TyInt(TyI64) => {
             *field_type == Type::I64
@@ -163,10 +167,6 @@ fn same_type(field_type: &Type, expected_type: &TyS) -> bool {
                 },
                 _ => false,
             }
-        },
-        TypeVariants::TyStruct(_, _) => {
-            // TODO: supporter la comparaison d’une clé étrangère.
-            false
         },
         _ => false,
     }

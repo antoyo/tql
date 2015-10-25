@@ -1,5 +1,8 @@
 //! Semantic analyzer.
 
+use std::collections::HashSet;
+use std::ops::Deref;
+
 use syntax::ast::{BinOp_, Expr, Path};
 use syntax::ast::Expr_::{ExprAssign, ExprBinary, ExprCall, ExprCast, ExprLit, ExprMethodCall, ExprParen, ExprPath, ExprRange, ExprUnary};
 use syntax::ast::FloatTy;
@@ -12,7 +15,6 @@ use syntax::codemap::{Span, Spanned};
 use syntax::ptr::P;
 
 use ast::{Assignment, Expression, Filter, FilterExpression, Filters, Identifier, Join, Limit, LogicalOperator, Order, RelationalOperator, Query, TypedField};
-use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use error::{Error, SqlResult, res};
 use gen::ToSql;
 use parser::{MethodCall, MethodCalls};
@@ -93,18 +95,18 @@ fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors: &mu
 /// Analyze the types of the `Limit`.
 fn analyze_limit_types(limit: &Limit, errors: &mut Vec<Error>) {
     match *limit {
-        EndRange(ref expression) => check_type(&Type::I64, expression, errors),
-        Index(ref expression) => check_type(&Type::I64, expression, errors),
-        LimitOffset(ref expression1, ref expression2) => {
+        Limit::EndRange(ref expression) => check_type(&Type::I64, expression, errors),
+        Limit::Index(ref expression) => check_type(&Type::I64, expression, errors),
+        Limit::LimitOffset(ref expression1, ref expression2) => {
             check_type(&Type::I64, expression1, errors);
             check_type(&Type::I64, expression2, errors);
         },
-        NoLimit => (),
-        Range(ref expression1, ref expression2) => {
+        Limit::NoLimit => (),
+        Limit::Range(ref expression1, ref expression2) => {
             check_type(&Type::I64, expression1, errors);
             check_type(&Type::I64, expression2, errors);
         },
-        StartRange(ref expression) => check_type(&Type::I64, expression, errors),
+        Limit::StartRange(ref expression) => check_type(&Type::I64, expression, errors),
     }
 }
 
@@ -330,6 +332,29 @@ fn binop_to_relational_operator(binop: BinOp_) -> RelationalOperator {
         BinOp_::BiGe => RelationalOperator::GreaterThan,
         BinOp_::BiGt => RelationalOperator::GreaterThanEqual,
     }
+}
+
+/// Check that the method call contains all the fields from the `table`.
+fn check_insert_arguments(assignments: &[Assignment], position: Span, table: &SqlFields, errors: &mut Vec<Error>) {
+    let mut names = HashSet::new();
+    let mut missing_fields: Vec<&str> = vec![];
+    for assignment in assignments {
+        names.insert(assignment.identifier.clone());
+    }
+    let primary_key = get_primary_key_field(table);
+
+    for field in table.keys() {
+        if !names.contains(field) && Some(field) != primary_key.as_ref() {
+            missing_fields.push(&field);
+        }
+    }
+
+    if !missing_fields.is_empty() {
+        let fields = "`".to_owned() + &missing_fields.join("`, `") + "`";
+        errors.push(Error::new_with_code(format!("missing fields: {}", fields), position, "E0063"));
+    }
+
+    // TODO: vérifier que la clé primaire n’est pas dans les champs insérés?
 }
 
 /// Check if the `identifier` is a field in the struct `table_name`.
@@ -694,6 +719,7 @@ fn process_methods(calls: &[MethodCall], table: &SqlFields, table_name: &str) ->
                 try(convert_arguments(&method_call.arguments, &table_name, table, argument_to_assignment), &mut errors, |assigns| {
                     assignments = assigns;
                 });
+                check_insert_arguments(&assignments, method_call.position, &table, &mut errors);
                 query_type = SqlQueryType::Insert;
             },
             "join" => {
