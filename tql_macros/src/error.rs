@@ -6,8 +6,8 @@
 use syntax::codemap::Span;
 
 /// `Error` is a type that represents an error with its position.
-pub struct Error<'a> {
-    pub code: Option<&'a str>,
+pub struct Error {
+    pub code: Option<String>,
     pub kind: ErrorType,
     pub message: String,
     pub position: Span,
@@ -22,9 +22,9 @@ pub enum ErrorType {
 
 /// `SqlResult<T>` is a type that represents either a success (`Ok`) or failure (`Err`).
 /// The failure may be represented by multiple `Error`s.
-pub type SqlResult<'a, T> = Result<T, Vec<Error<'a>>>;
+pub type SqlResult<T> = Result<T, Vec<Error>>;
 
-impl<'a> Error<'a> {
+impl Error {
     /// Returns a new `Error`.
     ///
     /// This is a shortcut for:
@@ -36,7 +36,7 @@ impl<'a> Error<'a> {
     ///     position: position,
     /// }
     /// ```
-    pub fn new(message: String, position: Span) -> Error<'a> {
+    pub fn new(message: String, position: Span) -> Error {
         Error {
             code: None,
             kind: ErrorType::Error,
@@ -56,7 +56,7 @@ impl<'a> Error<'a> {
     ///     position: position,
     ///     type: Error::Note,
     /// }
-    pub fn new_help(message: String, position: Span) -> Error<'a> {
+    pub fn new_help(message: String, position: Span) -> Error {
         Error {
             code: None,
             kind: ErrorType::Help,
@@ -76,7 +76,7 @@ impl<'a> Error<'a> {
     ///     position: position,
     ///     type: Error::Note,
     /// }
-    pub fn new_note(message: String, position: Span) -> Error<'a> {
+    pub fn new_note(message: String, position: Span) -> Error {
         Error {
             code: None,
             kind: ErrorType::Note,
@@ -96,9 +96,9 @@ impl<'a> Error<'a> {
     ///     position: position,
     /// }
     /// ```
-    pub fn new_with_code(message: String, position: Span, code: &'a str) -> Error<'a> {
+    pub fn new_with_code(message: String, position: Span, code: &str) -> Error {
         Error {
-            code: Some(code),
+            code: Some(code.to_owned()),
             kind: ErrorType::Error,
             message: message,
             position: position,

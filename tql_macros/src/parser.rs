@@ -33,7 +33,7 @@ impl MethodCalls {
 }
 
 /// Convert a method call expression to a simpler vector-based structure.
-pub fn parse<'a>(expression: Expression) -> SqlResult<'a, MethodCalls> {
+pub fn parse(expression: Expression) -> SqlResult<MethodCalls> {
     let mut errors = vec![];
     let mut calls = MethodCalls {
         calls: vec![],

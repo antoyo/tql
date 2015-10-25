@@ -16,7 +16,7 @@ use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use error::{Error, SqlResult, res};
 use parser::{MethodCall, MethodCalls};
 use plugin::number_literal;
-use state::{SqlFields, SqlTables, Type, singleton};
+use state::{SqlFields, SqlTables, Type, get_primary_key_field, singleton};
 use string::find_near;
 
 /// The type of the SQL query.
@@ -49,7 +49,7 @@ pub fn analyze(method_calls: MethodCalls, sql_tables: &SqlTables) -> SqlResult<Q
         match table {
             Some(table) => {
                 let (filter_expression, joins, limit, order, assignments, query_type) = try!(process_methods(&calls, table, &table_name));
-                let fields = get_query_fields(table, &table_name, &joins, sql_tables, &mut errors);
+                let fields = get_query_fields(table, &table_name, &joins, sql_tables);
                 (fields, filter_expression, joins, limit, order, assignments, query_type)
 
             },
@@ -106,7 +106,7 @@ fn analyze_limit_types(limit: &Limit, errors: &mut Vec<Error>) {
 }
 
 /// Analyze the literal types in the `Query`.
-pub fn analyze_types<'a>(query: Query) -> SqlResult<'a, Query> {
+pub fn analyze_types(query: Query) -> SqlResult<Query> {
     let mut errors = vec![];
     match query {
         Query::CreateTable { .. } => (), // TODO
@@ -129,7 +129,7 @@ pub fn analyze_types<'a>(query: Query) -> SqlResult<'a, Query> {
 }
 
 /// Convert an `Expression` to an `Assignment`.
-fn argument_to_assignment<'a>(arg: &Expression, table_name: &str, table: &SqlFields) -> SqlResult<'a, Assignment> {
+fn argument_to_assignment(arg: &Expression, table_name: &str, table: &SqlFields) -> SqlResult<Assignment> {
     let mut errors = vec![];
     let mut assignment = Assignment {
         identifier: "".to_owned(),
@@ -158,7 +158,7 @@ fn argument_to_assignment<'a>(arg: &Expression, table_name: &str, table: &SqlFie
 }
 
 /// Convert an `Expression` to a `Join`
-fn argument_to_join<'a>(arg: &Expression, table_name: &str, table: &SqlFields) -> SqlResult<'a, Join> {
+fn argument_to_join(arg: &Expression, table_name: &str, table: &SqlFields) -> SqlResult<Join> {
     let mut errors = vec![];
     let mut join = Join {
         left_field: "".to_owned(),
@@ -174,12 +174,17 @@ fn argument_to_join<'a>(arg: &Expression, table_name: &str, table: &SqlFields) -
             match table.get(&identifier) {
                 Some(field_type) => {
                     if let &Type::Custom(ref related_table_name) = field_type {
-                        join = Join {
-                            left_field: identifier,
-                            left_table: table_name.to_owned(),
-                            right_field: "id".to_owned(),
-                            right_table: related_table_name.clone(),
-                        };
+                        let tables = singleton();
+                        match tables.get(related_table_name).and_then(|table| get_primary_key_field(table)) {
+                            Some(primary_key_field) =>
+                                join = Join {
+                                    left_field: identifier,
+                                    left_table: table_name.to_owned(),
+                                    right_field: primary_key_field,
+                                    right_table: related_table_name.clone(),
+                                },
+                            None => errors.push(no_primary_key(related_table_name, arg.span)), // TODO: utiliser la vraie position.
+                        }
                     }
                     else {
                         errors.push(Error::new_with_code(
@@ -203,8 +208,8 @@ fn argument_to_join<'a>(arg: &Expression, table_name: &str, table: &SqlFields) -
 }
 
 /// Convert an `Expression` to an `Order`.
-fn argument_to_order<'a>(arg: &Expression, table_name: &str, table: &SqlFields) -> SqlResult<'a, Order> {
-    fn identifier<'a>(arg: &Expression, identifier: &Expr, table_name: &str, table: &SqlFields) -> SqlResult<'a, String> {
+fn argument_to_order(arg: &Expression, table_name: &str, table: &SqlFields) -> SqlResult<Order> {
+    fn identifier(arg: &Expression, identifier: &Expr, table_name: &str, table: &SqlFields) -> SqlResult<String> {
         let mut errors = vec![];
         if let ExprPath(_, Path { ref segments, span, .. }) = identifier.node {
             if segments.len() == 1 {
@@ -243,7 +248,7 @@ fn argument_to_order<'a>(arg: &Expression, table_name: &str, table: &SqlFields) 
 }
 
 /// Convert a slice of `Expression` to a `Limit`.
-fn arguments_to_limit<'a, 'b>(expression: &'b P<Expr>) -> SqlResult<'a, Limit> {
+fn arguments_to_limit(expression: &P<Expr>) -> SqlResult<Limit> {
     let mut errors = vec![];
     let limit =
         match expression.node {
@@ -343,7 +348,7 @@ fn check_field(identifier: &str, position: Span, table_name: &str, table: &SqlFi
 /// Check if the type of `identifier` matches the type of the `value` expression.
 fn check_field_type(table_name: &str, identifier: &str, value: &Expression, errors: &mut Vec<Error>) {
     match get_field_type(table_name, identifier) {
-        Some(field_type) => check_type(field_type, value, errors),
+        Some(ref field_type) => check_type(field_type, value, errors),
         None => (), // Nothing to do since this check is done in the conversion function.
     }
 }
@@ -418,8 +423,8 @@ fn check_type(field_type: &Type, expression: &Expression, errors: &mut Vec<Error
 }
 
 /// Convert the `arguments` to the `Type`.
-fn convert_arguments<'a, F, Type>(arguments: &[P<Expr>], table_name: &str, table: &SqlFields, convert_argument: F) -> SqlResult<'a, Vec<Type>>
-        where F: Fn(&Expression, &str, &SqlFields) -> SqlResult<'a, Type> {
+fn convert_arguments<F, Type>(arguments: &[P<Expr>], table_name: &str, table: &SqlFields, convert_argument: F) -> SqlResult<Vec<Type>>
+        where F: Fn(&Expression, &str, &SqlFields) -> SqlResult<Type> {
     let mut items = vec![];
     let mut errors = vec![];
 
@@ -433,7 +438,7 @@ fn convert_arguments<'a, F, Type>(arguments: &[P<Expr>], table_name: &str, table
 }
 
 /// Convert a Rust expression to a `FilterExpression`.
-fn expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &str, table: &SqlFields) -> SqlResult<'a, FilterExpression> {
+fn expression_to_filter_expression(arg: &P<Expr>, table_name: &str, table: &SqlFields) -> SqlResult<FilterExpression> {
     let mut errors = vec![];
 
     let dummy = FilterExpression::NoFilters;
@@ -490,29 +495,36 @@ fn expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &str, table: &
 }
 
 /// Convert an expression from a `get()` method to a FilterExpression and a Limit.
-fn get_expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &str, table: &SqlFields) -> SqlResult<'a, (FilterExpression, Limit)> {
-    match arg.node {
-        ExprLit(_) | ExprPath(_, _) => {
-            let filter = FilterExpression::Filter(Filter {
-                operand1: "id".to_owned(),
-                operator: RelationalOperator::Equal,
-                operand2: arg.clone(),
-            });
-            res((filter, Limit::NoLimit), vec![])
-        },
-        _ => expression_to_filter_expression(arg, table_name, table)
-                .and_then(|filter| Ok((filter, Limit::Index(number_literal(0))))),
+fn get_expression_to_filter_expression(arg: &P<Expr>, table_name: &str, table: &SqlFields) -> SqlResult<(FilterExpression, Limit)> {
+    let primary_key_field = get_primary_key_field(table);
+    match primary_key_field {
+        Some(primary_key_field) =>
+            match arg.node {
+                ExprLit(_) | ExprPath(_, _) => {
+                    let filter = FilterExpression::Filter(Filter {
+                        operand1: primary_key_field,
+                        operator: RelationalOperator::Equal,
+                        operand2: arg.clone(),
+                    });
+                    res((filter, Limit::NoLimit), vec![])
+                },
+                _ => expression_to_filter_expression(arg, table_name, table)
+                        .and_then(|filter| Ok((filter, Limit::Index(number_literal(0))))),
+            },
+        None => Err(vec![no_primary_key(table_name, arg.span)]), // TODO: utiliser la vraie position.
     }
 }
 
 /// Get the type of the field if it exists.
-fn get_field_type<'a, 'b>(table_name: &'a str, identifier: &'a str) -> Option<&'b Type> {
+fn get_field_type<'a>(table_name: &str, identifier: &'a str) -> Option<&'a Type> {
     let tables = singleton();
-    tables.get(table_name).and_then(|table| table.get(identifier))
+    tables
+        .get(table_name)
+        .and_then(|table| table.get(identifier))
 }
 
 /// Get the query field fully qualified names.
-fn get_query_fields(table: &SqlFields, table_name: &str, joins: &[Join], sql_tables: &SqlTables, errors: &mut Vec<Error>) -> Vec<Identifier> {
+fn get_query_fields(table: &SqlFields, table_name: &str, joins: &[Join], sql_tables: &SqlTables) -> Vec<Identifier> {
     let mut fields = vec![];
     for (field, typ) in table {
         match *typ {
@@ -613,8 +625,13 @@ fn new_query(fields: Vec<Identifier>, filter_expression: FilterExpression, joins
     }
 }
 
+/// Create an error about a table not having a primary key.
+fn no_primary_key(table_name: &str, position: Span) -> Error {
+    Error::new(format!("Table {} does not have a primary key", table_name), position)
+}
+
 /// Gather data about the query in the method `calls`.
-fn process_methods<'a>(calls: &[MethodCall], table: &SqlFields, table_name: &str) -> SqlResult<'a, QueryData> {
+fn process_methods(calls: &[MethodCall], table: &SqlFields, table_name: &str) -> SqlResult<QueryData> {
     let mut errors = vec![];
     let mut assignments = vec![];
     let mut filter_expression = FilterExpression::NoFilters;
@@ -715,7 +732,7 @@ fn same_type(field_type: &Type, expression: &Expression) -> bool {
 
 /// If `result` is an `Err`, add the errors to `errors`.
 /// Otherwise, execute the closure.
-fn try<'a, F: FnMut(T), T>(mut result: Result<T, Vec<Error<'a>>>, errors: &mut Vec<Error<'a>>, mut fn_using_result: F) {
+fn try<F: FnMut(T), T>(mut result: Result<T, Vec<Error>>, errors: &mut Vec<Error>, mut fn_using_result: F) {
     match result {
         Ok(value) => fn_using_result(value),
         Err(ref mut errs) => errors.append(errs),

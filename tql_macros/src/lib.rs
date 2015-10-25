@@ -6,6 +6,8 @@
 #![plugin(clippy)]
 #![warn(option_unwrap_used, result_unwrap_used)]
 
+// TODO: changer le courriel de l’auteur avant de mettre sur Github.
+
 // TODO: pour la méthode insert(), vérifier que tous les champs obligatoires sont fournis.
 // TODO: paramétriser le type ForeignKey et PrimaryKey pour que la macro puisse choisir de mettre
 // le type en question ou rien (dans le cas où la jointure n’est pas faite) ou empêcher les
@@ -29,6 +31,7 @@
 // utiles (peut-être possible avec un lint plugin).
 // TODO: peut-être utiliser Spanned pour conserver la position dans l’AST.
 // TODO: permetre les opérateurs += et autre pour un update.
+// TODO: supporter les clés primaires composées.
 // TODO: supporter la comparaison avec une clé étrangère :
 // impl postgres::types::ToSql for ForeignTable {
 //    fn to_sql<W: std::io::Write + ?Sized>(&self, ty: &postgres::types::Type, out: &mut W, ctx: &postgres::types::SessionInfo) -> postgres::Result<postgres::types::IsNull> {
@@ -386,11 +389,11 @@ fn get_query_fields(cx: &mut ExtCtxt, sp: Span, table: &SqlFields, sql_tables: &
 
 /// Show the compilation errors.
 fn span_errors(errors: Vec<Error>, cx: &mut ExtCtxt) {
-    for &Error {code, ref message, position, ref kind} in &errors {
+    for &Error {ref code, ref message, position, ref kind} in &errors {
         match *kind {
             ErrorType::Error => {
-                match code {
-                    Some(code) => cx.parse_sess.span_diagnostic.span_err_with_code(position, &message, code),
+                match *code {
+                    Some(ref code) => cx.parse_sess.span_diagnostic.span_err_with_code(position, &message, code),
                     None => cx.span_err(position, &message),
                 }
             },
@@ -405,7 +408,7 @@ fn span_errors(errors: Vec<Error>, cx: &mut ExtCtxt) {
 }
 
 /// Convert the Rust code to an SQL string with its type, arguments and joins.
-fn to_sql<'a>(cx: &mut ExtCtxt, args: &[TokenTree]) -> SqlResult<'a, SqlQueryWithArgs> {
+fn to_sql(cx: &mut ExtCtxt, args: &[TokenTree]) -> SqlResult<SqlQueryWithArgs> {
     if args.is_empty() {
         return Err(vec![Error::new_with_code("this macro takes 1 parameter but 0 parameters were supplied".to_owned(), cx.call_site(), "E0061")]);
     }

@@ -75,18 +75,14 @@ impl Display for Type {
     }
 }
 
-/// Returns the global state.
-pub fn singleton() -> &'static mut SqlTables {
-    // FIXME: make this thread safe.
-    static mut hash_map: *mut SqlTables = 0 as *mut SqlTables;
-
-    let map: SqlTables = HashMap::new();
-    unsafe {
-        if hash_map == 0 as *mut SqlTables {
-            hash_map = mem::transmute(Box::new(map));
+/// Get the name of the primary key field.
+pub fn get_primary_key_field(fields: &SqlFields) -> Option<String> {
+    for (field, typ) in fields {
+        if let Type::Serial = *typ {
+            return Some(field.clone());
         }
-        &mut *hash_map
     }
+    None
 }
 
 /// Returns the global lint state.
@@ -97,6 +93,20 @@ pub fn lint_singleton() -> &'static mut SqlCalls {
     let map: SqlCalls = HashMap::new();
     unsafe {
         if hash_map == 0 as *mut SqlCalls {
+            hash_map = mem::transmute(Box::new(map));
+        }
+        &mut *hash_map
+    }
+}
+
+/// Returns the global state.
+pub fn singleton() -> &'static mut SqlTables {
+    // FIXME: make this thread safe.
+    static mut hash_map: *mut SqlTables = 0 as *mut SqlTables;
+
+    let map: SqlTables = HashMap::new();
+    unsafe {
+        if hash_map == 0 as *mut SqlTables {
             hash_map = mem::transmute(Box::new(map));
         }
         &mut *hash_map
