@@ -11,9 +11,10 @@ use syntax::ast::UnOp::{UnNeg, UnNot};
 use syntax::codemap::{Span, Spanned};
 use syntax::ptr::P;
 
-use ast::{Assignment, Expression, Filter, FilterExpression, Filters, Identifier, Join, Limit, LogicalOperator, Order, RelationalOperator, Query};
+use ast::{Assignment, Expression, Filter, FilterExpression, Filters, Identifier, Join, Limit, LogicalOperator, Order, RelationalOperator, Query, TypedField};
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use error::{Error, SqlResult, res};
+use gen::ToSql;
 use parser::{MethodCall, MethodCalls};
 use plugin::number_literal;
 use state::{SqlFields, SqlTables, Type, get_primary_key_field, singleton};
@@ -21,6 +22,7 @@ use string::find_near;
 
 /// The type of the SQL query.
 enum SqlQueryType {
+    CreateTable,
     Delete,
     Insert,
     Select,
@@ -28,35 +30,35 @@ enum SqlQueryType {
 }
 
 /// The query data gathered during the analyze.
-type QueryData = (FilterExpression, Vec<Join>, Limit, Vec<Order>, Vec<Assignment>, SqlQueryType);
+type QueryData = (FilterExpression, Vec<Join>, Limit, Vec<Order>, Vec<Assignment>, Vec<TypedField>, SqlQueryType);
 
 /// Analyze and transform the AST.
 pub fn analyze(method_calls: MethodCalls, sql_tables: &SqlTables) -> SqlResult<Query> {
     // TODO: vérifier que la suite d’appels de méthode est valide (de même que l’ordre pour filter).
     let mut errors = vec![];
 
-    check_methods(&method_calls, &mut errors);
-
-    let table_name = method_calls.name;
-    let table = sql_tables.get(&table_name);
-    let calls = &method_calls.calls;
-
+    let table_name = method_calls.name.clone();
     if !sql_tables.contains_key(&table_name) {
         unknown_table_error(&table_name, method_calls.position, sql_tables, &mut errors);
     }
 
-    let (fields, filter_expression, joins, limit, order, assignments, query_type) =
+    check_methods(&method_calls, &mut errors);
+
+    let table = sql_tables.get(&table_name);
+    let calls = &method_calls.calls;
+
+    let (fields, filter_expression, joins, limit, order, assignments, typed_fields, query_type) =
         match table {
             Some(table) => {
-                let (filter_expression, joins, limit, order, assignments, query_type) = try!(process_methods(&calls, table, &table_name));
+                let (filter_expression, joins, limit, order, assignments, typed_fields, query_type) = try!(process_methods(&calls, table, &table_name));
                 let fields = get_query_fields(table, &table_name, &joins, sql_tables);
-                (fields, filter_expression, joins, limit, order, assignments, query_type)
+                (fields, filter_expression, joins, limit, order, assignments, typed_fields, query_type)
 
             },
-            None => (vec![], FilterExpression::NoFilters, vec![], Limit::NoLimit, vec![], vec![], SqlQueryType::Select),
+            None => (vec![], FilterExpression::NoFilters, vec![], Limit::NoLimit, vec![], vec![], vec![], SqlQueryType::Select),
         };
 
-    res(new_query(fields, filter_expression, joins, limit, order, assignments, query_type, table_name), errors)
+    res(new_query(fields, filter_expression, joins, limit, order, assignments, typed_fields, query_type, table_name), errors)
 }
 
 /// Analyze the types of the `Assignment`s.
@@ -357,6 +359,7 @@ fn check_field_type(table_name: &str, identifier: &str, value: &Expression, erro
 fn check_methods(method_calls: &MethodCalls, errors: &mut Vec<Error>) {
     let methods = vec![
         "all".to_owned(),
+        "create".to_owned(),
         "delete".to_owned(),
         "filter".to_owned(),
         "get".to_owned(),
@@ -595,8 +598,13 @@ pub fn has_joins(joins: &[Join], name: &str) -> bool {
 }
 
 /// Create a new query from all the data gathered by the method calls.
-fn new_query(fields: Vec<Identifier>, filter_expression: FilterExpression, joins: Vec<Join>, limit: Limit, order: Vec<Order>, assignments: Vec<Assignment>, query_type: SqlQueryType, table_name: String) -> Query {
+fn new_query(fields: Vec<Identifier>, filter_expression: FilterExpression, joins: Vec<Join>, limit: Limit, order: Vec<Order>, assignments: Vec<Assignment>, typed_fields: Vec<TypedField>, query_type: SqlQueryType, table_name: String) -> Query {
     match query_type {
+        SqlQueryType::CreateTable =>
+            Query::CreateTable {
+                fields: typed_fields,
+                table: table_name,
+            },
         SqlQueryType::Delete =>
             Query::Delete {
                 filter: filter_expression,
@@ -639,10 +647,21 @@ fn process_methods(calls: &[MethodCall], table: &SqlFields, table_name: &str) ->
     let mut limit = Limit::NoLimit;
     let mut order = vec![];
     let mut query_type = SqlQueryType::Select;
+    let mut typed_fields = vec![];
     for method_call in calls {
         match &method_call.name[..] {
             "all" => {
                 check_no_arguments(&method_call, &mut errors);
+            },
+            "create" => {
+                check_no_arguments(&method_call, &mut errors);
+                query_type = SqlQueryType::CreateTable;
+                for (field, typ) in table {
+                    typed_fields.push(TypedField {
+                        identifier: field.clone(),
+                        typ: typ.to_sql(),
+                    });
+                }
             },
             "delete" => {
                 check_no_arguments(&method_call, &mut errors);
@@ -690,7 +709,7 @@ fn process_methods(calls: &[MethodCall], table: &SqlFields, table_name: &str) ->
             _ => (), // Nothing to do since check_methods() check for unknown method.
         }
     }
-    res((filter_expression, joins, limit, order, assignments, query_type), errors)
+    res((filter_expression, joins, limit, order, assignments, typed_fields, query_type), errors)
 }
 
 /// Check if an `expression` as the type `field_type`.
@@ -712,14 +731,12 @@ fn same_type(field_type: &Type, expression: &Expression) -> bool {
                         SignedIntLit(IntTy::TyI16, _) => *field_type == Type::I16,
                         SignedIntLit(IntTy::TyI32, _) => *field_type == Type::I32 || *field_type == Type::Serial,
                         SignedIntLit(IntTy::TyI64, _) => *field_type == Type::I64,
-                        UnsignedIntLit(UintTy::TyU32) => *field_type == Type::U32,
                         UnsignedIntLit(_) => false,
                         UnsuffixedIntLit(_) =>
                             *field_type == Type::I8 ||
                             *field_type == Type::I16 ||
                             *field_type == Type::I32 ||
                             *field_type == Type::I64 ||
-                            *field_type == Type::U32 ||
                             *field_type == Type::Serial,
                     }
                 ,

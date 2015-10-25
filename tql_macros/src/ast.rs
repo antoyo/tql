@@ -135,8 +135,8 @@ pub enum QueryType {
 /// An SQL field with its type.
 #[derive(Debug)]
 pub struct TypedField {
-    identifier: Identifier,
-    typ: String,
+    pub identifier: Identifier,
+    pub typ: String,
 }
 
 /// Get the query type.

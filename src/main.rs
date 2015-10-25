@@ -81,6 +81,12 @@ fn show_people_with_address(people: Vec<Person>) {
 
 fn main() {
     let connection = get_connection();
+
+    let _ = sql!(Person.create());
+    let _ = sql!(Person.insert(name = "value1", age = 42));
+    let _ = sql!(Person.insert(name = "value2", age = 24));
+    let _ = sql!(Person.insert(name = "value3", age = 12));
+
     println!(to_sql!(Person.filter(name == "value1")));
     let people = sql!(Person.filter(name == "value1"));
     show_people(people);
@@ -301,4 +307,6 @@ fn main() {
 
     //let _ = to_sql!(Person.all().join(name, age));
     //let _ = to_sql!(Person.all().join(address, address)); // TODO: devrait causer une erreur.
+
+    //let _ = sql!(Person.drop()); // TODO
 }

@@ -5,9 +5,10 @@ use std::str::from_utf8;
 use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
 
-use ast::{Assignment, Expression, FieldList, Filter, Filters, FilterExpression, Identifier, Join, Limit, LogicalOperator, Order, RelationalOperator, Query};
+use ast::{Assignment, Expression, FieldList, Filter, Filters, FilterExpression, Identifier, Join, Limit, LogicalOperator, Order, RelationalOperator, Query, TypedField};
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use sql::escape;
+use state::{Type, get_primary_key_field, singleton};
 
 /// A generic trait for converting a value to SQL.
 pub trait ToSql {
@@ -85,7 +86,7 @@ impl ToSql for Filters {
 
 impl ToSql for Join {
     fn to_sql(&self) -> String {
-        " INNER JOIN ".to_owned() + &self.right_table + " ON " + &self.left_table + "." + &self.left_field + "_id = " + &self.right_table + "." + &self.right_field
+        " INNER JOIN ".to_owned() + &self.right_table + " ON " + &self.left_table + "." + &self.left_field + " = " + &self.right_table + "." + &self.right_field
     }
 }
 
@@ -152,7 +153,9 @@ impl ToSql for [Order] {
 impl ToSql for Query {
     fn to_sql(&self) -> String {
         match *self {
-            Query::CreateTable { .. } => "".to_owned(), // TODO
+            Query::CreateTable { ref fields, ref table } => {
+                format!("CREATE TABLE IF NOT EXISTS {} ({})", table, fields.to_sql())
+            },
             Query::Delete { ref filter, ref table } => {
                 let where_clause = filter_to_where_clause(filter);
                 replace_placeholder(format!("DELETE FROM {} {}{}", table, where_clause, filter.to_sql()))
@@ -184,6 +187,43 @@ impl ToSql for RelationalOperator {
             RelationalOperator::GreaterThan => ">=".to_owned(),
             RelationalOperator::GreaterThanEqual => ">".to_owned(),
         }
+    }
+}
+
+impl ToSql for Type {
+    fn to_sql(&self) -> String {
+        match *self {
+            Type::Bool => "BOOLEAN".to_owned(),
+            Type::ByteString => "BYTEA".to_owned(),
+            Type::I8 | Type::Char => "CHARACTER(1)".to_owned(),
+            Type::Custom(ref related_table_name) => {
+                let tables = singleton();
+                match tables.get(related_table_name).and_then(|table| get_primary_key_field(table)) {
+                    Some(primary_key_field) => "INTEGER REFERENCES ".to_owned() + &related_table_name + "(" + &primary_key_field + ")",
+                    None => "".to_owned(),
+                }
+            },
+            Type::Dummy => "".to_owned(),
+            Type::F32 => "REAL".to_owned(),
+            Type::F64 => "DOUBLE PRECISION".to_owned(),
+            Type::I16 => "SMALLINT".to_owned(),
+            Type::I32 => "INTEGER".to_owned(),
+            Type::I64 => "BIGINT".to_owned(),
+            Type::Serial => "SERIAL PRIMARY KEY".to_owned(),
+            Type::String => "CHARACTER VARYING".to_owned(),
+        }
+    }
+}
+
+impl ToSql for TypedField {
+    fn to_sql(&self) -> String {
+        self.identifier.to_sql() + " " + &self.typ
+    }
+}
+
+impl ToSql for [TypedField] {
+    fn to_sql(&self) -> String {
+        self.iter().map(ToSql::to_sql).collect::<Vec<_>>().join(", ")
     }
 }
 

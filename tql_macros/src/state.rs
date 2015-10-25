@@ -49,7 +49,6 @@ pub enum Type {
     I64,
     Serial,
     String,
-    U32,
 }
 
 impl Display for Type {
@@ -69,7 +68,6 @@ impl Display for Type {
             Type::I64 => "i64",
             Type::Serial => "i32",
             Type::String => "String",
-            Type::U32 => "u32",
         };
         write!(f, "{}", typ)
     }

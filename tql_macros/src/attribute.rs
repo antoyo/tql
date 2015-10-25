@@ -22,9 +22,6 @@ fn field_ty_to_type(ty: &Ty) -> Type {
                     "i32" => {
                         Type::I32
                     },
-                    "u32" => {
-                        Type::U32
-                    },
                     "ForeignKey" => {
                         if let AngleBracketedParameters(AngleBracketedParameterData { ref types, .. }) = segments[0].parameters {
                             match types.first() {
