@@ -35,6 +35,8 @@ pub fn analyze(method_calls: MethodCalls, sql_tables: &SqlTables) -> SqlResult<Q
     // TODO: vérifier que la suite d’appels de méthode est valide (de même que l’ordre pour filter).
     let mut errors = vec![];
 
+    check_methods(&method_calls, &mut errors);
+
     let table_name = method_calls.name;
     let table = sql_tables.get(&table_name);
     let calls = &method_calls.calls;
@@ -42,8 +44,6 @@ pub fn analyze(method_calls: MethodCalls, sql_tables: &SqlTables) -> SqlResult<Q
     if !sql_tables.contains_key(&table_name) {
         unknown_table_error(&table_name, method_calls.position, sql_tables, &mut errors);
     }
-
-    check_methods(&calls, &mut errors);
 
     let (fields, filter_expression, joins, limit, order, assignments, query_type) =
         match table {
@@ -326,7 +326,7 @@ fn check_field(identifier: &str, position: Span, table_name: &str, table: &SqlFi
 }
 
 /// Check if the method `calls` exist.
-fn check_methods(calls: &[MethodCall], errors: &mut Vec<Error>) {
+fn check_methods(method_calls: &MethodCalls, errors: &mut Vec<Error>) {
     let methods = vec![
         "all".to_owned(),
         "delete".to_owned(),
@@ -338,7 +338,7 @@ fn check_methods(calls: &[MethodCall], errors: &mut Vec<Error>) {
         "sort".to_owned(),
         "update".to_owned(),
     ];
-    for method_call in calls {
+    for method_call in &method_calls.calls {
         if !methods.contains(&method_call.name) {
             errors.push(Error::new(
                 format!("no method named `{}` found in tql", method_call.name),
@@ -351,6 +351,15 @@ fn check_methods(calls: &[MethodCall], errors: &mut Vec<Error>) {
                 ));
             }
         }
+    }
+
+    if method_calls.calls.is_empty() {
+        let table_name = &method_calls.name;
+        errors.push(Error::new_with_code(format!("`{}` is the name of a struct, but this expression uses it like a method name", table_name), method_calls.position, "E0423"));
+        errors.push(Error::new_help(
+            format!("did you mean to write `{}.method()`?", table_name),
+            method_calls.position,
+        ));
     }
 }
 

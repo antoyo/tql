@@ -403,6 +403,10 @@ fn span_errors(errors: Vec<Error>, cx: &mut ExtCtxt) {
 
 /// Convert the Rust code to an SQL string with its type, arguments and joins.
 fn to_sql<'a>(cx: &mut ExtCtxt, args: &[TokenTree]) -> SqlResult<'a, SqlQueryWithArgs> {
+    if args.is_empty() {
+        return Err(vec![Error::new_with_code("this macro takes 1 parameter but 0 parameters were supplied".to_owned(), cx.call_site(), "E0061")]);
+    }
+
     let mut parser = cx.new_parser_from_tts(args);
     let expression = parser.parse_expr();
     let sql_tables = singleton();

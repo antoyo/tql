@@ -269,7 +269,9 @@ fn main() {
     let people = sql!(Person.all());
     show_people(people);
 
-    //to_sql!(); // TODO: cela devrait donner une meilleure erreur.
+    //to_sql!();
+    //to_sql!(Person);
+    //to_sql!(Person());
 
     println!(to_sql!(Person.filter(name == "Me").delete()));
     let num_deleted = match sql!(Person.filter(name == "Me").delete()) {
