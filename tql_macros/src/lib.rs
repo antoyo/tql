@@ -7,8 +7,6 @@
 #![warn(option_unwrap_used, result_unwrap_used)]
 
 // TODO: pour la méthode insert(), vérifier que tous les champs obligatoires sont fournis.
-// TODO: Ne pas oublier de faire le cas Delete et Insert dans ce fichier (arguments) et dans
-// analyzer::analyze_types.
 // TODO: paramétriser le type ForeignKey et PrimaryKey pour que la macro puisse choisir de mettre
 // le type en question ou rien (dans le cas où la jointure n’est pas faite) ou empêcher les
 // modifications (dans le cas où l’ID existe).
@@ -146,8 +144,12 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
 
     match query {
         Query::CreateTable { .. } => (), // TODO
-        Query::Delete { .. } => (), // TODO
-        Query::Insert { .. } => (), // TODO
+        Query::Delete { filter, .. } => {
+            add_filter_arguments(filter, &mut arguments);
+        },
+        Query::Insert { assignments, .. } => {
+            add_assignments(assignments, &mut arguments);
+        },
         Query::Select {filter, limit, ..} => {
             add_filter_arguments(filter, &mut arguments);
             add_limit_arguments(cx, limit, &mut arguments);

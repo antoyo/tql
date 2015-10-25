@@ -39,13 +39,12 @@ fn argument_types<'a>(cx: &'a LateContext, arguments: &'a Expr_) -> Vec<Ty<'a>> 
 }
 
 impl LateLintPass for SqlError {
-    // TODO: faire la même chose pour la méthode execute().
     /// Check the types of the `Vec` argument of the `postgres::stmt::Statement::query` method.
     fn check_expr(&mut self, cx: &LateContext, expr: &Expr) {
         let tables = singleton();
         if let ExprMethodCall(name, _, ref arguments) = expr.node {
             let method_name = name.node.to_string();
-            if method_name == "query" {
+            if method_name == "query" || method_name == "execute" {
                 let types = argument_types(cx, &arguments[1].node);
                 let calls = lint_singleton();
                 let BytePos(low) = expr.span.lo;

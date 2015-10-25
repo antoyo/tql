@@ -59,20 +59,19 @@ pub fn analyze(method_calls: MethodCalls, sql_tables: &SqlTables) -> SqlResult<Q
     res(new_query(fields, filter_expression, joins, limit, order, assignments, query_type, table_name), errors)
 }
 
+/// Analyze the types of the `Assignment`s.
+fn analyze_assignments_types(assignments: &[Assignment], table_name: &str, errors: &mut Vec<Error>) {
+    for assignment in assignments {
+        check_field_type(table_name, &assignment.identifier, &assignment.value, errors);
+    }
+}
+
 /// Analyze the types of the `FilterExpression`.
 fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors: &mut Vec<Error>) {
     // TODO: vérifier que les opérateurs sont utilisé avec les bons types.
     match *filter {
         FilterExpression::Filter(ref filter) => {
-            let tables = singleton();
-            match tables.get(table_name).and_then(|table| table.get(&filter.operand1)) {
-                Some(field_type) => check_type(field_type, &filter.operand2, errors),
-                None => {
-                    let full_name = table_name.to_owned() + "." + &filter.operand1;
-                    // TODO: utiliser la vraie position.
-                    errors.push(Error::new(format!("`{}` does not name an SQL field", full_name), DUMMY_SP))
-                },
-            }
+            check_field_type(table_name, &filter.operand1, &filter.operand2, errors);
         },
         FilterExpression::Filters(ref filters) => {
             analyze_filter_types(&*filters.operand1, table_name, errors);
@@ -111,13 +110,20 @@ pub fn analyze_types<'a>(query: Query) -> SqlResult<'a, Query> {
     let mut errors = vec![];
     match query {
         Query::CreateTable { .. } => (), // TODO
-        Query::Delete { .. } => (), // TODO
-        Query::Insert { .. } => (), // TODO
+        Query::Delete { ref filter, ref table } => {
+            analyze_filter_types(filter, &table, &mut errors);
+        },
+        Query::Insert { ref assignments, ref table } => {
+            analyze_assignments_types(assignments, &table, &mut errors);
+        },
         Query::Select { ref filter, ref limit, ref table, .. } => {
             analyze_filter_types(filter, &table, &mut errors);
             analyze_limit_types(limit, &mut errors);
         },
-        Query::Update { .. } => (), // TODO
+        Query::Update { ref assignments, ref filter, ref table } => {
+            analyze_filter_types(filter, &table, &mut errors);
+            analyze_assignments_types(assignments, &table, &mut errors);
+        },
     }
     res(query, errors)
 }
@@ -325,6 +331,14 @@ fn check_field(identifier: &str, position: Span, table_name: &str, table: &SqlFi
     }
 }
 
+/// Check if the type of `identifier` matches the type of the `value` expression.
+fn check_field_type(table_name: &str, identifier: &str, value: &Expression, errors: &mut Vec<Error>) {
+    match get_field_type(table_name, identifier) {
+        Some(field_type) => check_type(field_type, value, errors),
+        None => (), // Nothing to do since this check is done in the conversion function.
+    }
+}
+
 /// Check if the method `calls` exist.
 fn check_methods(method_calls: &MethodCalls, errors: &mut Vec<Error>) {
     let methods = vec![
@@ -465,6 +479,12 @@ fn get_expression_to_filter_expression<'a>(arg: &P<Expr>, table_name: &str, tabl
         _ => expression_to_filter_expression(arg, table_name, table)
                 .and_then(|filter| Ok((filter, Limit::Index(number_literal(0))))),
     }
+}
+
+/// Get the type of the field if it exists.
+fn get_field_type<'a, 'b>(table_name: &'a str, identifier: &'a str) -> Option<&'b Type> {
+    let tables = singleton();
+    tables.get(table_name).and_then(|table| table.get(identifier))
 }
 
 /// Get the query field fully qualified names.
@@ -659,7 +679,13 @@ fn same_type(field_type: &Type, expression: &Expression) -> bool {
                         SignedIntLit(IntTy::TyI64, _) => *field_type == Type::I64,
                         UnsignedIntLit(UintTy::TyU32) => *field_type == Type::U32,
                         UnsignedIntLit(_) => false,
-                        UnsuffixedIntLit(_) => *field_type == Type::I32 || *field_type == Type::U32 || *field_type == Type::Serial,
+                        UnsuffixedIntLit(_) =>
+                            *field_type == Type::I8 ||
+                            *field_type == Type::I16 ||
+                            *field_type == Type::I32 ||
+                            *field_type == Type::I64 ||
+                            *field_type == Type::U32 ||
+                            *field_type == Type::Serial,
                     }
                 ,
                 LitStr(_, _) => *field_type == Type::String,

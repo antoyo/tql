@@ -273,6 +273,8 @@ fn main() {
     //to_sql!(Person);
     //to_sql!(Person());
 
+    //println!("{}", b"\u{a66e}"); // TODO: faire cette même vérification dans tql.
+
     println!(to_sql!(Person.filter(name == "Me").delete()));
     let num_deleted = match sql!(Person.filter(name == "Me").delete()) {
         Ok(number) => number,
@@ -285,4 +287,12 @@ fn main() {
 
     let people = sql!(Person.all());
     show_people(people);
+
+    //let age = 42;
+    //let _ = sql!(Person.insert(name = 42, age = 91));
+    //let _ = sql!(Person.insert(name = age, age = 91));
+    //let _ = sql!(Person.filter(name == 42).delete());
+    //let _ = sql!(Person.filter(name == age).delete());
+    //let _ = sql!(Person.filter(id == 1).update(name = 42, age = new_age));
+    //let _ = sql!(Person.filter(id == 1).update(name = age, age = new_age));
 }
