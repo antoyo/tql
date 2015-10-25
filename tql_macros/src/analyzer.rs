@@ -377,6 +377,21 @@ fn check_methods(method_calls: &MethodCalls, errors: &mut Vec<Error>) {
     }
 }
 
+/// Check that the specified method call did not received any arguments.
+fn check_no_arguments(method_call: &MethodCall, errors: &mut Vec<Error>) {
+    if !method_call.arguments.is_empty() {
+        let length = method_call.arguments.len();
+        let plural_verb =
+            if length == 1 {
+                " was"
+            }
+            else {
+                "s were"
+            };
+        errors.push(Error::new_with_code(format!("this method takes 0 parameters but {} parameter{} supplied", length, plural_verb), method_call.position, "E0061"));
+    }
+}
+
 /// Check if the `field_type` is compitable with the `expression`'s type.
 fn check_type(field_type: &Type, expression: &Expression, errors: &mut Vec<Error>) {
     if !same_type(field_type, expression) {
@@ -509,7 +524,8 @@ fn get_query_fields(table: &SqlFields, table_name: &str, joins: &[Join], sql_tab
                         }
                     },
                     None => {
-                        // TODO: utiliser la vraie position.
+                        // TODO: je crois que ceci est inutile. Plutôt vérifier dans la méthode
+                        // join().
                         unknown_table_error(foreign_table, DUMMY_SP, &sql_tables, errors);
                     },
                 }
@@ -607,10 +623,10 @@ fn process_methods<'a>(calls: &[MethodCall], table: &SqlFields, table_name: &str
     for method_call in calls {
         match &method_call.name[..] {
             "all" => {
-                // TODO: vérifier qu’aucun argument n’a été passé à la méthode.
+                check_no_arguments(&method_call, &mut errors);
             },
             "delete" => {
-                // TODO: vérifier qu’aucun argument n’a été passé à la méthode.
+                check_no_arguments(&method_call, &mut errors);
                 query_type = SqlQueryType::Delete;
             },
             "filter" => {

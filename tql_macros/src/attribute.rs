@@ -56,8 +56,6 @@ fn field_ty_to_type(ty: &Ty) -> Type {
 /// Convert a vector of Rust struct fields to a collection of fields.
 pub fn fields_vec_to_hashmap(fields: FieldIter) -> SqlFields {
     let mut sql_fields = BTreeMap::new();
-    // TODO: ajouter le champ id.
-    //sql_fields.insert("id".to_string(), Type::Int);
     for field in fields.into_iter() {
         if let StructFieldKind::NamedField(ident, _) = field.node.kind {
             sql_fields.insert(ident.to_string(), field_ty_to_type(&*field.node.ty));

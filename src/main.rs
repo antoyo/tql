@@ -295,4 +295,7 @@ fn main() {
     //let _ = sql!(Person.filter(name == age).delete());
     //let _ = sql!(Person.filter(id == 1).update(name = 42, age = new_age));
     //let _ = sql!(Person.filter(id == 1).update(name = age, age = new_age));
+
+    //let _ = sql!(Person.all(id == 1));
+    //let _ = sql!(Person.filter(id == 1).delete(id == 1));
 }
