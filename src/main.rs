@@ -308,5 +308,5 @@ fn main() {
     //let _ = to_sql!(Person.all().join(name, age));
     //let _ = to_sql!(Person.all().join(address, address)); // TODO: devrait causer une erreur.
 
-    //let _ = sql!(Person.drop()); // TODO
+    let _ = sql!(Person.drop());
 }

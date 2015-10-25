@@ -106,6 +106,9 @@ pub enum Query {
         filter: FilterExpression,
         table: Identifier,
     },
+    Drop {
+        table: Identifier,
+    },
     Insert {
         assignments: Vec<Assignment>,
         table: Identifier,

@@ -8,7 +8,6 @@ use syntax::ast::Lit_::LitInt;
 
 use ast::{Expression, Limit, Query};
 use ast::Limit::{EndRange, Index, LimitOffset, Range, StartRange};
-use ast::Query::{CreateTable, Delete, Insert, Select, Update};
 use plugin::number_literal;
 
 /// Check that all the expressions in `expression` are literal.
@@ -43,13 +42,14 @@ fn evaluate(expression: &Expression) -> u64 {
 /// Optimize the query.
 pub fn optimize(query: &mut Query) {
     match *query {
-        CreateTable { .. } => (), // TODO
-        Delete { .. } => (), // TODO
-        Insert { .. } => (), // TODO
-        Select { ref mut limit, .. } => {
+        Query::CreateTable { .. } => (), // Nothing to optimize.
+        Query::Delete { .. } => (), // TODO
+        Query::Drop { .. } => (), // Nothing to optimize.
+        Query::Insert { .. } => (), // TODO
+        Query::Select { ref mut limit, .. } => {
             *limit = optimize_limit(limit);
         },
-        Update { .. } => (), // TODO
+        Query::Update { .. } => (), // TODO
     }
 }
 

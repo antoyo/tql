@@ -146,10 +146,11 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
     }
 
     match query {
-        Query::CreateTable { .. } => (), // TODO
+        Query::CreateTable { .. } => (), // No arguments.
         Query::Delete { filter, .. } => {
             add_filter_arguments(filter, &mut arguments);
         },
+        Query::Drop { .. } => (), // No arguments.
         Query::Insert { assignments, .. } => {
             add_assignments(assignments, &mut arguments);
         },

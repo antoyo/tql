@@ -154,11 +154,14 @@ impl ToSql for Query {
     fn to_sql(&self) -> String {
         match *self {
             Query::CreateTable { ref fields, ref table } => {
-                format!("CREATE TABLE IF NOT EXISTS {} ({})", table, fields.to_sql())
+                format!("CREATE TABLE {} ({})", table, fields.to_sql())
             },
             Query::Delete { ref filter, ref table } => {
                 let where_clause = filter_to_where_clause(filter);
                 replace_placeholder(format!("DELETE FROM {} {}{}", table, where_clause, filter.to_sql()))
+            },
+            Query::Drop { ref table } => {
+                format!("DROP TABLE {}", table)
             },
             Query::Insert { ref assignments, ref table } => {
                 let fields: Vec<_> = assignments.iter().map(|assign| assign.identifier.clone()).collect();

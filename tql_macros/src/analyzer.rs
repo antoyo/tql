@@ -24,6 +24,7 @@ use string::find_near;
 enum SqlQueryType {
     CreateTable,
     Delete,
+    Drop,
     Insert,
     Select,
     Update,
@@ -111,10 +112,11 @@ fn analyze_limit_types(limit: &Limit, errors: &mut Vec<Error>) {
 pub fn analyze_types(query: Query) -> SqlResult<Query> {
     let mut errors = vec![];
     match query {
-        Query::CreateTable { .. } => (), // TODO
+        Query::CreateTable { .. } => (), // Nothing to analyze.
         Query::Delete { ref filter, ref table } => {
             analyze_filter_types(filter, &table, &mut errors);
         },
+        Query::Drop { .. } => (), // Nothing to analyze.
         Query::Insert { ref assignments, ref table } => {
             analyze_assignments_types(assignments, &table, &mut errors);
         },
@@ -361,6 +363,7 @@ fn check_methods(method_calls: &MethodCalls, errors: &mut Vec<Error>) {
         "all".to_owned(),
         "create".to_owned(),
         "delete".to_owned(),
+        "drop".to_owned(),
         "filter".to_owned(),
         "get".to_owned(),
         "insert".to_owned(),
@@ -610,6 +613,10 @@ fn new_query(fields: Vec<Identifier>, filter_expression: FilterExpression, joins
                 filter: filter_expression,
                 table: table_name,
             },
+        SqlQueryType::Drop =>
+            Query::Drop {
+                table: table_name,
+            },
         SqlQueryType::Insert =>
             Query::Insert {
                 assignments: assignments,
@@ -666,6 +673,10 @@ fn process_methods(calls: &[MethodCall], table: &SqlFields, table_name: &str) ->
             "delete" => {
                 check_no_arguments(&method_call, &mut errors);
                 query_type = SqlQueryType::Delete;
+            },
+            "drop" => {
+                check_no_arguments(&method_call, &mut errors);
+                query_type = SqlQueryType::Drop;
             },
             "filter" => {
                 try(expression_to_filter_expression(&method_call.arguments[0], &table_name, table), &mut errors, |filter| {
