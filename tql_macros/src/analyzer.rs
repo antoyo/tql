@@ -65,10 +65,14 @@ fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors: &mu
     match *filter {
         FilterExpression::Filter(ref filter) => {
             let tables = singleton();
-            // TODO: ne pas utiliser unwrap().
-            let table = tables.get(table_name).unwrap();
-            let field_type = table.get(&filter.operand1).unwrap();
-            check_type(field_type, &filter.operand2, errors);
+            match tables.get(table_name).and_then(|table| table.get(&filter.operand1)) {
+                Some(field_type) => check_type(field_type, &filter.operand2, errors),
+                None => {
+                    let full_name = table_name.to_owned() + "." + &filter.operand1;
+                    // TODO: utiliser la vraie position.
+                    errors.push(Error::new(format!("`{}` does not name an SQL field", full_name), DUMMY_SP))
+                },
+            }
         },
         FilterExpression::Filters(ref filters) => {
             analyze_filter_types(&*filters.operand1, table_name, errors);

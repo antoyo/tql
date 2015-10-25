@@ -232,12 +232,16 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
     let ident = Ident::new(intern("connection"), table_ident.ctxt);
     let sql_tables = singleton();
     let table_name = table_ident.to_string();
-    let table = sql_tables.get(&table_name).unwrap();
-    let fields = get_query_fields(cx, sp, table, sql_tables, joins);
-    let struct_expr = cx.expr_struct(sp, cx.path_ident(sp, table_ident), fields);
-    let args_expr = get_query_arguments(cx, sp, table_name, arguments);
-    let expr = gen_query_expr(cx, ident, sql_query, args_expr, struct_expr, query_type);
-    MacEager::expr(expr)
+    match sql_tables.get(&table_name) {
+        Some(table) => {
+            let fields = get_query_fields(cx, sp, table, sql_tables, joins);
+            let struct_expr = cx.expr_struct(sp, cx.path_ident(sp, table_ident), fields);
+            let args_expr = get_query_arguments(cx, sp, table_name, arguments);
+            let expr = gen_query_expr(cx, ident, sql_query, args_expr, struct_expr, query_type);
+            MacEager::expr(expr)
+        },
+        None => DummyResult::any(sp),
+    }
 }
 
 /// Generate the Rust code using the `postgres` library depending on the `QueryType`.
