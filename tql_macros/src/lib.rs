@@ -48,7 +48,7 @@
 extern crate rustc;
 extern crate syntax;
 
-use rustc::lint::LateLintPassObject;
+use rustc::lint::{EarlyLintPassObject, LateLintPassObject};
 use rustc::plugin::Registry;
 use syntax::ast::{Expr, Field, Ident, MetaItem, TokenTree};
 use syntax::ast::Expr_::ExprLit;
@@ -85,7 +85,7 @@ use gen::ToSql;
 use optimizer::optimize;
 use parser::parse;
 use state::{SqlArg, SqlArgs, SqlFields, SqlTables, Type, lint_singleton, singleton};
-use type_analyzer::SqlError;
+use type_analyzer::{SqlAttrError, SqlError};
 
 /// Extract the Rust `Expression`s from the `Query`.
 // TODO: séparer cette fonction en plusieurs fonctions.
@@ -324,7 +324,7 @@ fn get_query_fields(cx: &mut ExtCtxt, sp: Span, table: &SqlFields, sql_tables: &
     let mut fields = vec![];
     let mut index = 0usize;
     for (name, typ) in table {
-        match *typ {
+        match typ.node {
             Type::Custom(ref foreign_table) => {
                 let table_name = foreign_table;
                 match sql_tables.get(foreign_table) {
@@ -332,8 +332,8 @@ fn get_query_fields(cx: &mut ExtCtxt, sp: Span, table: &SqlFields, sql_tables: &
                         if has_joins(&joins, name) {
                             let mut foreign_fields = vec![];
                             for (field, typ) in foreign_table {
-                                match *typ {
-                                    Type::Custom(_) | Type::Dummy => (), // Do not add foreign key recursively.
+                                match typ.node {
+                                    Type::Custom(_) | Type::UnsupportedType(_) => (), // Do not add foreign key recursively.
                                     _ => {
                                         foreign_fields.push(Field {
                                             expr: quote_expr!(cx, row.get($index)),
@@ -371,7 +371,7 @@ fn get_query_fields(cx: &mut ExtCtxt, sp: Span, table: &SqlFields, sql_tables: &
                     None => (), // Cannot happen.
                 }
             },
-            Type::Dummy => (),
+            Type::UnsupportedType(_) => (),
             _ => {
                 fields.push(Field {
                     expr: quote_expr!(cx, row.get($index)),
@@ -404,6 +404,9 @@ fn span_errors(errors: Vec<Error>, cx: &mut ExtCtxt) {
             ErrorType::Note => {
                 cx.parse_sess.span_diagnostic.fileline_note(position, &message);
             },
+            ErrorType::Warning => {
+                cx.span_warn(position, &message);
+            },
         }
     }
 }
@@ -435,5 +438,6 @@ pub fn plugin_registrar(reg: &mut Registry) {
     reg.register_macro("to_sql", expand_to_sql);
     reg.register_macro("sql", expand_sql);
     reg.register_syntax_extension(intern("SqlTable"), MultiDecorator(box expand_sql_table));
+    reg.register_early_lint_pass(box SqlAttrError as EarlyLintPassObject);
     reg.register_late_lint_pass(box SqlError as LateLintPassObject);
 }

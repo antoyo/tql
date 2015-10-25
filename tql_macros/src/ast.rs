@@ -1,6 +1,7 @@
 //! Abstract syntax tree for SQL generation.
 
 use syntax::ast::Expr;
+use syntax::codemap::Spanned;
 use syntax::ptr::P;
 
 use state::{Type, singleton};
@@ -151,7 +152,7 @@ pub fn query_type(query: &Query) -> QueryType {
                 let tables = singleton();
                 match tables.get(table) {
                     Some(table) => {
-                        if let Some(&Type::Serial) = table.get(&filter.operand1) {
+                        if let Some(&Spanned { node: Type::Serial, .. }) = table.get(&filter.operand1) {
                             typ = QueryType::SelectOne;
                         }
                     },

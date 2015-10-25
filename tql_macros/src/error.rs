@@ -18,6 +18,7 @@ pub enum ErrorType {
     Error,
     Help,
     Note,
+    Warning,
 }
 
 /// `SqlResult<T>` is a type that represents either a success (`Ok`) or failure (`Err`).
@@ -32,6 +33,7 @@ impl Error {
     /// ```
     /// Error {
     ///     code: None,
+    ///     kind: ErrorType::Error,
     ///     message: message,
     ///     position: position,
     /// }
@@ -52,9 +54,9 @@ impl Error {
     /// ```
     /// Error {
     ///     code: None,
+    ///     kind: ErrorType::Note,
     ///     message: message,
     ///     position: position,
-    ///     type: Error::Note,
     /// }
     pub fn new_help(message: String, position: Span) -> Error {
         Error {
@@ -72,14 +74,34 @@ impl Error {
     /// ```
     /// Error {
     ///     code: None,
+    ///     kind: ErrorType::Note,
     ///     message: message,
     ///     position: position,
-    ///     type: Error::Note,
     /// }
     pub fn new_note(message: String, position: Span) -> Error {
         Error {
             code: None,
             kind: ErrorType::Note,
+            message: message,
+            position: position,
+        }
+    }
+
+    /// Returns a new `Error` of type warning.
+    ///
+    /// This is a shortcut for:
+    ///
+    /// ```
+    /// Error {
+    ///     code: None,
+    ///     kind: ErrorType::Warning,
+    ///     message: message,
+    ///     position: position,
+    /// }
+    pub fn new_warning(message: String, position: Span) -> Error {
+        Error {
+            code: None,
+            kind: ErrorType::Warning,
             message: message,
             position: position,
         }
@@ -91,7 +113,8 @@ impl Error {
     ///
     /// ```
     /// Error {
-    ///     code: Some(code),
+    ///     code: Some(code.to_owned()),
+    ///     kind: ErrorType::Error,
     ///     message: message,
     ///     position: position,
     /// }

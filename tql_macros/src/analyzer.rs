@@ -176,7 +176,7 @@ fn argument_to_join(arg: &Expression, table_name: &str, table: &SqlFields) -> Sq
             let identifier = path.segments[0].identifier.to_string();
             check_field(&identifier, path.span, table_name, table, &mut errors);
             match table.get(&identifier) {
-                Some(field_type) => {
+                Some(&Spanned { node: ref field_type, .. }) => {
                     if let &Type::Custom(ref related_table_name) = field_type {
                         let tables = singleton();
                         match tables.get(related_table_name).and_then(|table| get_primary_key_field(table)) {
@@ -352,7 +352,7 @@ fn check_field(identifier: &str, position: Span, table_name: &str, table: &SqlFi
 /// Check if the type of `identifier` matches the type of the `value` expression.
 fn check_field_type(table_name: &str, identifier: &str, value: &Expression, errors: &mut Vec<Error>) {
     match get_field_type(table_name, identifier) {
-        Some(ref field_type) => check_type(field_type, value, errors),
+        Some(ref field_type) => check_type(&field_type.node, value, errors),
         None => (), // Nothing to do since this check is done in the conversion function.
     }
 }
@@ -522,7 +522,7 @@ fn get_expression_to_filter_expression(arg: &P<Expr>, table_name: &str, table: &
 }
 
 /// Get the type of the field if it exists.
-fn get_field_type<'a>(table_name: &str, identifier: &'a str) -> Option<&'a Type> {
+fn get_field_type<'a>(table_name: &str, identifier: &'a str) -> Option<&'a Spanned<Type>> {
     let tables = singleton();
     tables
         .get(table_name)
@@ -533,15 +533,15 @@ fn get_field_type<'a>(table_name: &str, identifier: &'a str) -> Option<&'a Type>
 fn get_query_fields(table: &SqlFields, table_name: &str, joins: &[Join], sql_tables: &SqlTables) -> Vec<Identifier> {
     let mut fields = vec![];
     for (field, typ) in table {
-        match *typ {
+        match typ.node {
             // TODO: faire attention aux conflits de nom.
             Type::Custom(ref foreign_table) => {
                 let table_name = foreign_table;
                 if let Some(foreign_table) = sql_tables.get(foreign_table) {
                     if has_joins(&joins, field) {
                         for (field, typ) in foreign_table {
-                            match *typ {
-                                Type::Custom(_) | Type::Dummy => (), // Do not add foreign key recursively.
+                            match typ.node {
+                                Type::Custom(_) | Type::UnsupportedType(_) => (), // Do not add foreign key recursively.
                                 _ => {
                                     fields.push(table_name.clone() + "." + &field);
                                 },
@@ -550,7 +550,7 @@ fn get_query_fields(table: &SqlFields, table_name: &str, joins: &[Join], sql_tab
                     }
                 }
             },
-            Type::Dummy => (),
+            Type::UnsupportedType(_) => (),
             _ => {
                 fields.push(table_name.to_owned() + "." + &field);
             },
@@ -666,7 +666,7 @@ fn process_methods(calls: &[MethodCall], table: &SqlFields, table_name: &str) ->
                 for (field, typ) in table {
                     typed_fields.push(TypedField {
                         identifier: field.clone(),
-                        typ: typ.to_sql(),
+                        typ: typ.node.to_sql(),
                     });
                 }
             },
@@ -769,7 +769,7 @@ fn try<F: FnMut(T), T>(mut result: Result<T, Vec<Error>>, errors: &mut Vec<Error
 
 /// Add an error to the vector error about an unknown SQL table.
 /// It suggests a similar name if there exist one.
-fn unknown_table_error(table_name: &str, position: Span, sql_tables: &SqlTables, errors: &mut Vec<Error>) {
+pub fn unknown_table_error(table_name: &str, position: Span, sql_tables: &SqlTables, errors: &mut Vec<Error>) {
     errors.push(Error::new_with_code(
         format!("`{}` does not name an SQL table", table_name),
         position,

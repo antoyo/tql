@@ -9,6 +9,8 @@ use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 use std::mem;
 
+use syntax::codemap::Spanned;
+
 /// An SQL query argument.
 #[derive(Debug)]
 pub struct SqlArg {
@@ -28,7 +30,7 @@ pub struct SqlArgs {
 pub type SqlCalls = HashMap<u32, SqlArgs>;
 
 /// A collection of fields.
-pub type SqlFields = BTreeMap<String, Type>;
+pub type SqlFields = BTreeMap<String, Spanned<Type>>;
 
 /// A collection of SQL tables.
 pub type SqlTables = HashMap<String, SqlFields>;
@@ -40,7 +42,6 @@ pub enum Type {
     ByteString,
     Char,
     Custom(String),
-    Dummy,
     F32,
     F64,
     I8,
@@ -49,6 +50,7 @@ pub enum Type {
     I64,
     Serial,
     String,
+    UnsupportedType(String),
 }
 
 impl Display for Type {
@@ -59,7 +61,7 @@ impl Display for Type {
             Type::ByteString => "Vec<u8>",
             Type::Char => "char",
             Type::Custom(ref typ) => &typ[..],
-            Type::Dummy => "",
+            Type::UnsupportedType(_) => "",
             Type::F32 => "f32",
             Type::F64 => "f64",
             Type::I8 => "i8",
@@ -76,7 +78,7 @@ impl Display for Type {
 /// Get the name of the primary key field.
 pub fn get_primary_key_field(fields: &SqlFields) -> Option<String> {
     for (field, typ) in fields {
-        if let Type::Serial = *typ {
+        if let Type::Serial = typ.node {
             return Some(field.clone());
         }
     }

@@ -206,7 +206,7 @@ impl ToSql for Type {
                     None => "".to_owned(),
                 }
             },
-            Type::Dummy => "".to_owned(),
+            Type::UnsupportedType(_) => "".to_owned(),
             Type::F32 => "REAL".to_owned(),
             Type::F64 => "DOUBLE PRECISION".to_owned(),
             Type::I16 => "SMALLINT".to_owned(),

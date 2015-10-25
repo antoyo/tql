@@ -5,12 +5,13 @@ use std::collections::BTreeMap;
 use syntax::ast::{AngleBracketedParameterData, FieldIter, Path, StructFieldKind, Ty};
 use syntax::ast::PathParameters::AngleBracketedParameters;
 use syntax::ast::Ty_::TyPath;
+use syntax::codemap::Spanned;
 
 use state::{SqlFields, Type};
 
 /// Convert a type from the Rust AST to the SQL `Type`.
-fn field_ty_to_type(ty: &Ty) -> Type {
-    let mut typ = Type::Dummy;
+fn field_ty_to_type(ty: &Ty) -> Spanned<Type> {
+    let mut typ = Type::UnsupportedType("".to_owned());
     if let TyPath(None, Path { ref segments, .. }) = ty.node {
         if segments.len() == 1 {
             let ident = segments[0].identifier.to_string();
@@ -30,24 +31,27 @@ fn field_ty_to_type(ty: &Ty) -> Type {
                                         Type::Custom(segments[0].identifier.to_string())
                                     }
                                     else {
-                                        Type::Dummy // TODO
+                                        Type::UnsupportedType("".to_owned()) // TODO
                                     }
                                 },
-                                None => Type::Dummy, // TODO
+                                None => Type::UnsupportedType("".to_owned()), // TODO
                             }
                         }
                         else {
-                            Type::Dummy // TODO
+                            Type::UnsupportedType("".to_owned()) // TODO
                         }
                     },
                     "PrimaryKey" => {
                         Type::Serial
                     },
-                    _ => Type::Dummy,
+                    typ => Type::UnsupportedType(typ.to_owned()),
                 };
         }
     }
-    typ
+    Spanned {
+        node: typ,
+        span: ty.span,
+    }
 }
 
 /// Convert a vector of Rust struct fields to a collection of fields.
