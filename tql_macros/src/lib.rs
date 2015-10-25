@@ -195,6 +195,7 @@ fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, _: &MetaItem, item: &Annotatable
     if let &Annotatable::Item(ref item) = item {
         if let ItemStruct(ref struct_def, _) = item.node {
             // TODO: vérifier le type des champs de la structure.
+            // Pour ForeignKey, vérifier que le type T est une table existante.
             let table_name = item.ident.to_string();
             let fields = fields_vec_to_hashmap(struct_def.fields());
             sql_tables.insert(table_name, fields);

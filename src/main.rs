@@ -298,4 +298,7 @@ fn main() {
 
     //let _ = sql!(Person.all(id == 1));
     //let _ = sql!(Person.filter(id == 1).delete(id == 1));
+
+    //let _ = to_sql!(Person.all().join(name, age));
+    //let _ = to_sql!(Person.all().join(address, address)); // TODO: devrait causer une erreur.
 }

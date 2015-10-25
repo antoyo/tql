@@ -8,7 +8,7 @@ use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloa
 use syntax::ast::LitIntType::{SignedIntLit, UnsignedIntLit, UnsuffixedIntLit};
 use syntax::ast::UintTy;
 use syntax::ast::UnOp::{UnNeg, UnNot};
-use syntax::codemap::{DUMMY_SP, Span, Spanned};
+use syntax::codemap::{Span, Spanned};
 use syntax::ptr::P;
 
 use ast::{Assignment, Expression, Filter, FilterExpression, Filters, Identifier, Join, Limit, LogicalOperator, Order, RelationalOperator, Query};
@@ -172,13 +172,22 @@ fn argument_to_join<'a>(arg: &Expression, table_name: &str, table: &SqlFields) -
             let identifier = path.segments[0].identifier.to_string();
             check_field(&identifier, path.span, table_name, table, &mut errors);
             match table.get(&identifier) {
-                Some(related_table_name) => {
-                    join = Join {
-                        left_field: identifier,
-                        left_table: table_name.to_owned(),
-                        right_field: "id".to_owned(),
-                        right_table: related_table_name.to_string(),
-                    };
+                Some(field_type) => {
+                    if let &Type::Custom(ref related_table_name) = field_type {
+                        join = Join {
+                            left_field: identifier,
+                            left_table: table_name.to_owned(),
+                            right_field: "id".to_owned(),
+                            right_table: related_table_name.clone(),
+                        };
+                    }
+                    else {
+                        errors.push(Error::new_with_code(
+                            format!("mismatched types:\n expected `ForeignKey<_>`,\n    found `{}`", field_type),
+                            arg.span,
+                            "E0308",
+                        ));
+                    }
                 },
                 None => (), // This case is handled the check_field() call above.
             }
@@ -510,24 +519,17 @@ fn get_query_fields(table: &SqlFields, table_name: &str, joins: &[Join], sql_tab
             // TODO: faire attention aux conflits de nom.
             Type::Custom(ref foreign_table) => {
                 let table_name = foreign_table;
-                match sql_tables.get(foreign_table) {
-                    Some(foreign_table) => {
-                        if has_joins(&joins, field) {
-                            for (field, typ) in foreign_table {
-                                match *typ {
-                                    Type::Custom(_) | Type::Dummy => (), // Do not add foreign key recursively.
-                                    _ => {
-                                        fields.push(table_name.clone() + "." + &field);
-                                    },
-                                }
+                if let Some(foreign_table) = sql_tables.get(foreign_table) {
+                    if has_joins(&joins, field) {
+                        for (field, typ) in foreign_table {
+                            match *typ {
+                                Type::Custom(_) | Type::Dummy => (), // Do not add foreign key recursively.
+                                _ => {
+                                    fields.push(table_name.clone() + "." + &field);
+                                },
                             }
                         }
-                    },
-                    None => {
-                        // TODO: je crois que ceci est inutile. Plutôt vérifier dans la méthode
-                        // join().
-                        unknown_table_error(foreign_table, DUMMY_SP, &sql_tables, errors);
-                    },
+                    }
                 }
             },
             Type::Dummy => (),
