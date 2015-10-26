@@ -1,7 +1,6 @@
 //! Semantic analyzer.
 
 use std::collections::HashSet;
-use std::ops::Deref;
 
 use syntax::ast::{BinOp_, Expr, Path};
 use syntax::ast::Expr_::{ExprAssign, ExprBinary, ExprCall, ExprCast, ExprLit, ExprMethodCall, ExprParen, ExprPath, ExprRange, ExprUnary};
@@ -19,8 +18,9 @@ use error::{Error, SqlResult, res};
 use gen::ToSql;
 use parser::{MethodCall, MethodCalls};
 use plugin::number_literal;
-use state::{SqlFields, SqlTables, Type, get_primary_key_field, singleton};
+use state::{SqlFields, SqlTables, get_primary_key_field, singleton};
 use string::find_near;
+use types::Type;
 
 /// The type of the SQL query.
 enum SqlQueryType {
@@ -439,7 +439,7 @@ fn check_no_arguments(method_call: &MethodCall, errors: &mut Vec<Error>) {
 
 /// Check if the `field_type` is compitable with the `expression`'s type.
 fn check_type(field_type: &Type, expression: &Expression, errors: &mut Vec<Error>) {
-    if !same_type(field_type, expression) {
+    if field_type != expression {
         let literal_type = get_type(expression);
         errors.push(Error::new_with_code(
             format!("mismatched types:\n expected `{}`,\n    found `{}`", field_type, literal_type),
@@ -747,41 +747,6 @@ fn process_methods(calls: &[MethodCall], table: &SqlFields, table_name: &str) ->
         }
     }
     res((filter_expression, joins, limit, order, assignments, typed_fields, query_type), errors)
-}
-
-/// Check if an `expression` as the type `field_type`.
-fn same_type(field_type: &Type, expression: &Expression) -> bool {
-    match expression.node {
-        ExprLit(ref literal) => {
-            match literal.node {
-                LitBool(_) => *field_type == Type::Bool,
-                LitByte(_) => false,
-                LitByteStr(_) => *field_type == Type::ByteString,
-                LitChar(_) => *field_type == Type::Char,
-                LitFloat(_, FloatTy::TyF32) => *field_type == Type::F32,
-                LitFloat(_, FloatTy::TyF64) => *field_type == Type::F64,
-                LitFloatUnsuffixed(_) => *field_type == Type::F32 || *field_type == Type::F64,
-                LitInt(_, int_type) =>
-                    match int_type {
-                        SignedIntLit(IntTy::TyIs, _) => false,
-                        SignedIntLit(IntTy::TyI8, _) => *field_type == Type::I8,
-                        SignedIntLit(IntTy::TyI16, _) => *field_type == Type::I16,
-                        SignedIntLit(IntTy::TyI32, _) => *field_type == Type::I32 || *field_type == Type::Serial,
-                        SignedIntLit(IntTy::TyI64, _) => *field_type == Type::I64,
-                        UnsignedIntLit(_) => false,
-                        UnsuffixedIntLit(_) =>
-                            *field_type == Type::I8 ||
-                            *field_type == Type::I16 ||
-                            *field_type == Type::I32 ||
-                            *field_type == Type::I64 ||
-                            *field_type == Type::Serial,
-                    }
-                ,
-                LitStr(_, _) => *field_type == Type::String,
-            }
-        }
-        _ => true, // Returns true, because the type checking for non-literal is done later.
-    }
 }
 
 /// If `result` is an `Err`, add the errors to `errors`.

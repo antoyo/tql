@@ -2,7 +2,7 @@
 //!
 //! The SQL is generated at compile time via a procedural macro.
 
-#![feature(box_patterns, box_syntax, plugin, plugin_registrar, quote, rustc_private)]
+#![feature(box_patterns, box_syntax, convert, plugin, plugin_registrar, quote, rustc_private)]
 #![plugin(clippy)]
 #![warn(option_unwrap_used, result_unwrap_used)]
 
@@ -51,7 +51,7 @@ extern crate syntax;
 use rustc::lint::{EarlyLintPassObject, LateLintPassObject};
 use rustc::plugin::Registry;
 use syntax::ast::{Expr, Field, Ident, MetaItem, TokenTree};
-use syntax::ast::Expr_::{ExprField, ExprLit, ExprPath};
+use syntax::ast::Expr_::{ExprLit, ExprPath};
 use syntax::ast::Item_::ItemStruct;
 use syntax::codemap::{DUMMY_SP, BytePos, Span, Spanned};
 use syntax::ext::base::{Annotatable, DummyResult, ExtCtxt, MacEager, MacResult};
@@ -72,6 +72,7 @@ pub mod sql;
 pub mod state;
 pub mod string;
 pub mod type_analyzer;
+pub mod types;
 
 type Arg = (String, P<Expr>);
 type Args = Vec<Arg>;
@@ -85,8 +86,9 @@ use gen::ToSql;
 use optimizer::optimize;
 use parser::parse;
 use plugin::field_access;
-use state::{SqlArg, SqlArgs, SqlFields, SqlTables, Type, get_primary_key_field, lint_singleton, singleton};
+use state::{SqlArg, SqlArgs, SqlFields, SqlTables, get_primary_key_field, lint_singleton, singleton};
 use type_analyzer::{SqlAttrError, SqlError};
+use types::Type;
 
 /// Extract the Rust `Expression`s from the `Query`.
 // TODO: séparer cette fonction en plusieurs fonctions.

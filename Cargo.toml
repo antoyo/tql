@@ -12,7 +12,8 @@ name = "tql"
 doc = true
 
 [dependencies]
-postgres = "0.10.0"
+chrono = "0.2"
+postgres = { version = "0.10.0", features = ["chrono"] }
 
 [dependencies.tql_macros]
 path = "tql_macros"

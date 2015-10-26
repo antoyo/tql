@@ -3,17 +3,17 @@
 extern crate rustc_front;
 
 use rustc::lint::{EarlyContext, EarlyLintPass, LateContext, LateLintPass, LintArray, LintContext, LintPass};
-use rustc::middle::ty::{Ty, TypeAndMut, TyS, TypeVariants};
+use rustc::middle::ty::{Ty, TyS};
 use self::rustc_front::hir::Expr;
 use self::rustc_front::hir::Expr_::{self, ExprAddrOf, ExprMethodCall, ExprVec};
 use syntax::ast::Attribute;
-use syntax::ast::IntTy::{TyI32, TyI64};
 use syntax::codemap::{NO_EXPANSION, BytePos, Span};
 
 use analyzer::unknown_table_error;
 use error::{Error, ErrorType, SqlResult, res};
-use state::{SqlFields, SqlTables, Type, lint_singleton, singleton};
+use state::{SqlFields, SqlTables, lint_singleton, singleton};
 use string::find_near;
+use types::Type;
 
 declare_lint!(SQL_LINT, Forbid, "Err about SQL type errors");
 declare_lint!(SQL_ATTR_LINT, Forbid, "Err about SQL table errors");
@@ -140,35 +140,9 @@ impl LateLintPass for SqlError {
 /// Check that the `field_type` is the same as the `expected_type`.
 /// If not, show an error message.
 fn check_type(field_type: &Type, expected_type: &TyS, position: Span, note_position: Span, cx: &LateContext) {
-    if !same_type(field_type, expected_type) {
+    if field_type != expected_type {
         cx.sess().span_err_with_code(position, &format!("mismatched types:\n expected `{}`,    found `{:?}`", field_type, expected_type), "E0308");
         cx.sess().fileline_note(note_position, "in this expansion of sql! (defined in tql)");
-    }
-}
-
-/// Comapre the `field_type` with the `expected_type`.
-fn same_type(field_type: &Type, expected_type: &TyS) -> bool {
-    //panic!(format!("{:?} - {:?}", field_type, expected_type));
-    match expected_type.sty {
-        TypeVariants::TyInt(TyI32) => {
-            match *field_type {
-                Type::I32 | Type::Serial | Type::Custom(_) => true,
-                _ => false,
-            }
-        },
-        TypeVariants::TyInt(TyI64) => {
-            *field_type == Type::I64
-        },
-        TypeVariants::TyRef(_, TypeAndMut { ty, .. }) => {
-            // TODO: supporter les références de références.
-            match ty.sty {
-                TypeVariants::TyStr => {
-                    *field_type == Type::String
-                },
-                _ => false,
-            }
-        },
-        _ => false,
     }
 }
 

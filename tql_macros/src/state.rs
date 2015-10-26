@@ -6,10 +6,11 @@
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::fmt::{self, Display, Formatter};
 use std::mem;
 
 use syntax::codemap::Spanned;
+
+use types::Type;
 
 /// An SQL query argument.
 #[derive(Debug)]
@@ -34,46 +35,6 @@ pub type SqlFields = BTreeMap<String, Spanned<Type>>;
 
 /// A collection of SQL tables.
 pub type SqlTables = HashMap<String, SqlFields>;
-
-/// A field type.
-#[derive(Debug, Eq, PartialEq)]
-pub enum Type {
-    Bool,
-    ByteString,
-    Char,
-    Custom(String),
-    F32,
-    F64,
-    I8,
-    I16,
-    I32,
-    I64,
-    Serial,
-    String,
-    UnsupportedType(String),
-}
-
-impl Display for Type {
-    /// Get a string representation of the SQL `Type`.
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let typ = match *self {
-            Type::Bool => "bool",
-            Type::ByteString => "Vec<u8>",
-            Type::Char => "char",
-            Type::Custom(ref typ) => &typ[..],
-            Type::UnsupportedType(_) => "",
-            Type::F32 => "f32",
-            Type::F64 => "f64",
-            Type::I8 => "i8",
-            Type::I16 => "i16",
-            Type::I32 => "i32",
-            Type::I64 => "i64",
-            Type::Serial => "i32",
-            Type::String => "String",
-        };
-        write!(f, "{}", typ)
-    }
-}
 
 /// Get the name of the primary key field.
 pub fn get_primary_key_field(fields: &SqlFields) -> Option<String> {

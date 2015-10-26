@@ -1,10 +1,16 @@
 #![feature(plugin)]
 #![plugin(tql_macros)]
 
-#[macro_use]
+extern crate chrono;
 extern crate postgres;
 extern crate tql;
 
+use chrono::datetime::DateTime;
+//use chrono::naive::date::NaiveDate;
+//use chrono::naive::datetime::NaiveDateTime;
+//use chrono::naive::time::NaiveTime;
+//use chrono::offset::local::Local;
+use chrono::offset::utc::UTC;
 use postgres::{Connection, SslMode};
 use tql::{ForeignKey, PrimaryKey};
 
@@ -14,6 +20,11 @@ struct Person {
     id: PrimaryKey,
     name: String,
     age: i32,
+    //birthdate: NaiveDateTime,
+    birthdate: DateTime<UTC>,
+    //birthdate: DateTime<Local>,
+    //birthdate: NaiveDate,
+    //birthdate: NaiveTime,
     address: ForeignKey<Address>,
 }
 
@@ -44,7 +55,7 @@ impl Strct {
 }
 
 fn show_person(person: Person) {
-    println!("{}, {}", person.name, person.age);
+    println!("{}, {} ({} years old)", person.name, person.birthdate, person.age);
 }
 
 fn show_person_with_address(person: Person) {
@@ -86,9 +97,14 @@ fn main() {
     let _ = sql!(Person.create());
     let _ = sql!(Address.insert(number = 42, street = "Street Ave"));
     let address = sql!(Address.get(1)).unwrap();
-    let _ = sql!(Person.insert(name = "value1", age = 42, address = address));
-    let _ = sql!(Person.insert(name = "value2", age = 24, address = address));
-    let _ = sql!(Person.insert(name = "value3", age = 12, address = address));
+    //let date = NaiveDateTime::from_timestamp(1445815333, 0);
+    let date = UTC::now();
+    //let date = Local::now();
+    //let date = NaiveDate::from_ymd(2015, 10, 25);
+    //let date = NaiveTime::from_hms(20, 22, 0);
+    let _ = sql!(Person.insert(name = "value1", age = 42, address = address, birthdate = date));
+    let _ = sql!(Person.insert(name = "value2", age = 24, address = address, birthdate = date));
+    let _ = sql!(Person.insert(name = "value3", age = 12, address = address, birthdate = date));
 
     println!(to_sql!(Person.filter(name == "value1")));
     let people = sql!(Person.filter(name == "value1"));
@@ -261,7 +277,7 @@ fn main() {
     let new_age = 42i32;
     let _ = sql!(Person.filter(id == 1).update(name = "value1", age = new_age));
 
-    let num_inserted = match sql!(Person.insert(name = "Me", age = 91, address = address)) {
+    let num_inserted = match sql!(Person.insert(name = "Me", age = 91, address = address, birthdate = date)) {
         Ok(number) => number,
         Err(error) => {
             println!("Error: {}", error);

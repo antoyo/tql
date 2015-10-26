@@ -2,51 +2,18 @@
 
 use std::collections::BTreeMap;
 
-use syntax::ast::{AngleBracketedParameterData, FieldIter, Path, StructFieldKind, Ty};
-use syntax::ast::PathParameters::AngleBracketedParameters;
+use syntax::ast::{FieldIter, StructFieldKind, Ty};
 use syntax::ast::Ty_::TyPath;
 use syntax::codemap::Spanned;
 
-use state::{SqlFields, Type};
+use state::SqlFields;
+use types::Type;
 
 /// Convert a type from the Rust AST to the SQL `Type`.
 fn field_ty_to_type(ty: &Ty) -> Spanned<Type> {
     let mut typ = Type::UnsupportedType("".to_owned());
-    if let TyPath(None, Path { ref segments, .. }) = ty.node {
-        if segments.len() == 1 {
-            let ident = segments[0].identifier.to_string();
-            typ =
-                match &ident[..] {
-                    "String" => {
-                        Type::String
-                    },
-                    "i32" => {
-                        Type::I32
-                    },
-                    "ForeignKey" => {
-                        if let AngleBracketedParameters(AngleBracketedParameterData { ref types, .. }) = segments[0].parameters {
-                            match types.first() {
-                                Some(ty) => {
-                                    if let TyPath(None, Path { ref segments, .. }) = ty.node {
-                                        Type::Custom(segments[0].identifier.to_string())
-                                    }
-                                    else {
-                                        Type::UnsupportedType("".to_owned()) // TODO
-                                    }
-                                },
-                                None => Type::UnsupportedType("".to_owned()), // TODO
-                            }
-                        }
-                        else {
-                            Type::UnsupportedType("".to_owned()) // TODO
-                        }
-                    },
-                    "PrimaryKey" => {
-                        Type::Serial
-                    },
-                    typ => Type::UnsupportedType(typ.to_owned()),
-                };
-        }
+    if let TyPath(None, ref path) = ty.node {
+        typ = Type::from(path);
     }
     Spanned {
         node: typ,

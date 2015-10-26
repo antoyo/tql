@@ -4,7 +4,8 @@ use syntax::ast::Expr;
 use syntax::codemap::Spanned;
 use syntax::ptr::P;
 
-use state::{Type, singleton};
+use state::singleton;
+use types::Type;
 
 pub type Expression = P<Expr>;
 pub type FieldList = Vec<Identifier>;

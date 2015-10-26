@@ -8,7 +8,8 @@ use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloa
 use ast::{Assignment, Expression, FieldList, Filter, Filters, FilterExpression, Identifier, Join, Limit, LogicalOperator, Order, RelationalOperator, Query, TypedField};
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use sql::escape;
-use state::{Type, get_primary_key_field, singleton};
+use state::{get_primary_key_field, singleton};
+use types::Type;
 
 /// A generic trait for converting a value to SQL.
 pub trait ToSql {
@@ -189,31 +190,6 @@ impl ToSql for RelationalOperator {
             RelationalOperator::NotEqual => "<>".to_owned(),
             RelationalOperator::GreaterThan => ">=".to_owned(),
             RelationalOperator::GreaterThanEqual => ">".to_owned(),
-        }
-    }
-}
-
-impl ToSql for Type {
-    fn to_sql(&self) -> String {
-        match *self {
-            Type::Bool => "BOOLEAN".to_owned(),
-            Type::ByteString => "BYTEA".to_owned(),
-            Type::I8 | Type::Char => "CHARACTER(1)".to_owned(),
-            Type::Custom(ref related_table_name) => {
-                let tables = singleton();
-                match tables.get(related_table_name).and_then(|table| get_primary_key_field(table)) {
-                    Some(primary_key_field) => "INTEGER REFERENCES ".to_owned() + &related_table_name + "(" + &primary_key_field + ")",
-                    None => "".to_owned(),
-                }
-            },
-            Type::UnsupportedType(_) => "".to_owned(),
-            Type::F32 => "REAL".to_owned(),
-            Type::F64 => "DOUBLE PRECISION".to_owned(),
-            Type::I16 => "SMALLINT".to_owned(),
-            Type::I32 => "INTEGER".to_owned(),
-            Type::I64 => "BIGINT".to_owned(),
-            Type::Serial => "SERIAL PRIMARY KEY".to_owned(),
-            Type::String => "CHARACTER VARYING".to_owned(),
         }
     }
 }
