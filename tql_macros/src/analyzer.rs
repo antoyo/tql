@@ -13,12 +13,12 @@ use syntax::ast::UnOp::{UnNeg, UnNot};
 use syntax::codemap::{Span, Spanned};
 use syntax::ptr::P;
 
-use ast::{Assignment, Expression, Filter, FilterExpression, Filters, Identifier, Join, Limit, LogicalOperator, Order, RelationalOperator, Query, TypedField};
+use ast::{self, Assignment, Expression, Filter, FilterExpression, Filters, Identifier, Join, Limit, LogicalOperator, Order, RelationalOperator, RValue, Query, TypedField};
 use error::{Error, SqlResult, res};
 use gen::ToSql;
 use parser::{MethodCall, MethodCalls};
 use plugin::number_literal;
-use state::{SqlFields, SqlTables, get_primary_key_field, singleton};
+use state::{SqlFields, SqlTables, get_primary_key_field, methods_singleton, singleton};
 use string::find_near;
 use types::Type;
 
@@ -67,7 +67,7 @@ pub fn analyze(method_calls: MethodCalls, sql_tables: &SqlTables) -> SqlResult<Q
 /// Analyze the types of the `Assignment`s.
 fn analyze_assignments_types(assignments: &[Assignment], table_name: &str, errors: &mut Vec<Error>) {
     for assignment in assignments {
-        check_field_type(table_name, &assignment.identifier, &assignment.value, errors);
+        check_field_type(table_name, &RValue::Identifier(assignment.identifier.clone()), &assignment.value, errors);
     }
 }
 
@@ -375,8 +375,8 @@ fn check_field(identifier: &str, position: Span, table_name: &str, table: &SqlFi
 }
 
 /// Check if the type of `identifier` matches the type of the `value` expression.
-fn check_field_type(table_name: &str, identifier: &str, value: &Expression, errors: &mut Vec<Error>) {
-    match get_field_type(table_name, identifier) {
+fn check_field_type(table_name: &str, rvalue: &RValue, value: &Expression, errors: &mut Vec<Error>) {
+    match get_field_type(table_name, rvalue) {
         Some(ref field_type) => check_type(&field_type.node, value, errors),
         None => (), // Nothing to do since this check is done in the conversion function.
     }
@@ -469,6 +469,7 @@ fn convert_arguments<F, Type>(arguments: &[P<Expr>], table_name: &str, table: &S
 }
 
 /// Convert a Rust expression to a `FilterExpression`.
+// TODO: séparer en plusieurs fonctions.
 fn expression_to_filter_expression(arg: &P<Expr>, table_name: &str, table: &SqlFields) -> SqlResult<FilterExpression> {
     let mut errors = vec![];
 
@@ -481,12 +482,45 @@ fn expression_to_filter_expression(arg: &P<Expr>, table_name: &str, table: &SqlF
                         let identifier = path.segments[0].identifier.to_string();
                         check_field(&identifier, path.span, table_name, table, &mut errors);
                         FilterExpression::Filter(Filter {
-                            operand1: identifier,
-                            operator: binop_to_relational_operator(op),
+                            operand1: RValue::Identifier(identifier),
+                            operator: binop_to_relational_operator(op), // TODO: vérifier ce qui se passe lorsqu’un opérateur logique est utilisé à la place d’un opérateur relationnel.
                             operand2: expr2.clone(),
                         })
                     },
-                    ExprBinary(_, _, _) | ExprUnary(UnNot, _) | ExprParen(_) => {
+                    ExprMethodCall(identifier, _, ref exprs) => {
+                        if let ExprPath(_, ref path) = exprs[0].node {
+                            let method_name = identifier.node.name.to_string();
+                            let methods = methods_singleton();
+                            if methods.contains_key(&method_name) {
+                                FilterExpression::Filter(Filter {
+                                    operand1: RValue::MethodCall(ast::MethodCall {
+                                        arguments: vec![],
+                                        identifier: method_name,
+                                        name: path.segments[0].identifier.name.to_string(),
+                                    }),
+                                    operator: binop_to_relational_operator(op), // TODO: vérifier ce qui se passe lorsqu’un opérateur logique est utilisé à la place d’un opérateur relationnel.
+                                    operand2: expr2.clone(),
+                                })
+                            }
+                            else {
+                                errors.push(Error::new(
+                                    format!("no method named `{}` found for type `{}`", method_name, ""), // TODO: améliorer ce message.
+                                    identifier.span,
+                                ));
+                                if let Some(name) = find_near(&method_name, methods.keys()) {
+                                    errors.push(Error::new_help(
+                                        format!("did you mean {}?", name),
+                                        identifier.span,
+                                    ));
+                                }
+                                dummy
+                            }
+                        }
+                        else {
+                            dummy
+                        }
+                    },
+                    ExprBinary(_, _, _) | ExprParen(_) | ExprUnary(UnNot, _) => {
                         // TODO: accumuler les erreurs au lieu d’arrêter à la première.
                         let filter1 = try!(expression_to_filter_expression(expr1, table_name, table));
                         let filter2 = try!(expression_to_filter_expression(expr2, table_name, table));
@@ -505,17 +539,17 @@ fn expression_to_filter_expression(arg: &P<Expr>, table_name: &str, table: &SqlF
                     },
                 }
             },
-            ExprUnary(UnNot, ref expr) => {
-                let filter = try!(expression_to_filter_expression(expr, table_name, table));
-                FilterExpression::NegFilter(box filter)
-            },
             ExprParen(ref expr) => {
                 let filter = try!(expression_to_filter_expression(expr, table_name, table));
                 FilterExpression::ParenFilter(box filter)
             },
+            ExprUnary(UnNot, ref expr) => {
+                let filter = try!(expression_to_filter_expression(expr, table_name, table));
+                FilterExpression::NegFilter(box filter)
+            },
             _ => {
                 errors.push(Error::new(
-                    "Expected binary operation".to_owned(),
+                    "Expected binary operation".to_owned(), // TODO: corriger ce message.
                     arg.span,
                 ));
                 dummy
@@ -533,7 +567,7 @@ fn get_expression_to_filter_expression(arg: &P<Expr>, table_name: &str, table: &
             match arg.node {
                 ExprLit(_) | ExprPath(_, _) => {
                     let filter = FilterExpression::Filter(Filter {
-                        operand1: primary_key_field,
+                        operand1: RValue::Identifier(primary_key_field),
                         operator: RelationalOperator::Equal,
                         operand2: arg.clone(),
                     });
@@ -547,11 +581,18 @@ fn get_expression_to_filter_expression(arg: &P<Expr>, table_name: &str, table: &
 }
 
 /// Get the type of the field if it exists.
-fn get_field_type<'a>(table_name: &str, identifier: &'a str) -> Option<&'a Spanned<Type>> {
-    let tables = singleton();
-    tables
-        .get(table_name)
-        .and_then(|table| table.get(identifier))
+fn get_field_type<'a>(table_name: &str, rvalue: &'a RValue) -> Option<&'a Spanned<Type>> {
+    match *rvalue {
+        RValue::Identifier(ref identifier) => {
+            let tables = singleton();
+            tables
+                .get(table_name)
+                .and_then(|table| table.get(identifier))
+        },
+        RValue::MethodCall(_) => {
+            None // TODO
+        },
+    }
 }
 
 /// Get the query field fully qualified names.

@@ -5,11 +5,10 @@ use std::str::from_utf8;
 use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
 
-use ast::{Assignment, Expression, FieldList, Filter, Filters, FilterExpression, Identifier, Join, Limit, LogicalOperator, Order, RelationalOperator, Query, TypedField};
+use ast::{Assignment, Expression, FieldList, Filter, Filters, FilterExpression, Identifier, Join, Limit, LogicalOperator, MethodCall, Order, RelationalOperator, RValue, Query, TypedField};
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use sql::escape;
-use state::{get_primary_key_field, singleton};
-use types::Type;
+use state::methods_singleton;
 
 /// A generic trait for converting a value to SQL.
 pub trait ToSql {
@@ -147,6 +146,21 @@ impl ToSql for [Order] {
         }
         else {
             "".to_owned()
+        }
+    }
+}
+
+impl ToSql for RValue {
+    fn to_sql(&self) -> String {
+        match *self {
+            RValue::Identifier(ref identifier) => identifier.to_sql(),
+            RValue::MethodCall(MethodCall { ref identifier, ref name, .. }) => {
+                let methods = methods_singleton();
+                match methods.get(identifier) {
+                    Some(template) => template.replace("{}", name),
+                    None => "".to_owned(),
+                }
+            },
         }
     }
 }

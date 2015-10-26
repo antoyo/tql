@@ -322,6 +322,10 @@ fn main() {
     //let _ = to_sql!(Person.all().join(name, age));
     //let _ = to_sql!(Person.all().join(address, address)); // TODO: devrait causer une erreur.
 
+    println!(to_sql!(Person.filter(birthdate.year() == 2015 && birthdate.month() == 10 && birthdate.day() == 26 && birthdate.hour() == 1 && birthdate.minute() == 39 && birthdate.second() > 0)));
+    let people = sql!(Person.filter(birthdate.year() == 2015 && birthdate.month() == 10 && birthdate.day() == 26 && birthdate.hour() == 1 && birthdate.minute() == 39 && birthdate.second() > 0));
+    show_people(people);
+
     let _ = sql!(Person.drop());
     let _ = sql!(Address.drop());
 }

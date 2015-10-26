@@ -10,6 +10,7 @@ use std::mem;
 
 use syntax::codemap::Spanned;
 
+use methods::add_initial_methods;
 use types::Type;
 
 /// An SQL query argument.
@@ -33,6 +34,9 @@ pub type SqlCalls = HashMap<u32, SqlArgs>;
 /// A collection of fields.
 pub type SqlFields = BTreeMap<String, Spanned<Type>>;
 
+/// A collection mapping tql methods to SQL functions.
+pub type SqlMethods = HashMap<String, String>;
+
 /// A collection of SQL tables.
 pub type SqlTables = HashMap<String, SqlFields>;
 
@@ -55,6 +59,21 @@ pub fn lint_singleton() -> &'static mut SqlCalls {
     unsafe {
         if hash_map == 0 as *mut SqlCalls {
             hash_map = mem::transmute(Box::new(map));
+        }
+        &mut *hash_map
+    }
+}
+
+/// Returns the global lint state.
+pub fn methods_singleton() -> &'static mut SqlMethods {
+    // FIXME: make this thread safe.
+    static mut hash_map: *mut SqlMethods = 0 as *mut SqlMethods;
+
+    let map: SqlMethods = HashMap::new();
+    unsafe {
+        if hash_map == 0 as *mut SqlMethods {
+            hash_map = mem::transmute(Box::new(map));
+            add_initial_methods();
         }
         &mut *hash_map
     }

@@ -23,7 +23,7 @@ pub struct Assignment {
 pub struct Filter {
     /// The field from the SQL table to be compared to `operand2`.
     // TODO: aussi permettre les appels de méthode.
-    pub operand1: Identifier,
+    pub operand1: RValue,
     /// The `operator` used to compare `operand1` to `operand2`.
     pub operator: RelationalOperator,
     /// The expression to be compared to `operand1`.
@@ -79,6 +79,14 @@ pub enum LogicalOperator {
     Or,
 }
 
+/// A method call is an abstraction of SQL function call.
+#[derive(Debug)]
+pub struct MethodCall {
+    pub arguments: Vec<Expression>,
+    pub identifier: Identifier,
+    pub name: String,
+}
+
 /// An SQL ORDER BY clause.
 #[derive(Debug)]
 pub enum Order {
@@ -95,6 +103,22 @@ pub enum RelationalOperator {
     NotEqual,
     GreaterThan,
     GreaterThanEqual,
+}
+
+/// Either an identifier or a method call.
+#[derive(Debug)]
+pub enum RValue {
+    Identifier(Identifier),
+    MethodCall(MethodCall),
+}
+
+impl ToString for RValue {
+    fn to_string(&self) -> String {
+        match *self {
+            RValue::Identifier(ref identifier) => identifier.clone(),
+            RValue::MethodCall(_) => "".to_owned(), // TODO
+        }
+    }
 }
 
 /// An SQL `Query`.
@@ -165,13 +189,12 @@ pub fn query_type(query: &Query) -> QueryType {
             let mut typ = QueryType::SelectMulti;
             if let FilterExpression::Filter(ref filter) = *filter {
                 let tables = singleton();
-                match tables.get(table) {
-                    Some(table) => {
-                        if let Some(&Spanned { node: Type::Serial, .. }) = table.get(&filter.operand1) {
+                if let Some(table) = tables.get(table) {
+                    if let RValue::Identifier(ref identifier) = filter.operand1 {
+                        if let Some(&Spanned { node: Type::Serial, .. }) = table.get(identifier) {
                             typ = QueryType::SelectOne;
                         }
-                    },
-                    None => (), // Unreachable.
+                    }
                 }
             }
             if let Limit::Index(_) = *limit {

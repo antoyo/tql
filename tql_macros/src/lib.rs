@@ -8,6 +8,8 @@
 
 // TODO: changer le courriel de l’auteur avant de mettre sur Github.
 
+// TODO: ajouter la vérification de types et les arguments pour les méthodes.
+// TODO: pour CreateTable, prendre en compte qu’un type Option<T> est NULLable.
 // TODO: retourner l’élément inséré par l’appel à la méthode insert().
 // TODO: paramétriser le type ForeignKey et PrimaryKey pour que la macro puisse choisir de mettre
 // le type en question ou rien (dans le cas où la jointure n’est pas faite) ou empêcher les
@@ -65,6 +67,7 @@ pub mod ast;
 pub mod attribute;
 pub mod error;
 pub mod gen;
+pub mod methods;
 pub mod optimizer;
 pub mod parser;
 pub mod plugin;
@@ -106,7 +109,6 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
                     if let Some(table) = sql_tables.get(related_table_name) {
                         if let Some(primary_key_field) = get_primary_key_field(table) {
                             new_arg = (new_arg.0, field_access(new_arg.1, path, primary_key_field));
-                            //panic!(format!("{:?}: {:?}", path, related_table_name));
                         }
                     }
                 }
@@ -130,7 +132,7 @@ fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
     fn add_filter_arguments(filter: FilterExpression, arguments: &mut Args, table_name: &str) {
         match filter {
             FilterExpression::Filter(filter) => {
-                add(arguments, filter.operand1, filter.operand2, table_name);
+                add(arguments, filter.operand1.to_string(), filter.operand2, table_name);
             },
             FilterExpression::Filters(filters) => {
                 add_filter_arguments(*filters.operand1, arguments, table_name);
