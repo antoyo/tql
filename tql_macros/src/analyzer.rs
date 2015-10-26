@@ -18,7 +18,7 @@ use error::{Error, SqlResult, res};
 use gen::ToSql;
 use parser::{MethodCall, MethodCalls};
 use plugin::number_literal;
-use state::{SqlFields, SqlTables, get_primary_key_field, methods_singleton, singleton};
+use state::{SqlFields, SqlMethod, SqlTables, get_primary_key_field, methods_singleton, singleton};
 use string::find_near;
 use types::Type;
 
@@ -382,6 +382,13 @@ fn check_field_type(table_name: &str, rvalue: &RValue, value: &Expression, error
     }
 }
 
+/// Check the type of the arguments of the method.
+fn check_method_arguments(arguments: &[Expression], argument_types: &[Type], errors: &mut Vec<Error>) {
+    for (i, argument) in arguments.iter().enumerate() {
+        check_type(&argument_types[i], argument, errors);
+    }
+}
+
 /// Check if the method `calls` exist.
 fn check_methods(method_calls: &MethodCalls, errors: &mut Vec<Error>) {
     let methods = vec![
@@ -648,21 +655,24 @@ fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: 
                 match methods.get(&object_type.node) {
                     Some(type_methods) => {
                         match type_methods.get(&method_name) {
-                            Some(template) =>
+                            Some(&(ref template, ref argument_types)) => {
+                                let arguments: Vec<Expression> = exprs[1..].iter().map(Clone::clone).collect();
+                                check_method_arguments(&arguments, argument_types, errors);
                                 FilterExpression::Filter(Filter {
                                     operand1: RValue::MethodCall(ast::MethodCall {
-                                        arguments: vec![],
+                                        arguments: arguments,
                                         identifier: method_name,
                                         name: object,
                                         template: template.clone(),
                                     }),
                                     operator: binop_to_relational_operator(op), // TODO: vérifier ce qui se passe lorsqu’un opérateur logique est utilisé à la place d’un opérateur relationnel.
                                     operand2: expr2.clone(),
-                                }),
-                                None => {
-                                    unknown_method(identifier.span, &object_type.node, method_name, Some(type_methods), errors);
-                                    dummy
-                                }
+                                })
+                            },
+                            None => {
+                                unknown_method(identifier.span, &object_type.node, method_name, Some(type_methods), errors);
+                                dummy
+                            }
                         }
                     },
                     None => {
@@ -815,7 +825,7 @@ fn try<F: FnMut(T), T>(mut result: Result<T, Vec<Error>>, errors: &mut Vec<Error
     }
 }
 
-fn unknown_method(position: Span, object_type: &Type, method_name: String, type_methods: Option<&HashMap<String, String>>, errors: &mut Vec<Error>) {
+fn unknown_method(position: Span, object_type: &Type, method_name: String, type_methods: Option<&SqlMethod>, errors: &mut Vec<Error>) {
     errors.push(Error::new(
         format!("no method named `{}` found for type `{}`", method_name, object_type), // TODO: améliorer ce message.
         position,

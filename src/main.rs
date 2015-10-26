@@ -322,6 +322,9 @@ fn main() {
     //let _ = to_sql!(Person.all().join(name, age));
     //let _ = to_sql!(Person.all().join(address, address)); // TODO: devrait causer une erreur.
 
+    let people = sql!(Person.filter(birthdate.year() == 2015));
+    show_people(people);
+
     println!(to_sql!(Person.filter(birthdate.year() == 2015 && birthdate.month() == 10 && birthdate.day() == 26 && birthdate.hour() == 1 && birthdate.minute() == 39 && birthdate.second() > 0)));
     let people = sql!(Person.filter(birthdate.year() == 2015 && birthdate.month() == 10 && birthdate.day() == 26 && birthdate.hour() == 1 && birthdate.minute() == 39 && birthdate.second() > 0));
     show_people(people);
@@ -329,6 +332,19 @@ fn main() {
     //sql!(Person.filter(age.year() == 2015));
     //sql!(Person.filter(birthdate.test() == 2015));
     //sql!(Person.filter(brthdate.year() == 2015));
+
+    //sql!(Person.filter(birthdate.year())); // TODO: devrait causer une erreur.
+    println!(to_sql!(Person.filter(name.contains("value") == true)));
+    let people = sql!(Person.filter(name.contains("value") == true));
+    show_people(people);
+    //let people = sql!(Person.filter(name.contains("value")));
+    //show_people(people);
+    let people = sql!(Person.filter(name.starts_with("va") == true));
+    show_people(people);
+    let people = sql!(Person.filter(name.ends_with("1") == true));
+    show_people(people);
+
+    //sql!(Person.filter(name.ends_with(1) == true));
 
     let _ = sql!(Person.drop());
     let _ = sql!(Address.drop());

@@ -154,8 +154,14 @@ impl ToSql for RValue {
     fn to_sql(&self) -> String {
         match *self {
             RValue::Identifier(ref identifier) => identifier.to_sql(),
-            RValue::MethodCall(MethodCall { ref name, ref template, .. }) => {
-                template.replace("$0", name)
+            RValue::MethodCall(MethodCall { ref arguments, ref name, ref template, ..  }) => {
+                let mut sql = template.replace("$0", name);
+                let mut index = 1;
+                for argument in arguments {
+                    sql = sql.replace(&format!("${}", index), &argument.to_sql());
+                    index += 1;
+                }
+                sql
             },
         }
     }
