@@ -154,12 +154,8 @@ impl ToSql for RValue {
     fn to_sql(&self) -> String {
         match *self {
             RValue::Identifier(ref identifier) => identifier.to_sql(),
-            RValue::MethodCall(MethodCall { ref identifier, ref name, .. }) => {
-                let methods = methods_singleton();
-                match methods.get(identifier) {
-                    Some(template) => template.replace("{}", name),
-                    None => "".to_owned(),
-                }
+            RValue::MethodCall(MethodCall { ref name, ref template, .. }) => {
+                template.replace("$0", name)
             },
         }
     }

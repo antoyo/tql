@@ -85,6 +85,7 @@ pub struct MethodCall {
     pub arguments: Vec<Expression>,
     pub identifier: Identifier,
     pub name: String,
+    pub template: String,
 }
 
 /// An SQL ORDER BY clause.

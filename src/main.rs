@@ -326,6 +326,10 @@ fn main() {
     let people = sql!(Person.filter(birthdate.year() == 2015 && birthdate.month() == 10 && birthdate.day() == 26 && birthdate.hour() == 1 && birthdate.minute() == 39 && birthdate.second() > 0));
     show_people(people);
 
+    //sql!(Person.filter(age.year() == 2015));
+    //sql!(Person.filter(birthdate.test() == 2015));
+    //sql!(Person.filter(brthdate.year() == 2015));
+
     let _ = sql!(Person.drop());
     let _ = sql!(Address.drop());
 }

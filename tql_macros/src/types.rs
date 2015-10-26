@@ -15,7 +15,7 @@ use gen::ToSql;
 use state::{get_primary_key_field, singleton};
 
 /// A field type.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Type {
     Bool,
     ByteString,

@@ -1,8 +1,8 @@
 //! Semantic analyzer.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use syntax::ast::{BinOp_, Expr, Path};
+use syntax::ast::{BinOp_, Expr, Path, SpannedIdent};
 use syntax::ast::Expr_::{ExprAssign, ExprBinary, ExprCall, ExprCast, ExprLit, ExprMethodCall, ExprParen, ExprPath, ExprRange, ExprUnary};
 use syntax::ast::FloatTy;
 use syntax::ast::IntTy;
@@ -488,37 +488,7 @@ fn expression_to_filter_expression(arg: &P<Expr>, table_name: &str, table: &SqlF
                         })
                     },
                     ExprMethodCall(identifier, _, ref exprs) => {
-                        if let ExprPath(_, ref path) = exprs[0].node {
-                            let method_name = identifier.node.name.to_string();
-                            let methods = methods_singleton();
-                            if methods.contains_key(&method_name) {
-                                FilterExpression::Filter(Filter {
-                                    operand1: RValue::MethodCall(ast::MethodCall {
-                                        arguments: vec![],
-                                        identifier: method_name,
-                                        name: path.segments[0].identifier.name.to_string(),
-                                    }),
-                                    operator: binop_to_relational_operator(op), // TODO: vérifier ce qui se passe lorsqu’un opérateur logique est utilisé à la place d’un opérateur relationnel.
-                                    operand2: expr2.clone(),
-                                })
-                            }
-                            else {
-                                errors.push(Error::new(
-                                    format!("no method named `{}` found for type `{}`", method_name, ""), // TODO: améliorer ce message.
-                                    identifier.span,
-                                ));
-                                if let Some(name) = find_near(&method_name, methods.keys()) {
-                                    errors.push(Error::new_help(
-                                        format!("did you mean {}?", name),
-                                        identifier.span,
-                                    ));
-                                }
-                                dummy
-                            }
-                        }
-                        else {
-                            dummy
-                        }
+                        method_call_expression_to_filter_expression(identifier, &exprs, table_name, table, op, expr2, &mut errors)
                     },
                     ExprBinary(_, _, _) | ExprParen(_) | ExprUnary(UnNot, _) => {
                         // TODO: accumuler les erreurs au lieu d’arrêter à la première.
@@ -666,6 +636,52 @@ pub fn has_joins(joins: &[Join], name: &str) -> bool {
         .any(|field_name| field_name == name)
 }
 
+/// Convert a method call expression to a filter expression.
+fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: &[Expression], table_name: &str, table: &SqlFields, op: BinOp_, expr2: &Expression, errors: &mut Vec<Error>) -> FilterExpression {
+    let dummy = FilterExpression::NoFilters;
+    if let ExprPath(_, ref path) = exprs[0].node {
+        let object = path.segments[0].identifier.name.to_string();
+        let method_name = identifier.node.name.to_string();
+        let methods = methods_singleton();
+        match table.get(&object) {
+            Some(object_type) => {
+                match methods.get(&object_type.node) {
+                    Some(type_methods) => {
+                        match type_methods.get(&method_name) {
+                            Some(template) =>
+                                FilterExpression::Filter(Filter {
+                                    operand1: RValue::MethodCall(ast::MethodCall {
+                                        arguments: vec![],
+                                        identifier: method_name,
+                                        name: object,
+                                        template: template.clone(),
+                                    }),
+                                    operator: binop_to_relational_operator(op), // TODO: vérifier ce qui se passe lorsqu’un opérateur logique est utilisé à la place d’un opérateur relationnel.
+                                    operand2: expr2.clone(),
+                                }),
+                                None => {
+                                    unknown_method(identifier.span, &object_type.node, method_name, Some(type_methods), errors);
+                                    dummy
+                                }
+                        }
+                    },
+                    None => {
+                        unknown_method(identifier.span, &object_type.node, method_name, None, errors);
+                        dummy
+                    },
+                }
+            },
+            None => {
+                check_field(&object, identifier.span, table_name, table, errors);
+                dummy
+            }
+        }
+    }
+    else {
+        dummy
+    }
+}
+
 /// Create a new query from all the data gathered by the method calls.
 fn new_query(fields: Vec<Identifier>, filter_expression: FilterExpression, joins: Vec<Join>, limit: Limit, order: Vec<Order>, assignments: Vec<Assignment>, typed_fields: Vec<TypedField>, query_type: SqlQueryType, table_name: String) -> Query {
     match query_type {
@@ -796,6 +812,21 @@ fn try<F: FnMut(T), T>(mut result: Result<T, Vec<Error>>, errors: &mut Vec<Error
     match result {
         Ok(value) => fn_using_result(value),
         Err(ref mut errs) => errors.append(errs),
+    }
+}
+
+fn unknown_method(position: Span, object_type: &Type, method_name: String, type_methods: Option<&HashMap<String, String>>, errors: &mut Vec<Error>) {
+    errors.push(Error::new(
+        format!("no method named `{}` found for type `{}`", method_name, object_type), // TODO: améliorer ce message.
+        position,
+    ));
+    if let Some(type_methods) = type_methods {
+        if let Some(name) = find_near(&method_name, type_methods.keys()) {
+            errors.push(Error::new_help(
+                format!("did you mean {}?", name),
+                position,
+            ));
+        }
     }
 }
 
