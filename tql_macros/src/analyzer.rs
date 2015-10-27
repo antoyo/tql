@@ -345,7 +345,12 @@ fn check_insert_arguments(assignments: &[Assignment], position: Span, table: &Sq
 
     for field in table.keys() {
         if !names.contains(field) && Some(field) != primary_key.as_ref() {
-            missing_fields.push(&field);
+            if let Some(&Spanned { node: Type::Nullable(_), .. }) = table.get(field) {
+                // Do not err about missing nullable field.
+            }
+            else {
+                missing_fields.push(&field);
+            }
         }
     }
 

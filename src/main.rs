@@ -26,6 +26,7 @@ struct Person {
     //birthdate: NaiveDate,
     //birthdate: NaiveTime,
     address: ForeignKey<Address>,
+    weight: Option<i32>,
 }
 
 #[SqlTable]
@@ -55,7 +56,11 @@ impl Strct {
 }
 
 fn show_person(person: Person) {
-    println!("{}, {} ({} years old)", person.name, person.birthdate, person.age);
+    let weight = match person.weight {
+        Some(weight) => format!("{} kg", weight),
+        None => "no weight".to_owned(),
+    };
+    println!("{}, {} ({} years old) {}", person.name, person.birthdate, person.age, weight);
 }
 
 fn show_person_with_address(person: Person) {
@@ -275,7 +280,7 @@ fn main() {
     let new_age = 42i32;
     let _ = sql!(Person.filter(id == 1).update(name = "value1", age = new_age));
 
-    let num_inserted = match sql!(Person.insert(name = "Me", age = 91, address = address, birthdate = date)) {
+    let num_inserted = match sql!(Person.insert(name = "Me", age = 91, address = address, birthdate = date, weight = 142)) {
         Ok(number) => number,
         Err(error) => {
             println!("Error: {}", error);
@@ -283,6 +288,9 @@ fn main() {
         },
     };
     println!("{} inserted entries", num_inserted);
+
+    let weight = 152;
+    let _ = sql!(Person.insert(name = "Me", age = 91, address = address, birthdate = date, weight = weight));
 
     let people = sql!(Person.all());
     show_people(people);
