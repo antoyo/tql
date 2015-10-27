@@ -295,6 +295,12 @@ fn main() {
     let people = sql!(Person.all());
     show_people(people);
 
+    let people = sql!(Person.filter(weight.is_some() == true)); // TODO: enlever == true.
+    show_people(people);
+
+    let people = sql!(Person.filter(weight.is_none() == true)); // TODO: enlever == true.
+    show_people(people);
+
     //to_sql!();
     //to_sql!(Person);
     //to_sql!(Person());

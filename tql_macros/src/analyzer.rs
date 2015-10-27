@@ -657,7 +657,15 @@ fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: 
         let methods = methods_singleton();
         match table.get(&object_name) {
             Some(object_type) => {
-                match methods.get(&object_type.node) {
+                let type_methods =
+                    if let Type::Nullable(_) = object_type.node {
+                        methods.get(&Type::Nullable(box Type::Generic))
+                    }
+                    else {
+                        methods.get(&object_type.node)
+                    };
+
+                match type_methods {
                     Some(type_methods) => {
                         match type_methods.get(&method_name) {
                             Some(&(ref template, ref argument_types)) => {

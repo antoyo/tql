@@ -42,9 +42,6 @@ fn analyze_table_types(fields: &SqlFields, sql_tables: &SqlTables) -> SqlResult<
                 if let None = sql_tables.get(related_table_name) {
                     unknown_table_error(related_table_name, field.span, sql_tables, &mut errors);
                 },
-            Type::UnsupportedType(ref typ) => {
-                errors.push(Error::new_with_code(format!("Use of unsupported type name `{}`", typ), field.span, "E0412"));
-            },
             Type::Serial => primary_key_count += 1,
             _ => (),
         }

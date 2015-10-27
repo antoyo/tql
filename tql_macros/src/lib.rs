@@ -126,6 +126,12 @@ fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, _: &MetaItem, item: &Annotatable
             // Pour ForeignKey, vérifier que le type T est une table existante.
             let table_name = item.ident.to_string();
             let fields = fields_vec_to_hashmap(struct_def.fields());
+            for field in fields.values() {
+                if let Type::UnsupportedType(ref typ) = field.node {
+                    //panic!(format!("{:?}", field.node));
+                    cx.parse_sess.span_diagnostic.span_err_with_code(field.span, &format!("Use of unsupported type name `{}`", typ), "E0412");
+                }
+            }
             sql_tables.insert(table_name, fields);
         }
         else {

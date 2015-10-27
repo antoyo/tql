@@ -30,4 +30,6 @@ pub fn add_initial_methods() {
     add_method(&Type::String, vec![Type::String], "contains", "$0 LIKE '%' || $1 || '%'");
     add_method(&Type::String, vec![Type::String], "ends_with", "$0 LIKE '%' || $1");
     add_method(&Type::String, vec![Type::String], "starts_with", "$0 LIKE $1 || '%'");
+    add_method(&Type::Nullable(box Type::Generic), vec![], "is_some", "$0 IS NOT NULL");
+    add_method(&Type::Nullable(box Type::Generic), vec![], "is_none", "$0 IS NULL");
 }
