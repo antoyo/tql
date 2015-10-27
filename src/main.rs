@@ -206,12 +206,10 @@ fn main() {
     show_people_with_address(people);
 
     //let value1 = 42;
-    //println!("Filtre: age > {} && name == {}", value, value1);
     //let people = sql!(Person.filter(age > value && name == value1));
     //show_people(people);
 
     //let value = 20i64;
-    //println!("Filtre: age > {}", value);
     //let people = sql!(Person.filter(age > value));
     //show_people(people);
 
@@ -339,10 +337,17 @@ fn main() {
     show_people(people);
     //let people = sql!(Person.filter(name.contains("value")));
     //show_people(people);
-    let people = sql!(Person.filter(name.starts_with("va") == true));
+    let people = sql!(Person.filter(name.starts_with("va") == true)); // TODO: enlever == true.
     show_people(people);
     let people = sql!(Person.filter(name.ends_with("1") == true));
     show_people(people);
+
+    let value = "value";
+    let people = sql!(Person.filter(name.contains(value) == true));
+    show_people(people);
+
+    //let value = 42;
+    //let people = sql!(Person.filter(name.contains(value) == true));
 
     //sql!(Person.filter(name.ends_with(1) == true));
 

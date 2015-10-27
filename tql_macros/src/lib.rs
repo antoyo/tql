@@ -52,17 +52,17 @@ extern crate syntax;
 
 use rustc::lint::{EarlyLintPassObject, LateLintPassObject};
 use rustc::plugin::Registry;
-use syntax::ast::{Expr, Field, Ident, MetaItem, TokenTree};
-use syntax::ast::Expr_::{ExprLit, ExprPath};
+use syntax::ast::{Field, Ident, MetaItem, TokenTree};
+use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Item_::ItemStruct;
 use syntax::codemap::{DUMMY_SP, BytePos, Span, Spanned};
 use syntax::ext::base::{Annotatable, DummyResult, ExtCtxt, MacEager, MacResult};
 use syntax::ext::base::SyntaxExtension::MultiDecorator;
 use syntax::ext::build::AstBuilder;
 use syntax::parse::token::{InternedString, Token, intern, str_to_ident};
-use syntax::ptr::P;
 
 pub mod analyzer;
+pub mod arguments;
 pub mod ast;
 pub mod attribute;
 pub mod error;
@@ -77,114 +77,19 @@ pub mod string;
 pub mod type_analyzer;
 pub mod types;
 
-type Arg = (String, P<Expr>);
-type Args = Vec<Arg>;
 pub type SqlQueryWithArgs = (String, QueryType, Args, Vec<Join>);
 
 use analyzer::{analyze, analyze_types, has_joins};
-use ast::{Assignment, Expression, FilterExpression, Join, Limit, Query, QueryType, query_table, query_type};
+use arguments::{Args, arguments};
+use ast::{Expression, Join, Query, QueryType, query_type};
 use attribute::fields_vec_to_hashmap;
 use error::{Error, ErrorType, SqlResult};
 use gen::ToSql;
 use optimizer::optimize;
 use parser::parse;
-use plugin::field_access;
-use state::{SqlArg, SqlArgs, SqlFields, SqlTables, get_primary_key_field, lint_singleton, singleton};
+use state::{SqlArg, SqlArgs, SqlFields, SqlTables, lint_singleton, singleton};
 use type_analyzer::{SqlAttrError, SqlError};
 use types::Type;
-
-/// Extract the Rust `Expression`s from the `Query`.
-// TODO: séparer cette fonction en plusieurs fonctions.
-fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
-    let mut arguments = vec![];
-    let table_name = query_table(&query);
-
-    fn add_expr(arguments: &mut Args, arg: Arg, table_name: &str) {
-        let mut new_arg = arg.clone();
-        match arg.1.node {
-            ExprLit(_) => return, // Do not add literal.
-            ExprPath(_, ref path) => {
-                let sql_tables = singleton();
-                if let Some(&Spanned { node: Type::Custom(ref related_table_name), .. }) = sql_tables.get(table_name).and_then(|table| table.get(&arg.0)) {
-                    if let Some(table) = sql_tables.get(related_table_name) {
-                        if let Some(primary_key_field) = get_primary_key_field(table) {
-                            new_arg = (new_arg.0, field_access(new_arg.1, path, primary_key_field));
-                        }
-                    }
-                }
-            },
-            _ => (),
-        }
-        arguments.push(new_arg);
-    }
-
-    fn add(arguments: &mut Args, field_name: String, expr: Expression, table_name: &str) {
-        let arg = (field_name, expr);
-        add_expr(arguments, arg, table_name);
-    }
-
-    fn add_assignments(assignments: Vec<Assignment>, arguments: &mut Args, table_name: &str) {
-        for assign in assignments {
-            add(arguments, assign.identifier, assign.value, table_name);
-        }
-    }
-
-    fn add_filter_arguments(filter: FilterExpression, arguments: &mut Args, table_name: &str) {
-        match filter {
-            FilterExpression::Filter(filter) => {
-                add(arguments, filter.operand1.to_string(), filter.operand2, table_name);
-            },
-            FilterExpression::Filters(filters) => {
-                add_filter_arguments(*filters.operand1, arguments, table_name);
-                add_filter_arguments(*filters.operand2, arguments, table_name);
-            },
-            FilterExpression::NegFilter(box filter) => {
-                add_filter_arguments(filter, arguments, table_name);
-            },
-            FilterExpression::NoFilters => (),
-            FilterExpression::ParenFilter(box filter) => {
-                add_filter_arguments(filter, arguments, table_name);
-            },
-        }
-    }
-
-    fn add_limit_arguments(cx: &mut ExtCtxt, limit: Limit, arguments: &mut Args, table_name: &str) {
-        match limit {
-            Limit::EndRange(expression) => add(arguments, "i64".to_owned(), expression, table_name),
-            Limit::Index(expression) => add(arguments, "i64".to_owned(), expression, table_name),
-            Limit::LimitOffset(_, _) => (),
-            Limit::NoLimit => (),
-            Limit::Range(expression1, expression2) => {
-                let offset = expression1.clone();
-                add(arguments, "i64".to_owned(), expression1, table_name);
-                let expr2 = expression2;
-                add_expr(arguments, ("i64".to_owned(), quote_expr!(cx, $expr2 - $offset)), table_name);
-            },
-            Limit::StartRange(expression) => add(arguments, "i64".to_owned(), expression, table_name),
-        }
-    }
-
-    match query {
-        Query::CreateTable { .. } => (), // No arguments.
-        Query::Delete { filter, .. } => {
-            add_filter_arguments(filter, &mut arguments, &table_name);
-        },
-        Query::Drop { .. } => (), // No arguments.
-        Query::Insert { assignments, .. } => {
-            add_assignments(assignments, &mut arguments, &table_name);
-        },
-        Query::Select { filter, limit, ..} => {
-            add_filter_arguments(filter, &mut arguments, &table_name);
-            add_limit_arguments(cx, limit, &mut arguments, &table_name);
-        },
-        Query::Update { assignments, filter, .. } => {
-            add_filter_arguments(filter, &mut arguments, &table_name);
-            add_assignments(assignments, &mut arguments, &table_name);
-        },
-    }
-
-    arguments
-}
 
 /// Expand the `sql!()` macro.
 /// This macro converts the Rust code provided as argument to SQL and outputs Rust code using the
@@ -306,8 +211,8 @@ fn get_query_arguments(cx: &mut ExtCtxt, sp: Span, table_name: String, arguments
     let mut sql_args = vec![];
     let calls = lint_singleton();
 
-    for (field_name, arg) in arguments {
-        let pos = arg.span;
+    for arg in arguments {
+        let pos = arg.expression.span;
 
         let (low, high) =
             match (pos.lo, pos.hi) {
@@ -316,14 +221,14 @@ fn get_query_arguments(cx: &mut ExtCtxt, sp: Span, table_name: String, arguments
         sql_args.push(SqlArg {
             high: high,
             low: low,
-            name: field_name,
+            typ: arg.typ,
         });
 
-        match arg.node {
+        match arg.expression.node {
             // Do not add literal arguments as they are in the final string literal.
             ExprLit(_) => (),
             _ => {
-                arg_refs.push(cx.expr_addr_of(DUMMY_SP, arg));
+                arg_refs.push(cx.expr_addr_of(DUMMY_SP, arg.expression));
             },
         }
     }

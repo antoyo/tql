@@ -10,7 +10,7 @@ use syntax::codemap::{Spanned, DUMMY_SP};
 use syntax::parse::token::intern;
 use syntax::ptr::P;
 
-/// Create an `ExprField` expression where the field is `field_name`.
+/// Create the `ExprField` expression `expr`.`field_name`.
 pub fn field_access(expr: P<Expr>, path: &Path, field_name: String) -> P<Expr> {
     let syntax_context = path.segments[0].identifier.ctxt;
     let ident = Ident::new(intern(&field_name), syntax_context);

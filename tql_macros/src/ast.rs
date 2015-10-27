@@ -83,8 +83,8 @@ pub enum LogicalOperator {
 #[derive(Debug)]
 pub struct MethodCall {
     pub arguments: Vec<Expression>,
-    pub identifier: Identifier,
-    pub name: String,
+    pub method_name: Identifier,
+    pub object_name: Identifier,
     pub template: String,
 }
 

@@ -1,6 +1,6 @@
 //! Semantic analyzer.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use syntax::ast::{BinOp_, Expr, Path, SpannedIdent};
 use syntax::ast::Expr_::{ExprAssign, ExprBinary, ExprCall, ExprCast, ExprLit, ExprMethodCall, ExprParen, ExprPath, ExprRange, ExprUnary};
@@ -647,10 +647,10 @@ pub fn has_joins(joins: &[Join], name: &str) -> bool {
 fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: &[Expression], table_name: &str, table: &SqlFields, op: BinOp_, expr2: &Expression, errors: &mut Vec<Error>) -> FilterExpression {
     let dummy = FilterExpression::NoFilters;
     if let ExprPath(_, ref path) = exprs[0].node {
-        let object = path.segments[0].identifier.name.to_string();
+        let object_name = path.segments[0].identifier.name.to_string();
         let method_name = identifier.node.name.to_string();
         let methods = methods_singleton();
-        match table.get(&object) {
+        match table.get(&object_name) {
             Some(object_type) => {
                 match methods.get(&object_type.node) {
                     Some(type_methods) => {
@@ -661,8 +661,8 @@ fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: 
                                 FilterExpression::Filter(Filter {
                                     operand1: RValue::MethodCall(ast::MethodCall {
                                         arguments: arguments,
-                                        identifier: method_name,
-                                        name: object,
+                                        method_name: method_name,
+                                        object_name: object_name,
                                         template: template.clone(),
                                     }),
                                     operator: binop_to_relational_operator(op), // TODO: vérifier ce qui se passe lorsqu’un opérateur logique est utilisé à la place d’un opérateur relationnel.
@@ -682,7 +682,7 @@ fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: 
                 }
             },
             None => {
-                check_field(&object, identifier.span, table_name, table, errors);
+                check_field(&object_name, path.span, table_name, table, errors);
                 dummy
             }
         }

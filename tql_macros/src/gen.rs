@@ -8,7 +8,6 @@ use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloa
 use ast::{Assignment, Expression, FieldList, Filter, Filters, FilterExpression, Identifier, Join, Limit, LogicalOperator, MethodCall, Order, RelationalOperator, RValue, Query, TypedField};
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use sql::escape;
-use state::methods_singleton;
 
 /// A generic trait for converting a value to SQL.
 pub trait ToSql {
@@ -154,8 +153,8 @@ impl ToSql for RValue {
     fn to_sql(&self) -> String {
         match *self {
             RValue::Identifier(ref identifier) => identifier.to_sql(),
-            RValue::MethodCall(MethodCall { ref arguments, ref name, ref template, ..  }) => {
-                let mut sql = template.replace("$0", name);
+            RValue::MethodCall(MethodCall { ref arguments, ref object_name, ref template, ..  }) => {
+                let mut sql = template.replace("$0", object_name);
                 let mut index = 1;
                 for argument in arguments {
                     sql = sql.replace(&format!("${}", index), &argument.to_sql());

@@ -18,7 +18,7 @@ use types::Type;
 pub struct SqlArg {
     pub high: u32,
     pub low: u32,
-    pub name: String,
+    pub typ: Type,
 }
 
 /// A collection of SQL query arguments.

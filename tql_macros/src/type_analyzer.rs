@@ -12,7 +12,6 @@ use syntax::codemap::{NO_EXPANSION, BytePos, Span};
 use analyzer::unknown_table_error;
 use error::{Error, ErrorType, SqlResult, res};
 use state::{SqlFields, SqlTables, lint_singleton, singleton};
-use string::find_near;
 use types::Type;
 
 declare_lint!(SQL_LINT, Forbid, "Err about SQL type errors");
@@ -101,33 +100,14 @@ impl LateLintPass for SqlError {
                 let BytePos(low) = expr.span.lo;
                 match calls.get(&low) {
                     Some(fields) => {
-                        if let Some(table) = tables.get(&fields.table_name) {
-                            for (i, typ) in types.iter().enumerate() {
-                                let field = &fields.arguments[i];
-                                let position = Span {
-                                    lo: BytePos(field.low),
-                                    hi: BytePos(field.high),
-                                    expn_id: NO_EXPANSION,
-                                };
-                                if field.name == "i64" {
-                                    check_type(&Type::I64, typ, position, expr.span, cx);
-                                }
-                                else if let Some(field_type) = table.get(&field.name) {
-                                    check_type(&field_type.node, typ, position, expr.span, cx);
-                                }
-                                else {
-                                    cx.sess().span_err(position, &format!("attempted access of field `{}` on type `{}`, but no field with that name was found", field.name, fields.table_name));
-                                    let field_names = fields.arguments.iter().map(|arg| {
-                                        &arg.name
-                                    });
-                                    match find_near(&field.name, field_names) {
-                                        Some(name) => {
-                                            cx.sess().span_help(position, &format!("did you mean `{}`?", name));
-                                        },
-                                        None => (),
-                                    }
-                                }
-                            }
+                        for (i, typ) in types.iter().enumerate() {
+                            let field = &fields.arguments[i];
+                            let position = Span {
+                                lo: BytePos(field.low),
+                                hi: BytePos(field.high),
+                                expn_id: NO_EXPANSION,
+                            };
+                            check_type(&field.typ, typ, position, expr.span, cx);
                         }
                     },
                     None => (), // TODO
