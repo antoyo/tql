@@ -72,7 +72,8 @@ impl ToSql for FilterExpression {
             FilterExpression::Filters(ref filters) => filters.to_sql(),
             FilterExpression::NegFilter(ref filter) => "NOT ".to_owned() + &filter.to_sql(),
             FilterExpression::NoFilters => "".to_owned(),
-            FilterExpression::ParenFilter(ref filter) => "(".to_owned() + &filter.to_sql() + ")"
+            FilterExpression::ParenFilter(ref filter) => "(".to_owned() + &filter.to_sql() + ")",
+            FilterExpression::RValue(ref rvalue) => rvalue.node.to_sql(),
         }
     }
 }
@@ -224,7 +225,7 @@ impl ToSql for [TypedField] {
 /// Convert a `FilterExpression` to either " WHERE " or the empty string if there are no filters.
 fn filter_to_where_clause(filter: &FilterExpression) -> &str {
     match *filter {
-        FilterExpression::Filter(_) | FilterExpression::Filters(_) | FilterExpression::NegFilter(_) | FilterExpression::ParenFilter(_) => " WHERE ",
+        FilterExpression::Filter(_) | FilterExpression::Filters(_) | FilterExpression::NegFilter(_) | FilterExpression::ParenFilter(_) | FilterExpression::RValue(_) => " WHERE ",
         FilterExpression::NoFilters => "",
     }
 }

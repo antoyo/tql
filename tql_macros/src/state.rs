@@ -35,10 +35,17 @@ pub type SqlCalls = HashMap<u32, SqlArgs>;
 pub type SqlFields = BTreeMap<String, Spanned<Type>>;
 
 /// A tql method.
-pub type SqlMethod = HashMap<String, (String, Vec<Type>)>;
+pub type SqlMethod = HashMap<String, SqlMethodTypes>;
 
 /// A collection mapping tql methods to SQL functions.
 pub type SqlMethods = HashMap<Type, SqlMethod>;
+
+/// Tql method types.
+pub struct SqlMethodTypes {
+    pub argument_types: Vec<Type>,
+    pub return_type: Type,
+    pub template: String,
+}
 
 /// A collection of SQL tables.
 pub type SqlTables = HashMap<String, SqlFields>;

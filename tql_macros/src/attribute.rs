@@ -18,7 +18,7 @@ fn field_ty_to_type(ty: &Ty) -> Spanned<Type> {
         }
         else {
             let mut type_string = String::new();
-            write!(type_string, "{:?}", ty);
+            let _ = write!(type_string, "{:?}", ty);
             Type::UnsupportedType(type_string[5..type_string.len() - 1].to_owned())
         };
     let mut position = ty.span;

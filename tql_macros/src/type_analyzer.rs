@@ -88,7 +88,6 @@ impl EarlyLintPass for SqlAttrError {
 impl LateLintPass for SqlError {
     /// Check the types of the `Vec` argument of the `postgres::stmt::Statement::query` method.
     fn check_expr(&mut self, cx: &LateContext, expr: &Expr) {
-        let tables = singleton();
         if let ExprMethodCall(name, _, ref arguments) = expr.node {
             let method_name = name.node.to_string();
             if method_name == "query" || method_name == "execute" {

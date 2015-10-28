@@ -38,6 +38,7 @@ pub enum FilterExpression {
     NegFilter(Box<FilterExpression>),
     NoFilters,
     ParenFilter(Box<FilterExpression>),
+    RValue(Spanned<RValue>),
 }
 
 /// A `Filters` is used to combine `FilterExpression`s with a `LogicalOperator`.

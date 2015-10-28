@@ -295,10 +295,10 @@ fn main() {
     let people = sql!(Person.all());
     show_people(people);
 
-    let people = sql!(Person.filter(weight.is_some() == true)); // TODO: enlever == true.
+    let people = sql!(Person.filter(weight.is_some()));
     show_people(people);
 
-    let people = sql!(Person.filter(weight.is_none() == true)); // TODO: enlever == true.
+    let people = sql!(Person.filter(weight.is_none()));
     show_people(people);
 
     //to_sql!();
@@ -351,19 +351,29 @@ fn main() {
     show_people(people);
     //let people = sql!(Person.filter(name.contains("value")));
     //show_people(people);
-    let people = sql!(Person.filter(name.starts_with("va") == true)); // TODO: enlever == true.
+    let people = sql!(Person.filter(name.starts_with("va")));
     show_people(people);
-    let people = sql!(Person.filter(name.ends_with("1") == true));
+    let people = sql!(Person.filter(name.ends_with("1")));
     show_people(people);
 
     let value = "value";
-    let people = sql!(Person.filter(name.contains(value) == true));
+    let people = sql!(Person.filter(name.contains(value)));
     show_people(people);
 
     //let value = 42;
     //let people = sql!(Person.filter(name.contains(value) == true));
 
     //sql!(Person.filter(name.ends_with(1) == true));
+
+    //let people = sql!(Person.filter(name[4..6] == "e3")); // TODO
+    //show_people(people);
+
+    let people = sql!(Person.filter(name.len() == 6));
+    show_people(people);
+
+    //sql!(Person.filter(name.len() == "toto"));
+    //sql!(Person.filter(name.len()));
+    //sql!(Person.filter(name.len() && weight.is_some()));
 
     let _ = sql!(Person.drop());
     let _ = sql!(Address.drop());
