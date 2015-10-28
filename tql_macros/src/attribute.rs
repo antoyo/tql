@@ -1,6 +1,7 @@
 //! A conversion function for the attribute.
 
 use std::collections::BTreeMap;
+use std::fmt::Write;
 
 use syntax::ast::{AngleBracketedParameters, AngleBracketedParameterData, FieldIter, StructFieldKind, Ty};
 use syntax::ast::Ty_::TyPath;
@@ -11,10 +12,15 @@ use types::Type;
 
 /// Convert a type from the Rust AST to the SQL `Type`.
 fn field_ty_to_type(ty: &Ty) -> Spanned<Type> {
-    let mut typ = Type::UnsupportedType("".to_owned());
-    if let TyPath(None, ref path) = ty.node {
-        typ = Type::from(path);
-    }
+    let typ =
+        if let TyPath(None, ref path) = ty.node {
+            Type::from(path)
+        }
+        else {
+            let mut type_string = String::new();
+            write!(type_string, "{:?}", ty);
+            Type::UnsupportedType(type_string[5..type_string.len() - 1].to_owned())
+        };
     let mut position = ty.span;
     if let TyPath(_, ref path) =  ty.node {
         if path.segments[0].identifier.to_string() == "Option" {

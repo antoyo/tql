@@ -8,8 +8,10 @@
 
 // TODO: changer le courriel de l’auteur avant de mettre sur Github.
 
-// TODO: ajouter la vérification de types et les arguments pour les méthodes.
-// TODO: pour CreateTable, prendre en compte qu’un type Option<T> est NULLable.
+// TODO: supporter les méthodes sur Nullable<Generic> et Nullable<i32> et autres?
+// TODO: erreur pour les types Option<Option<_>>.
+// TODO: ne pas faire d’erreur pour un type Option<Unsupported> quand il est oublié dans insert().
+// TODO: avertissement pour un delete() sans filtre.
 // TODO: retourner l’élément inséré par l’appel à la méthode insert().
 // TODO: paramétriser le type ForeignKey et PrimaryKey pour que la macro puisse choisir de mettre
 // le type en question ou rien (dans le cas où la jointure n’est pas faite) ou empêcher les
@@ -129,7 +131,7 @@ fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, _: &MetaItem, item: &Annotatable
             for field in fields.values() {
                 if let Type::UnsupportedType(ref typ) = field.node {
                     //panic!(format!("{:?}", field.node));
-                    cx.parse_sess.span_diagnostic.span_err_with_code(field.span, &format!("Use of unsupported type name `{}`", typ), "E0412");
+                    cx.parse_sess.span_diagnostic.span_err_with_code(field.span, &format!("use of unsupported type name `{}`", typ), "E0412");
                 }
             }
             sql_tables.insert(table_name, fields);

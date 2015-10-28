@@ -11,3 +11,6 @@ plugin = true
 
 [dependencies]
 clippy = "0.0.21"
+
+[dev-dependencies]
+compiletest_rs = "0.0.10"
