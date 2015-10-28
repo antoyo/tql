@@ -343,9 +343,10 @@ fn main() {
 
     //sql!(Person.filter(age.year() == 2015));
     //sql!(Person.filter(birthdate.test() == 2015));
+    //sql!(Person.filter(birthdate.yar() == 2015));
     //sql!(Person.filter(brthdate.year() == 2015));
 
-    //sql!(Person.filter(birthdate.year())); // TODO: devrait causer une erreur.
+    //sql!(Person.filter(birthdate.year()));
     println!(to_sql!(Person.filter(name.contains("value") == true)));
     let people = sql!(Person.filter(name.contains("value") == true));
     show_people(people);

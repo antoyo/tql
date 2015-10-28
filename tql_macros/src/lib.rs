@@ -93,6 +93,18 @@ use state::{SqlArg, SqlArgs, SqlFields, SqlTables, lint_singleton, singleton};
 use type_analyzer::{SqlAttrError, SqlError};
 use types::Type;
 
+/// Add a `Field` made with the `expr`, identified by `name` at `position`.
+fn add_field(fields: &mut Vec<Field>, expr: Expression, name: &str, position: Span) {
+    fields.push(Field {
+        expr: expr,
+        ident: Spanned {
+            node: str_to_ident(name),
+            span: position,
+        },
+        span: position,
+    });
+}
+
 /// Expand the `sql!()` macro.
 /// This macro converts the Rust code provided as argument to SQL and outputs Rust code using the
 /// `postgres` library.
@@ -250,8 +262,7 @@ fn get_query_arguments(cx: &mut ExtCtxt, sp: Span, table_name: String, arguments
     cx.expr_vec(DUMMY_SP, arg_refs)
 }
 
-/// Get the fully qualified field names.
-// TODO: séparer cette fonction en plusieurs fonctions.
+/// Get the fully qualified field names for the struct expression needed by the generated code.
 fn get_query_fields(cx: &mut ExtCtxt, sp: Span, table: &SqlFields, sql_tables: &SqlTables, joins: Vec<Join>) -> Vec<Field> {
     let mut fields = vec![];
     let mut index = 0usize;
@@ -259,60 +270,31 @@ fn get_query_fields(cx: &mut ExtCtxt, sp: Span, table: &SqlFields, sql_tables: &
         match typ.node {
             Type::Custom(ref foreign_table) => {
                 let table_name = foreign_table;
-                match sql_tables.get(foreign_table) {
-                    Some(foreign_table) => {
-                        if has_joins(&joins, name) {
-                            let mut foreign_fields = vec![];
-                            for (field, typ) in foreign_table {
-                                match typ.node {
-                                    Type::Custom(_) | Type::UnsupportedType(_) => (), // Do not add foreign key recursively.
-                                    _ => {
-                                        foreign_fields.push(Field {
-                                            expr: quote_expr!(cx, row.get($index)),
-                                            ident: Spanned {
-                                                node: str_to_ident(field),
-                                                span: sp,
-                                            },
-                                            span: sp,
-                                        });
-                                        index += 1;
-                                    },
-                                }
+                if let Some(foreign_table) = sql_tables.get(foreign_table) {
+                    if has_joins(&joins, name) {
+                        let mut foreign_fields = vec![];
+                        for (field, typ) in foreign_table {
+                            match typ.node {
+                                Type::Custom(_) | Type::UnsupportedType(_) => (), // Do not add foreign key recursively.
+                                _ => {
+                                    add_field(&mut foreign_fields, quote_expr!(cx, row.get($index)), field, sp);
+                                    index += 1;
+                                },
                             }
-                            let related_struct = cx.expr_struct(sp, cx.path_ident(sp, str_to_ident(table_name)), foreign_fields);
-                            fields.push(Field {
-                                expr: quote_expr!(cx, Some($related_struct)),
-                                ident: Spanned {
-                                    node: str_to_ident(name),
-                                    span: sp,
-                                },
-                                span: sp,
-                            });
                         }
-                        else {
-                            fields.push(Field {
-                                expr: quote_expr!(cx, None),
-                                ident: Spanned {
-                                    node: str_to_ident(name),
-                                    span: sp,
-                                },
-                                span: sp,
-                            });
-                        }
-                    },
-                    None => (), // Cannot happen.
+                        let related_struct = cx.expr_struct(sp, cx.path_ident(sp, str_to_ident(table_name)), foreign_fields);
+                        add_field(&mut fields, quote_expr!(cx, Some($related_struct)), name, sp);
+                    }
+                    else {
+                        // Since a `ForeignKey` is an `Option`, we output `None` when the field
+                        // is not `join`ed.
+                        add_field(&mut fields, quote_expr!(cx, None), name, sp);
+                    }
                 }
             },
             Type::UnsupportedType(_) => (),
             _ => {
-                fields.push(Field {
-                    expr: quote_expr!(cx, row.get($index)),
-                    ident: Spanned {
-                        node: str_to_ident(name),
-                        span: sp,
-                    },
-                    span: sp,
-                });
+                add_field(&mut fields, quote_expr!(cx, row.get($index)), name, sp);
                 index += 1;
             },
         }

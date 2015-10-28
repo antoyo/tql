@@ -68,6 +68,8 @@ fn argument_types<'a>(cx: &'a LateContext, arguments: &'a Expr_) -> Vec<Ty<'a>> 
 }
 
 impl EarlyLintPass for SqlAttrError {
+    /// Check the ForeignKey types at the end because the order of the declarations does not matter
+    /// in Rust.
     fn exit_lint_attrs(&mut self, cx: &EarlyContext, _: &[Attribute]) {
         static mut analyze_done: bool = false;
         let done = unsafe { analyze_done };

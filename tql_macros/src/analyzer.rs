@@ -889,9 +889,11 @@ fn try<F: FnMut(T), T>(mut result: Result<T, Vec<Error>>, errors: &mut Vec<Error
     }
 }
 
+/// Add an error to the vector `errors` about an unknown SQL method.
+/// It suggests a similar name if there exist one.
 fn unknown_method(position: Span, object_type: &Type, method_name: String, type_methods: Option<&SqlMethod>, errors: &mut Vec<Error>) {
     errors.push(Error::new(
-        format!("no method named `{}` found for type `{}`", method_name, object_type), // TODO: améliorer ce message.
+        format!("no method named `{}` found for type `{}`", method_name, object_type),
         position,
     ));
     if let Some(type_methods) = type_methods {
@@ -904,7 +906,7 @@ fn unknown_method(position: Span, object_type: &Type, method_name: String, type_
     }
 }
 
-/// Add an error to the vector error about an unknown SQL table.
+/// Add an error to the vector `errors` about an unknown SQL table.
 /// It suggests a similar name if there exist one.
 pub fn unknown_table_error(table_name: &str, position: Span, sql_tables: &SqlTables, errors: &mut Vec<Error>) {
     errors.push(Error::new_with_code(

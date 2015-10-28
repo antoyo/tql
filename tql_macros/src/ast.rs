@@ -22,7 +22,6 @@ pub struct Assignment {
 #[derive(Debug)]
 pub struct Filter {
     /// The field from the SQL table to be compared to `operand2`.
-    // TODO: aussi permettre les appels de méthode.
     pub operand1: RValue,
     /// The `operator` used to compare `operand1` to `operand2`.
     pub operator: RelationalOperator,
@@ -112,15 +111,6 @@ pub enum RelationalOperator {
 pub enum RValue {
     Identifier(Identifier),
     MethodCall(MethodCall),
-}
-
-impl ToString for RValue {
-    fn to_string(&self) -> String {
-        match *self {
-            RValue::Identifier(ref identifier) => identifier.clone(),
-            RValue::MethodCall(_) => "".to_owned(), // TODO
-        }
-    }
 }
 
 /// An SQL `Query`.

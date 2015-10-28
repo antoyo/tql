@@ -9,6 +9,7 @@ use plugin::field_access;
 use state::{SqlMethodTypes, get_primary_key_field, methods_singleton, singleton};
 use types::Type;
 
+/// A Rust expression to be send as a parameter to the SQL query function.
 #[derive(Clone)]
 pub struct Arg {
     pub expression: Expression,
@@ -16,6 +17,7 @@ pub struct Arg {
     pub typ: Type,
 }
 
+/// A collection of `Arg`s.
 pub type Args = Vec<Arg>;
 
 /// Create an argument from the parameters and add it to `arguments`.

@@ -69,6 +69,7 @@ impl Display for Type {
 }
 
 impl<'a> From<&'a Path> for Type {
+    /// Convert a `Path` to a `Type`.
     fn from(&Path { ref segments, .. }: &Path) -> Type {
         let unsupported = Type::UnsupportedType("".to_owned());
         if segments.len() == 1 {
@@ -162,7 +163,7 @@ impl PartialEq<Expression> for Type {
 }
 
 impl<'tcx> PartialEq<TyS<'tcx>> for Type {
-    /// Comapre the `expected_type` with `Type`.
+    /// Compare the `expected_type` with `Type`.
     fn eq(&self, expected_type: &TyS<'tcx>) -> bool {
         let typ =
             match *self {
@@ -222,7 +223,6 @@ impl<'tcx> PartialEq<TyS<'tcx>> for Type {
 fn get_type_parameter(parameters: &PathParameters) -> Option<String> {
     get_type_parameter_as_path(parameters).map(|path| path.segments[0].identifier.to_string())
 }
-
 
 /// Get the type between < and > as a Path.
 fn get_type_parameter_as_path<'a>(parameters: &'a PathParameters) -> Option<&'a Path> {
