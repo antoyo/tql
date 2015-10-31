@@ -376,6 +376,23 @@ fn main() {
     //sql!(Person.filter(name.len()));
     //sql!(Person.filter(name.len() && weight.is_some()));
 
+    //println!(to_sql!(Person.filter(name.len() in 3..6))); // TODO
+    //let people = sql!(Person.filter(name.len() in 3..6));
+    //show_people(people);
+
+    //println!(to_sql!(Person.filter(age.in([1, 42, 3])))); // TODO
+    //let people = sql!(Person.filter(age.in([1, 42, 3])));
+    //show_people(people);
+
+    let people = sql!(Person.filter(name.match(r"%3")));
+    show_people(people);
+
+    let people = sql!(Person.filter(name.match(r"%E3")));
+    show_people(people);
+
+    let people = sql!(Person.filter(name.imatch(r"%E3")));
+    show_people(people);
+
     let _ = sql!(Person.drop());
     let _ = sql!(Address.drop());
 }

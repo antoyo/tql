@@ -39,6 +39,8 @@ pub fn add_initial_methods() {
     add_method(&Type::String, Type::Bool, vec![Type::String], "ends_with", "$0 LIKE '%' || $1");
     add_method(&Type::String, Type::Bool, vec![Type::String], "starts_with", "$0 LIKE $1 || '%'");
     add_method(&Type::String, Type::I32, vec![], "len", "CHAR_LENGTH($0)");
+    add_method(&Type::String, Type::Bool, vec![Type::String], "match", "$0 LIKE $1");
+    add_method(&Type::String, Type::Bool, vec![Type::String], "imatch", "$0 ILIKE $1");
     add_method(&Type::Nullable(box Type::Generic), Type::Bool, vec![], "is_some", "$0 IS NOT NULL");
     add_method(&Type::Nullable(box Type::Generic), Type::Bool, vec![], "is_none", "$0 IS NULL");
 }

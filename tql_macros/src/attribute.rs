@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Write;
 
-use syntax::ast::{AngleBracketedParameters, AngleBracketedParameterData, FieldIter, StructFieldKind, Ty};
+use syntax::ast::{AngleBracketedParameters, AngleBracketedParameterData, StructField, StructFieldKind, Ty};
 use syntax::ast::Ty_::TyPath;
 use syntax::codemap::Spanned;
 
@@ -38,9 +38,9 @@ fn field_ty_to_type(ty: &Ty) -> Spanned<Type> {
 }
 
 /// Convert a vector of Rust struct fields to a collection of fields.
-pub fn fields_vec_to_hashmap(fields: FieldIter) -> SqlFields {
+pub fn fields_vec_to_hashmap(fields: &[StructField]) -> SqlFields {
     let mut sql_fields = BTreeMap::new();
-    for field in fields.into_iter() {
+    for field in fields {
         if let StructFieldKind::NamedField(ident, _) = field.node.kind {
             sql_fields.insert(ident.to_string(), field_ty_to_type(&*field.node.ty));
         }

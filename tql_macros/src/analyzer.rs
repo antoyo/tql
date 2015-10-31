@@ -603,6 +603,37 @@ fn get_field_type(table_name: &str, rvalue: &RValue) -> Option<Type> {
     }
 }
 
+/// Get an SQL method and arguments by type and name.
+fn get_method<'a>(object_type: &'a Spanned<Type>, exprs: &[Expression], method_name: &str, identifier: SpannedIdent, errors: &mut Vec<Error>) -> Option<(&'a SqlMethodTypes, Vec<Expression>)> {
+    let methods = methods_singleton();
+    let type_methods =
+        if let Type::Nullable(_) = object_type.node {
+            methods.get(&Type::Nullable(box Type::Generic))
+        }
+        else {
+            methods.get(&object_type.node)
+        };
+    match type_methods {
+        Some(type_methods) => {
+            match type_methods.get(method_name) {
+                Some(sql_method) => {
+                    let arguments: Vec<Expression> = exprs[1..].iter().map(Clone::clone).collect();
+                    check_method_arguments(&arguments, &sql_method.argument_types, errors);
+                    Some((sql_method, arguments))
+                },
+                None => {
+                    unknown_method(identifier.span, &object_type.node, method_name, Some(type_methods), errors);
+                    None
+                },
+            }
+        },
+        None => {
+            unknown_method(identifier.span, &object_type.node, method_name, None, errors);
+            None
+        },
+    }
+}
+
 /// Get the query field fully qualified names.
 fn get_query_fields(table: &SqlFields, table_name: &str, joins: &[Join], sql_tables: &SqlTables) -> Vec<Identifier> {
     let mut fields = vec![];
@@ -692,54 +723,19 @@ fn is_relational_operator(binop: BinOp_) -> bool {
 
 /// Convert a method call expression to a filter expression.
 fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: &[Expression], table_name: &str, table: &SqlFields, errors: &mut Vec<Error>) -> RValue {
+    let method_name = identifier.node.name.to_string();
     let dummy = RValue::Identifier("".to_owned());
-    if let ExprPath(_, ref path) = exprs[0].node {
-        let object_name = path.segments[0].identifier.name.to_string();
-        let method_name = identifier.node.name.to_string();
-        let methods = methods_singleton();
-        match table.get(&object_name) {
-            Some(object_type) => {
-                let type_methods =
-                    if let Type::Nullable(_) = object_type.node {
-                        methods.get(&Type::Nullable(box Type::Generic))
-                    }
-                    else {
-                        methods.get(&object_type.node)
-                    };
-
-                match type_methods {
-                    Some(type_methods) => {
-                        match type_methods.get(&method_name) {
-                            Some(&SqlMethodTypes { ref template, ref argument_types, .. }) => {
-                                let arguments: Vec<Expression> = exprs[1..].iter().map(Clone::clone).collect();
-                                check_method_arguments(&arguments, argument_types, errors);
-                                RValue::MethodCall(ast::MethodCall {
-                                    arguments: arguments,
-                                    method_name: method_name,
-                                    object_name: object_name,
-                                    template: template.clone(),
-                                })
-                            },
-                            None => {
-                                unknown_method(identifier.span, &object_type.node, method_name, Some(type_methods), errors);
-                                dummy
-                            }
-                        }
-                    },
-                    None => {
-                        unknown_method(identifier.span, &object_type.node, method_name, None, errors);
-                        dummy
-                    },
-                }
-            },
-            None => {
-                check_field(&object_name, path.span, table_name, table, errors);
-                dummy
-            }
-        }
-    }
-    else {
-        dummy
+    match exprs[0].node {
+        ExprPath(_, ref path) => {
+            path_method_call_to_filter(path, identifier, &method_name, exprs, table, table_name, errors)
+        },
+        _ => {
+            errors.push(Error::new(
+                "expected identifier".to_owned(), // TODO: améliorer ce message.
+                exprs[0].span,
+            ));
+            dummy
+        },
     }
 }
 
@@ -799,6 +795,33 @@ fn new_query(fields: Vec<Identifier>, filter_expression: FilterExpression, joins
 /// Create an error about a table not having a primary key.
 fn no_primary_key(table_name: &str, position: Span) -> Error {
     Error::new(format!("Table {} does not have a primary key", table_name), position)
+}
+
+/// Convert a method call where the object is an identifier to a filter expression.
+fn path_method_call_to_filter(path: &Path, identifier: SpannedIdent, method_name: &str, exprs: &[Expression], table: &SqlFields, table_name: &str, errors: &mut Vec<Error>) -> RValue {
+    let dummy = RValue::Identifier("".to_owned());
+    let object_name = path.segments[0].identifier.name.to_string();
+    match table.get(&object_name) {
+        Some(object_type) => {
+            let type_method = get_method(object_type, exprs, method_name, identifier, errors);
+
+            if let Some((&SqlMethodTypes { ref template, .. }, ref arguments)) = type_method {
+                RValue::MethodCall(ast::MethodCall {
+                    arguments: arguments.clone(),
+                    method_name: method_name.to_owned(),
+                    object_name: object_name,
+                    template: template.clone(),
+                })
+            }
+            else {
+                dummy
+            }
+        },
+        None => {
+            check_field(&object_name, path.span, table_name, table, errors);
+            dummy
+        },
+    }
 }
 
 /// Gather data about the query in the method `calls`.
@@ -891,13 +914,13 @@ fn try<F: FnMut(T), T>(mut result: Result<T, Vec<Error>>, errors: &mut Vec<Error
 
 /// Add an error to the vector `errors` about an unknown SQL method.
 /// It suggests a similar name if there exist one.
-fn unknown_method(position: Span, object_type: &Type, method_name: String, type_methods: Option<&SqlMethod>, errors: &mut Vec<Error>) {
+fn unknown_method(position: Span, object_type: &Type, method_name: &str, type_methods: Option<&SqlMethod>, errors: &mut Vec<Error>) {
     errors.push(Error::new(
         format!("no method named `{}` found for type `{}`", method_name, object_type),
         position,
     ));
     if let Some(type_methods) = type_methods {
-        if let Some(name) = find_near(&method_name, type_methods.keys()) {
+        if let Some(name) = find_near(method_name, type_methods.keys()) {
             errors.push(Error::new_help(
                 format!("did you mean {}?", name),
                 position,

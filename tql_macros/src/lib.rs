@@ -4,7 +4,6 @@
 
 #![feature(box_patterns, box_syntax, convert, plugin, plugin_registrar, quote, rustc_private)]
 #![plugin(clippy)]
-#![warn(option_unwrap_used, result_unwrap_used)]
 
 // TODO: changer le courriel de l’auteur avant de mettre sur Github.
 

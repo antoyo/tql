@@ -33,7 +33,7 @@ impl ToSql for Expression {
                 match literal.node {
                     LitBool(boolean) => boolean.to_string().to_uppercase(),
                     LitByte(byte) => "'".to_owned() + &escape((byte as char).to_string()) + "'",
-                    // TODO: ne pas utiliser unwrap().
+                    // TODO: vérifier si l’utilisation de unwrap() est sécuritaire ici.
                     LitByteStr(ref bytestring) => "'".to_owned() + &escape(from_utf8(&bytestring[..]).unwrap().to_owned()) + "'",
                     LitChar(character) => "'".to_owned() + &escape(character.to_string()) + "'",
                     LitFloat(ref float, _) => float.to_string(),
