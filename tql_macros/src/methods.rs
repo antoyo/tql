@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use state::{SqlMethodTypes, methods_singleton};
+use state::{SqlMethodTypes, aggregates_singleton, methods_singleton};
 use types::Type;
 
 /// Add a new `method` on `object_type` of type `argument_types` -> `return_type`.
@@ -16,6 +16,16 @@ pub fn add_method(object_type: &Type, return_type: Type, argument_types: Vec<Typ
         return_type: return_type,
         template: template.to_owned(),
     });
+}
+
+pub fn add_aggregate(rust_function: &str, sql_function: &str) {
+    let aggregates = aggregates_singleton();
+    aggregates.insert(rust_function.to_owned(), sql_function.to_owned());
+}
+
+/// Add the default SQL aggregate functions.
+pub fn add_initial_aggregates() {
+    add_aggregate("avg", "AVG");
 }
 
 /// Add the default SQL methods.

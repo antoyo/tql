@@ -145,6 +145,7 @@ pub fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
     let table_name = query_table(&query);
 
     match query {
+        Query::Aggregate { .. } => (), // No arguments.
         Query::CreateTable { .. } => (), // No arguments.
         Query::Delete { filter, .. } => {
             add_filter_arguments(filter, &mut arguments, &table_name);

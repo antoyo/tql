@@ -42,6 +42,7 @@ fn evaluate(expression: &Expression) -> u64 {
 /// Optimize the query.
 pub fn optimize(query: &mut Query) {
     match *query {
+        Query::Aggregate { .. } => (), // TODO
         Query::CreateTable { .. } => (), // Nothing to optimize.
         Query::Delete { .. } => (), // TODO
         Query::Drop { .. } => (), // Nothing to optimize.

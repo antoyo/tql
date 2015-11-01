@@ -12,6 +12,10 @@
 // TODO: ne pas faire d’erreur pour un type Option<Unsupported> quand il est oublié dans insert().
 // TODO: avertissement pour un delete() sans filtre.
 // TODO: retourner l’élément inséré par l’appel à la méthode insert().
+// TODO: dans les aggrégations, permettre des opérations :
+// Table.aggregate(avg(field2 / field1))
+// TODO: utiliser unwrap pour faire planter quand l’erreur est dû à un bug.
+// TODO: mieux gérer les ExprPath (vérifier qu’il n’y a qu’un segment).
 // TODO: paramétriser le type ForeignKey et PrimaryKey pour que la macro puisse choisir de mettre
 // le type en question ou rien (dans le cas où la jointure n’est pas faite) ou empêcher les
 // modifications (dans le cas où l’ID existe).
@@ -53,14 +57,16 @@ extern crate syntax;
 
 use rustc::lint::{EarlyLintPassObject, LateLintPassObject};
 use rustc::plugin::Registry;
-use syntax::ast::{Field, Ident, MetaItem, TokenTree};
+use syntax::ast::{AngleBracketedParameters, AngleBracketedParameterData, Block, Field, Ident, MetaItem, Path, PathSegment, StructField_, StructFieldKind, TokenTree, Ty, Ty_, VariantData, Visibility};
 use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Item_::ItemStruct;
 use syntax::codemap::{DUMMY_SP, BytePos, Span, Spanned};
 use syntax::ext::base::{Annotatable, DummyResult, ExtCtxt, MacEager, MacResult};
 use syntax::ext::base::SyntaxExtension::MultiDecorator;
 use syntax::ext::build::AstBuilder;
+use syntax::owned_slice::OwnedSlice;
 use syntax::parse::token::{InternedString, Token, intern, str_to_ident};
+use syntax::ptr::P;
 
 pub mod analyzer;
 pub mod arguments;
@@ -78,16 +84,17 @@ pub mod string;
 pub mod type_analyzer;
 pub mod types;
 
-pub type SqlQueryWithArgs = (String, QueryType, Args, Vec<Join>);
+pub type SqlQueryWithArgs = (String, QueryType, Args, Vec<Join>, Vec<Aggregate>);
 
 use analyzer::{analyze, analyze_types, has_joins};
 use arguments::{Args, arguments};
-use ast::{Expression, Join, Query, QueryType, query_type};
+use ast::{Aggregate, Expression, Join, Query, QueryType, query_type};
 use attribute::fields_vec_to_hashmap;
 use error::{Error, ErrorType, SqlResult};
 use gen::ToSql;
 use optimizer::optimize;
 use parser::parse;
+use plugin::NODE_ID;
 use state::{SqlArg, SqlArgs, SqlFields, SqlTables, lint_singleton, singleton};
 use type_analyzer::{SqlAttrError, SqlError};
 use types::Type;
@@ -163,7 +170,7 @@ fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, _: &MetaItem, item: &Annotatable
 fn expand_to_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult + 'static> {
     let sql_result = to_sql(cx, args);
     match sql_result {
-        Ok((sql, _, _, _)) => {
+        Ok((sql, _, _, _, _)) => {
             let string_literal = intern(&sql);
             MacEager::expr(cx.expr_str(sp, InternedString::new_from_name(string_literal)))
         }
@@ -174,9 +181,48 @@ fn expand_to_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResul
     }
 }
 
+/// Generate the aggregate struct and struct expression.
+fn gen_aggregate_struct(cx: &mut ExtCtxt, sp: Span, aggregates: &[Aggregate]) -> P<Block> {
+    let mut aggregate_fields = vec![];
+    let mut fields = vec![];
+    for (index, aggregate) in aggregates.iter().enumerate() {
+        let field_name = aggregate.field.clone() + "_" + &aggregate.function.to_lowercase();
+        add_field(&mut aggregate_fields, quote_expr!(cx, row.get($index)), &field_name, sp);
+        fields.push(Spanned {
+            node: StructField_ {
+                kind: StructFieldKind::NamedField(str_to_ident(&field_name), Visibility::Inherited),
+                id: NODE_ID,
+                ty: P(Ty {
+                    id: NODE_ID,
+                    node: Ty_::TyPath(None, Path {
+                        span: sp,
+                        global: false,
+                        segments: vec![PathSegment {
+                            identifier: str_to_ident("i32"), // TODO: choisir le type en fonction du champ?
+                            parameters: AngleBracketedParameters(AngleBracketedParameterData {
+                                bindings: OwnedSlice::empty(),
+                                lifetimes: vec![],
+                                types: OwnedSlice::empty(),
+                            }),
+                        }],
+                    }),
+                    span: sp,
+                }),
+                attrs: vec![],
+            },
+            span: sp,
+        });
+    }
+    let struct_ident = str_to_ident("Aggregate");
+    let aggregate_struct = cx.item_struct(sp, struct_ident, VariantData::Struct(fields, NODE_ID));
+    let aggregate_stmt = cx.stmt_item(sp, aggregate_struct);
+    let instance = cx.expr_struct(sp, cx.path_ident(sp, struct_ident), aggregate_fields);
+    cx.block(sp, vec![aggregate_stmt], Some(instance))
+}
+
 /// Generate the Rust code from the SQL query.
 fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args: SqlQueryWithArgs) -> Box<MacResult + 'static> {
-    let (sql, query_type, arguments, joins) = sql_query_with_args;
+    let (sql, query_type, arguments, joins, aggregates) = sql_query_with_args;
     let string_literal = intern(&sql);
     let sql_query = cx.expr_str(sp, InternedString::new_from_name(string_literal));
     let ident = Ident::new(intern("connection"), table_ident.ctxt);
@@ -186,8 +232,9 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
         Some(table) => {
             let fields = get_query_fields(cx, sp, table, sql_tables, joins);
             let struct_expr = cx.expr_struct(sp, cx.path_ident(sp, table_ident), fields);
+            let aggregate_struct = gen_aggregate_struct(cx, sp, &aggregates);
             let args_expr = get_query_arguments(cx, sp, table_name, arguments);
-            let expr = gen_query_expr(cx, ident, sql_query, args_expr, struct_expr, query_type);
+            let expr = gen_query_expr(cx, ident, sql_query, args_expr, struct_expr, aggregate_struct, query_type);
             MacEager::expr(expr)
         },
         None => DummyResult::any(sp),
@@ -195,8 +242,16 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
 }
 
 /// Generate the Rust code using the `postgres` library depending on the `QueryType`.
-fn gen_query_expr(cx: &mut ExtCtxt, ident: Ident, sql_query: Expression, args_expr: Expression, struct_expr: Expression, query_type: QueryType) -> Expression {
+fn gen_query_expr(cx: &mut ExtCtxt, ident: Ident, sql_query: Expression, args_expr: Expression, struct_expr: Expression, aggregate_struct: P<Block>, query_type: QueryType) -> Expression {
     match query_type {
+        QueryType::AggregateOne => {
+            quote_expr!(cx, {
+                let result = $ident.prepare($sql_query).unwrap();
+                result.query(&$args_expr).unwrap().iter().next().map(|row| {
+                    $aggregate_struct
+                })
+            })
+        },
         QueryType::SelectMulti => {
             quote_expr!(cx, {
                 let result = $ident.prepare($sql_query).unwrap();
@@ -343,7 +398,12 @@ fn to_sql(cx: &mut ExtCtxt, args: &[TokenTree]) -> SqlResult<SqlQueryWithArgs> {
             Query::Select { ref joins, .. } => joins.clone(),
             _ => vec![],
         };
-    Ok((sql, query_type(&query), arguments(cx, query), joins))
+    let aggrs: Vec<Aggregate> =
+        match query {
+            Query::Aggregate { ref aggregates, .. } => aggregates.clone(),
+            _ => vec![],
+        };
+    Ok((sql, query_type(&query), arguments(cx, query), joins, aggrs))
 }
 
 #[plugin_registrar]

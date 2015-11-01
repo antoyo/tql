@@ -11,6 +11,13 @@ pub type Expression = P<Expr>;
 pub type FieldList = Vec<Identifier>;
 pub type Identifier = String;
 
+/// `Aggregate` for une in SQL Aggregate `Query`.
+#[derive(Clone, Debug)]
+pub struct Aggregate {
+    pub field: Identifier,
+    pub function: Identifier,
+}
+
 /// `Assignment` for use in SQL Update `Query`.
 #[derive(Debug)]
 pub struct Assignment {
@@ -116,6 +123,12 @@ pub enum RValue {
 /// An SQL `Query`.
 #[derive(Debug)]
 pub enum Query {
+    Aggregate {
+        aggregates: Vec<Aggregate>,
+        filter: FilterExpression,
+        joins: Vec<Join>,
+        table: Identifier,
+    },
     CreateTable {
         fields: Vec<TypedField>,
         table: Identifier,
@@ -148,6 +161,7 @@ pub enum Query {
 
 /// The type of the query.
 pub enum QueryType {
+    AggregateOne,
     Exec,
     SelectOne,
     SelectMulti,
@@ -164,6 +178,7 @@ pub struct TypedField {
 pub fn query_table(query: &Query) -> Identifier {
     let table_name =
         match *query {
+            Query::Aggregate { ref table, .. } => table,
             Query::CreateTable { ref table, .. } => table,
             Query::Delete { ref table, .. } => table,
             Query::Drop { ref table, .. } => table,
@@ -177,6 +192,7 @@ pub fn query_table(query: &Query) -> Identifier {
 /// Get the query type.
 pub fn query_type(query: &Query) -> QueryType {
     match *query {
+        Query::Aggregate { .. } => QueryType::AggregateOne,
         Query::Select { ref filter, ref limit, ref table, .. } => {
             let mut typ = QueryType::SelectMulti;
             if let FilterExpression::Filter(ref filter) = *filter {
@@ -194,6 +210,6 @@ pub fn query_type(query: &Query) -> QueryType {
             }
             typ
         },
-        _ => QueryType::Exec,
+        Query::CreateTable { .. } | Query::Delete { .. } | Query::Drop { .. } | Query::Insert { .. } | Query::Update { .. } => QueryType::Exec,
     }
 }

@@ -393,6 +393,11 @@ fn main() {
     let people = sql!(Person.filter(name.imatch(r"%E3")));
     show_people(people);
 
+    //sql!(Person.aggregate(avh(age)));
+    if let Some(aggregate1) = sql!(Person.aggregate(avg(age))) {
+        println!("Average age: {}", aggregate1.age_avg);
+    }
+
     let _ = sql!(Person.drop());
     let _ = sql!(Address.drop());
 }

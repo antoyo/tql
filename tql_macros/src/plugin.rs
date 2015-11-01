@@ -10,12 +10,14 @@ use syntax::codemap::{Spanned, DUMMY_SP};
 use syntax::parse::token::intern;
 use syntax::ptr::P;
 
+pub static NODE_ID: u32 = 4294967295;
+
 /// Create the `ExprField` expression `expr`.`field_name`.
 pub fn field_access(expr: P<Expr>, path: &Path, field_name: String) -> P<Expr> {
     let syntax_context = path.segments[0].identifier.ctxt;
     let ident = Ident::new(intern(&field_name), syntax_context);
     P(Expr {
-        id: 4294967295,
+        id: NODE_ID,
         node: ExprField(expr, Spanned {
             node: ident,
             span: DUMMY_SP,
@@ -27,7 +29,7 @@ pub fn field_access(expr: P<Expr>, path: &Path, field_name: String) -> P<Expr> {
 /// Converts a number to an `P<Expr>`.
 pub fn number_literal(number: u64) -> P<Expr> {
     P(Expr {
-        id: 4294967295,
+        id: NODE_ID,
         node: ExprLit(P(Spanned {
             node: LitInt(number, SignedIntLit(TyI64, Sign::Plus)),
             span: DUMMY_SP,

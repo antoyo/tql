@@ -5,13 +5,25 @@ use std::str::from_utf8;
 use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
 
-use ast::{Assignment, Expression, FieldList, Filter, Filters, FilterExpression, Identifier, Join, Limit, LogicalOperator, MethodCall, Order, RelationalOperator, RValue, Query, TypedField};
+use ast::{Aggregate, Assignment, Expression, FieldList, Filter, Filters, FilterExpression, Identifier, Join, Limit, LogicalOperator, MethodCall, Order, RelationalOperator, RValue, Query, TypedField};
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use sql::escape;
 
 /// A generic trait for converting a value to SQL.
 pub trait ToSql {
     fn to_sql(&self) -> String;
+}
+
+impl ToSql for Aggregate {
+    fn to_sql(&self) -> String {
+        "CAST(".to_owned() + &self.function.to_sql() + "(" + &self.field.to_sql() + ") AS INT)" // TODO: ne pas hard-coder le type.
+    }
+}
+
+impl ToSql for [Aggregate] {
+    fn to_sql(&self) -> String {
+        self.into_iter().map(ToSql::to_sql).collect::<Vec<_>>().join(", ")
+    }
 }
 
 impl ToSql for Assignment {
@@ -170,6 +182,10 @@ impl ToSql for RValue {
 impl ToSql for Query {
     fn to_sql(&self) -> String {
         match *self {
+            Query::Aggregate{ref aggregates, ref filter, ref joins, ref table} => {
+                let where_clause = filter_to_where_clause(filter);
+                replace_placeholder(format!("SELECT {} FROM {}{}{}{}", aggregates.to_sql(), table, joins.to_sql(), where_clause, filter.to_sql()))
+            },
             Query::CreateTable { ref fields, ref table } => {
                 format!("CREATE TABLE {} ({})", table, fields.to_sql())
             },

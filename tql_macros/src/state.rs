@@ -10,8 +10,11 @@ use std::mem;
 
 use syntax::codemap::Spanned;
 
-use methods::add_initial_methods;
+use methods::{add_initial_aggregates, add_initial_methods};
 use types::Type;
+
+/// A collection of tql aggregate functions.
+pub type SqlAggregates = HashMap<String, String>;
 
 /// An SQL query argument.
 #[derive(Debug)]
@@ -60,6 +63,21 @@ pub fn get_primary_key_field(fields: &SqlFields) -> Option<String> {
     None
 }
 
+/// Returns the global aggregate state.
+pub fn aggregates_singleton() -> &'static mut SqlAggregates {
+    // FIXME: make this thread safe.
+    static mut hash_map: *mut SqlAggregates = 0 as *mut SqlAggregates;
+
+    let map: SqlAggregates = HashMap::new();
+    unsafe {
+        if hash_map == 0 as *mut SqlAggregates {
+            hash_map = mem::transmute(Box::new(map));
+            add_initial_aggregates();
+        }
+        &mut *hash_map
+    }
+}
+
 /// Returns the global lint state.
 pub fn lint_singleton() -> &'static mut SqlCalls {
     // FIXME: make this thread safe.
@@ -74,7 +92,7 @@ pub fn lint_singleton() -> &'static mut SqlCalls {
     }
 }
 
-/// Returns the global lint state.
+/// Returns the global methods state.
 pub fn methods_singleton() -> &'static mut SqlMethods {
     // FIXME: make this thread safe.
     static mut hash_map: *mut SqlMethods = 0 as *mut SqlMethods;
