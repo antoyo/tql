@@ -9,7 +9,6 @@
 
 // TODO: supporter les méthodes sur Nullable<Generic> et Nullable<i32> et autres?
 // TODO: ne pas faire d’erreur pour un type Option<Unsupported> quand il est oublié dans insert().
-// TODO: avertissement pour un delete() sans filtre.
 // TODO: retourner l’élément inséré par l’appel à la méthode insert().
 // TODO: dans les aggrégations, permettre des opérations :
 // Table.aggregate(avg(field2 / field1))

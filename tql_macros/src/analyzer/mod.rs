@@ -65,12 +65,13 @@ pub fn analyze(method_calls: MethodCalls, sql_tables: &SqlTables) -> SqlResult<Q
 
     let table = sql_tables.get(&table_name);
     let calls = &method_calls.calls;
+    let mut delete_position = None;
 
     let (fields, filter_expression, joins, limit, order, assignments, typed_fields, aggregates, query_type) =
         match table {
             Some(table) => {
                 let (filter_expression, joins, limit, order, assignments, typed_fields, aggregates, query_type) =
-                    try!(process_methods(&calls, table, &table_name));
+                    try!(process_methods(&calls, table, &table_name, &mut delete_position));
                 let fields = get_query_fields(table, &table_name, &joins, sql_tables);
                 (fields, filter_expression, joins, limit, order, assignments, typed_fields, aggregates, query_type)
 
@@ -78,7 +79,11 @@ pub fn analyze(method_calls: MethodCalls, sql_tables: &SqlTables) -> SqlResult<Q
             None => (vec![], FilterExpression::NoFilters, vec![], Limit::NoLimit, vec![], vec![], vec![], vec![], SqlQueryType::Select),
         };
 
-    res(new_query(fields, filter_expression, joins, limit, order, assignments, typed_fields, aggregates, query_type, table_name), errors)
+    let query = new_query(fields, filter_expression, joins, limit, order, assignments, typed_fields, aggregates, query_type, table_name);
+
+    check_delete(&query, delete_position, &mut errors);
+
+    res(query, errors)
 }
 
 /// Analyze the literal types in the `Query`.
@@ -106,6 +111,18 @@ pub fn analyze_types(query: Query) -> SqlResult<Query> {
         },
     }
     res(query, errors)
+}
+
+/// Check that `Delete` `Query` contains a filter.
+fn check_delete(query: &Query, delete_position: Option<Span>, errors: &mut Vec<Error>) {
+    if let Query::Delete { ref filter, .. } = *query {
+        if let FilterExpression::NoFilters = *filter {
+            errors.push(Error::new_warning(
+                "delete() without filters".to_owned(),
+                delete_position.unwrap(), // There is always a delete position when the query is of type Delete.
+            ));
+        }
+    }
 }
 
 /// Check if the `identifier` is a field in the struct `table_name`.
@@ -369,7 +386,7 @@ pub fn no_primary_key(table_name: &str, position: Span) -> Error {
 }
 
 /// Gather data about the query in the method `calls`.
-fn process_methods(calls: &[MethodCall], table: &SqlFields, table_name: &str) -> SqlResult<QueryData> {
+fn process_methods(calls: &[MethodCall], table: &SqlFields, table_name: &str, delete_position: &mut Option<Span>) -> SqlResult<QueryData> {
     let mut errors = vec![];
     let mut assignments = vec![];
     let mut filter_expression = FilterExpression::NoFilters;
@@ -403,6 +420,7 @@ fn process_methods(calls: &[MethodCall], table: &SqlFields, table_name: &str) ->
             "delete" => {
                 check_no_arguments(&method_call, &mut errors);
                 query_type = SqlQueryType::Delete;
+                *delete_position = Some(method_call.position);
             },
             "drop" => {
                 check_no_arguments(&method_call, &mut errors);

@@ -399,6 +399,8 @@ fn main() {
         println!("Average age: {}", aggregate1.age_avg);
     }
 
+   //sql!(Person.delete());
+
     let _ = sql!(Person.drop());
     let _ = sql!(Address.drop());
 }
