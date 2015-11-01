@@ -11,6 +11,7 @@ use state::SqlFields;
 use types::Type;
 
 /// Convert a type from the Rust AST to the SQL `Type`.
+#[allow(cmp_owned)]
 fn field_ty_to_type(ty: &Ty) -> Spanned<Type> {
     let typ =
         if let TyPath(None, ref path) = ty.node {
@@ -25,6 +26,7 @@ fn field_ty_to_type(ty: &Ty) -> Spanned<Type> {
     if let TyPath(_, ref path) =  ty.node {
         if path.segments[0].identifier.to_string() == "Option" {
             if let AngleBracketedParameters(AngleBracketedParameterData { ref types, .. }) = path.segments[0].parameters {
+                // TODO: utiliser unwrap().
                 if let Some(typ) = types.first() {
                     position = typ.span
                 }

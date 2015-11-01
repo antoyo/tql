@@ -228,19 +228,18 @@ fn get_type_parameter(parameters: &PathParameters) -> Option<String> {
 }
 
 /// Get the type between < and > as a Path.
+#[allow(needless_lifetimes)]
 fn get_type_parameter_as_path<'a>(parameters: &'a PathParameters) -> Option<&'a Path> {
     if let AngleBracketedParameters(AngleBracketedParameterData { ref types, .. }) = *parameters {
-        match types.first() {
-            Some(ty) => {
+        types.first()
+            .and_then(|ty| {
                 if let TyPath(None, ref path) = ty.node {
                     Some(path)
                 }
                 else {
                     None
                 }
-            },
-            None => None
-        }
+            })
     }
     else {
         None
@@ -256,10 +255,10 @@ fn type_to_sql(typ: &Type, mut nullable: bool) -> String {
             Type::I8 | Type::Char => "CHARACTER(1)".to_owned(),
             Type::Custom(ref related_table_name) => {
                 let tables = singleton();
-                match tables.get(related_table_name).and_then(|table| get_primary_key_field(table)) {
-                    Some(primary_key_field) => "INTEGER REFERENCES ".to_owned() + &related_table_name + "(" + &primary_key_field + ")",
-                    None => "".to_owned(),
-                }
+                // NOTE: At this stage (code generation), the table and the primary key exist, hence unwrap().
+                let table = tables.get(related_table_name).unwrap();
+                let primary_key_field = get_primary_key_field(table).unwrap();
+                "INTEGER REFERENCES ".to_owned() + &related_table_name + "(" + &primary_key_field + ")"
             },
             Type::F32 => "REAL".to_owned(),
             Type::F64 => "DOUBLE PRECISION".to_owned(),

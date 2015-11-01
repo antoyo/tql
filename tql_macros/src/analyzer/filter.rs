@@ -40,6 +40,7 @@ pub fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors:
 fn binary_expression_to_filter_expression(expr1: &Expression, op: BinOp_, expr2: &Expression, table_name: &str, table: &SqlFields) -> SqlResult<FilterExpression> {
     // TODO: accumuler les erreurs au lieu d’arrêter à la première.
     let filter1 = try!(expression_to_filter_expression(expr1, table_name, table));
+    // TODO: retourner des erreurs à la place de dummy.
     let dummy = FilterExpression::NoFilters;
 
     let filter =
@@ -234,6 +235,7 @@ fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: 
 
 /// Convert a method call where the object is an identifier to a filter expression.
 fn path_method_call_to_filter(path: &Path, identifier: SpannedIdent, method_name: &str, exprs: &[Expression], table: &SqlFields, table_name: &str, errors: &mut Vec<Error>) -> RValue {
+    // TODO: retourner des erreurs à la place de dummy.
     let dummy = RValue::Identifier("".to_owned());
     let object_name = path.segments[0].identifier.name.to_string();
     match table.get(&object_name) {
@@ -249,6 +251,7 @@ fn path_method_call_to_filter(path: &Path, identifier: SpannedIdent, method_name
                 })
             }
             else {
+                // NOTE: An error is emitted in the get_method() function.
                 dummy
             }
         },

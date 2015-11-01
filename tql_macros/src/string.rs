@@ -13,6 +13,7 @@ macro_rules! min {
 }
 
 /// Finds a near match of `str_to_check` in `strings`.
+#[allow(needless_lifetimes)]
 pub fn find_near<'a, T: Iterator<Item = &'a String>>(str_to_check: &str, strings: T) -> Option<&'a String> {
     let mut result = None;
     let mut best_distance = str_to_check.len();
@@ -29,6 +30,7 @@ pub fn find_near<'a, T: Iterator<Item = &'a String>>(str_to_check: &str, strings
 }
 
 /// Returns the Levensthein distance between `string1` and `string2`.
+#[allow(needless_range_loop)]
 fn levenshtein_distance(string1: &str, string2: &str) -> usize {
     fn distance(i: usize, j: usize, d: &[Vec<usize>], string1: &str, string2: &str) -> usize {
         match (i, j) {

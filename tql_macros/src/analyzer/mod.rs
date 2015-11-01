@@ -1,5 +1,6 @@
 //! Semantic analyzer.
 
+use std::borrow::Cow;
 use std::fmt::Display;
 
 use syntax::ast::Expr;
@@ -33,7 +34,7 @@ use self::insert::check_insert_arguments;
 use self::join::argument_to_join;
 use self::limit::{analyze_limit_types, arguments_to_limit};
 use self::sort::argument_to_order;
-use state::{SqlFields, SqlTables, methods_singleton, singleton};
+use state::{SqlFields, SqlTables, get_field_type, methods_singleton, singleton};
 use string::find_near;
 use types::Type;
 
@@ -139,10 +140,8 @@ pub fn check_field(identifier: &str, position: Span, table_name: &str, table: &S
 
 /// Check if the type of `identifier` matches the type of the `value` expression.
 fn check_field_type(table_name: &str, rvalue: &RValue, value: &Expression, errors: &mut Vec<Error>) {
-    match get_field_type(table_name, rvalue) {
-        Some(ref field_type) => check_type(field_type, value, errors),
-        None => (), // Nothing to do since this check is done in the conversion function.
-    }
+    let field_type = get_field_type_by_rvalue(table_name, rvalue);
+    check_type(field_type, value, errors);
 }
 
 /// Check if the method `calls` exist.
@@ -206,10 +205,9 @@ pub fn check_type(field_type: &Type, expression: &Expression, errors: &mut Vec<E
 
 /// Check if the `field_type` is compatible with the `rvalue`'s type.
 fn check_type_rvalue(expected_type: &Type, rvalue: &Spanned<RValue>, table_name: &str, errors: &mut Vec<Error>) {
-    if let Some(field_type) = get_field_type(table_name, &rvalue.node) {
-        if field_type != *expected_type {
-            mismatched_types(expected_type, &field_type, rvalue.span, errors);
-        }
+    let field_type = get_field_type_by_rvalue(table_name, &rvalue.node);
+    if *field_type != *expected_type {
+        mismatched_types(expected_type, &field_type, rvalue.span, errors);
     }
 }
 
@@ -228,23 +226,26 @@ fn convert_arguments<F, Type>(arguments: &[P<Expr>], table_name: &str, table: &S
     res(items, errors)
 }
 
-/// Get the type of the field if it exists.
-fn get_field_type(table_name: &str, rvalue: &RValue) -> Option<Type> {
-    let tables = singleton();
-    let table = tables.get(table_name);
+/// Get the type of the field if it exists from an `RValue`.
+fn get_field_type_by_rvalue<'a>(table_name: &'a str, rvalue: &RValue) -> &'a Type {
+    // NOTE: At this stage (type analysis), the field exists, hence unwrap().
     match *rvalue {
         RValue::Identifier(ref identifier) => {
-            table
-                .and_then(|table| table.get(identifier))
-                .map(|field_type| field_type.node.clone())
+            get_field_type(table_name, identifier).unwrap()
         },
         RValue::MethodCall(ast::MethodCall { ref method_name, ref object_name, .. }) => {
+            let tables = singleton();
+            let table = tables.get(table_name).unwrap();
             let methods = methods_singleton();
-            table
-                .and_then(|table| table.get(object_name))
-                .and_then(|typ| methods.get(&typ.node))
-                .and_then(|type_methods| type_methods.get(method_name))
-                .map(|method| method.return_type.clone())
+            let typ = table.get(object_name).unwrap();
+            let typ =
+                match typ.node {
+                    Type::Nullable(_) => Cow::Owned(Type::Nullable(box Type::Generic)),
+                    ref typ => Cow::Borrowed(typ),
+                };
+            let type_methods = methods.get(&typ).unwrap();
+            let method = type_methods.get(method_name).unwrap();
+            &method.return_type
         },
     }
 }
@@ -261,7 +262,7 @@ fn get_query_fields(table: &SqlFields, table_name: &str, joins: &[Join], sql_tab
                     if has_joins(&joins, field) {
                         for (field, typ) in foreign_table {
                             match typ.node {
-                                Type::Custom(_) | Type::UnsupportedType(_) => (), // Do not add foreign key recursively.
+                                Type::Custom(_) | Type::UnsupportedType(_) => (), // NOTE: Do not add foreign key recursively.
                                 _ => {
                                     fields.push(table_name.clone() + "." + &field);
                                 },
@@ -269,6 +270,8 @@ fn get_query_fields(table: &SqlFields, table_name: &str, joins: &[Join], sql_tab
                         }
                     }
                 }
+                // TODO: Check if the foreign table exists instead of doing this in the lint plugin
+                // (it is needed here because the related fields need to be included in the query.)
             },
             Type::UnsupportedType(_) => (),
             _ => {
@@ -309,7 +312,7 @@ fn get_type(expression: &Expression) -> &str {
                 LitStr(_, _) => "String",
             }
         }
-        _ => "",
+        _ => panic!("expression needs to be a literal"),
     }
 }
 
@@ -466,7 +469,7 @@ fn process_methods(calls: &[MethodCall], table: &SqlFields, table_name: &str, de
                 });
                 query_type = SqlQueryType::Update;
             },
-            _ => (), // Nothing to do since check_methods() check for unknown method.
+            _ => (), // NOTE: Nothing to do since check_methods() check for unknown method.
         }
     }
     res((filter_expression, joins, limit, order, assignments, typed_fields, aggregates, query_type), errors)

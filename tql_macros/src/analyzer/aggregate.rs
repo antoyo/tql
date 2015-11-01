@@ -23,7 +23,6 @@ pub fn argument_to_aggregate(arg: &Expression, _table_name: &str, _table: &SqlFi
                     aggregate.function = sql_function.clone();
                 }
                 else {
-                    // TODO: afficher des noms similaires.
                     errors.push(Error::new_with_code(
                         format!("unresolved name `{}`", identifier),
                         arg.span,
@@ -33,7 +32,10 @@ pub fn argument_to_aggregate(arg: &Expression, _table_name: &str, _table: &SqlFi
                 }
             }
             else {
-                // TODO
+                errors.push(Error::new(
+                    "Expected identifier".to_owned(), // TODO: améliorer ce message.
+                    arg.span,
+                ));
             }
 
             if arguments.len() == 1 {

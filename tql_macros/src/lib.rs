@@ -5,16 +5,16 @@
 #![feature(box_patterns, box_syntax, convert, plugin, plugin_registrar, quote, rustc_private)]
 #![plugin(clippy)]
 
+// TODO: permetre les opérateurs += et autre pour un update.
 // TODO: changer le courriel de l’auteur avant de mettre sur Github.
 
-// TODO: utiliser unwrap pour faire planter quand l’erreur est dû à un bug.
 // TODO: mieux gérer les ExprPath (vérifier qu’il n’y a qu’un segment).
+// TODO: utiliser tous les segments au lieu de juste segments[0].
 // TODO: paramétriser le type ForeignKey et PrimaryKey pour que la macro puisse choisir de mettre
 // le type en question ou rien (dans le cas où la jointure n’est pas faite) ou empêcher les
 // modifications (dans le cas où l’ID existe).
 // TODO: ajouter une étape entre l’optimisation et la génération de code pour produire une
 // structure qui facilitera la génération du code.
-// TODO: utiliser tous les segments au lieu de juste segments[0].
 // FIXME: unreachable!() fait planter le compilateur.
 // FIXME: remplacer format!() par .to_owned() quand c’est possible.
 // FIXME: enlever les clone() inutiles.
@@ -23,6 +23,7 @@
 // TODO: créer différents types pour String (VARCHAR, CHAR(n), TEXT, …).
 // TODO: rendre les messages d’erreur plus semblables à ceux de Rust.
 // TODO: rendre le moins d’identifiants publiques.
+// TODO: utiliser unwrap pour faire planter quand l’erreur est dû à un bug.
 // TODO: supporter plusieurs SGBDs.
 // TODO: supporter les méthodes sur Nullable<Generic> et Nullable<i32> et autres?
 // TODO: dans les aggrégations, permettre des opérations :
@@ -35,19 +36,8 @@
 // TODO: utiliser une compilation en 2 passes pour détecter les champs utilisés et les jointures
 // utiles (peut-être possible avec un lint plugin).
 // TODO: peut-être utiliser Spanned pour conserver la position dans l’AST.
-// TODO: permetre les opérateurs += et autre pour un update.
 // TODO: supporter les clés primaires composées.
-// TODO: supporter la comparaison avec une clé étrangère :
-// impl postgres::types::ToSql for ForeignTable {
-//    fn to_sql<W: std::io::Write + ?Sized>(&self, ty: &postgres::types::Type, out: &mut W, ctx: &postgres::types::SessionInfo) -> postgres::Result<postgres::types::IsNull> {
-//        try!(out.write(self.id.to_string().as_bytes()));
-//        Ok(postgres::types::IsNull::No)
-//    }
-//
-//    accepts!(postgres::types::Type::Oid);
-//
-//    to_sql_checked!();
-//}
+// TODO: enlever les attributs allow qui ont été ajoutés à cause de bogues dans clippy.
 
 #[macro_use]
 extern crate rustc;
@@ -127,7 +117,7 @@ fn expand_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult +
         }
     }
     else {
-        cx.span_err(sp, "Expected table identifier");
+        cx.span_err(sp, "Expected table identifier"); // TODO: améliorer ce message.
         DummyResult::any(sp)
     }
 }
@@ -148,18 +138,17 @@ fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, _: &MetaItem, item: &Annotatable
                 match field.node {
                     Type::UnsupportedType(ref typ) | Type::Nullable(box Type::UnsupportedType(ref typ)) =>
                         cx.parse_sess.span_diagnostic.span_err_with_code(field.span, &format!("use of unsupported type name `{}`", typ), "E0412"),
-                    _ => (),
+                    _ => (), // NOTE: Other types are supported.
                 }
             }
             sql_tables.insert(table_name, fields);
         }
         else {
-            // TODO
-            cx.span_err(item.span, "Expected struct but found");
+            cx.span_err(item.span, "Expected struct but found"); // TODO: améliorer ce message.
         }
     }
     else {
-        cx.span_err(sp, "Expected struct item");
+        cx.span_err(sp, "Expected struct item"); // TODO: améliorer ce message.
     }
 }
 
@@ -333,26 +322,26 @@ fn get_query_fields(cx: &mut ExtCtxt, sp: Span, table: &SqlFields, sql_tables: &
         match typ.node {
             Type::Custom(ref foreign_table) => {
                 let table_name = foreign_table;
-                if let Some(foreign_table) = sql_tables.get(foreign_table) {
-                    if has_joins(&joins, name) {
-                        let mut foreign_fields = vec![];
-                        for (field, typ) in foreign_table {
-                            match typ.node {
-                                Type::Custom(_) | Type::UnsupportedType(_) => (), // Do not add foreign key recursively.
-                                _ => {
-                                    add_field(&mut foreign_fields, quote_expr!(cx, row.get($index)), field, sp);
-                                    index += 1;
-                                },
-                            }
+                // NOTE: At this stage (code generation), the table exists, hence unwrap().
+                let foreign_table = sql_tables.get(foreign_table).unwrap();
+                if has_joins(&joins, name) {
+                    let mut foreign_fields = vec![];
+                    for (field, typ) in foreign_table {
+                        match typ.node {
+                            Type::Custom(_) | Type::UnsupportedType(_) => (), // Do not add foreign key recursively.
+                            _ => {
+                                add_field(&mut foreign_fields, quote_expr!(cx, row.get($index)), field, sp);
+                                index += 1;
+                            },
                         }
-                        let related_struct = cx.expr_struct(sp, cx.path_ident(sp, str_to_ident(table_name)), foreign_fields);
-                        add_field(&mut fields, quote_expr!(cx, Some($related_struct)), name, sp);
                     }
-                    else {
-                        // Since a `ForeignKey` is an `Option`, we output `None` when the field
-                        // is not `join`ed.
-                        add_field(&mut fields, quote_expr!(cx, None), name, sp);
-                    }
+                    let related_struct = cx.expr_struct(sp, cx.path_ident(sp, str_to_ident(table_name)), foreign_fields);
+                    add_field(&mut fields, quote_expr!(cx, Some($related_struct)), name, sp);
+                }
+                else {
+                    // Since a `ForeignKey` is an `Option`, we output `None` when the field
+                    // is not `join`ed.
+                    add_field(&mut fields, quote_expr!(cx, None), name, sp);
                 }
             },
             Type::UnsupportedType(_) => (),

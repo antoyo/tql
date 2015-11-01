@@ -5,7 +5,7 @@ use syntax::codemap::Spanned;
 
 use ast::{Expression, Join};
 use error::{Error, SqlResult, res};
-use state::{SqlFields, get_primary_key_field, singleton};
+use state::{SqlFields, get_primary_key_field_by_table_name};
 use super::{check_field, no_primary_key};
 use types::Type;
 
@@ -26,8 +26,7 @@ pub fn argument_to_join(arg: &Expression, table_name: &str, table: &SqlFields) -
             match table.get(&identifier) {
                 Some(&Spanned { node: ref field_type, .. }) => {
                     if let &Type::Custom(ref related_table_name) = field_type {
-                        let tables = singleton();
-                        match tables.get(related_table_name).and_then(|table| get_primary_key_field(table)) {
+                        match get_primary_key_field_by_table_name(related_table_name) {
                             Some(primary_key_field) =>
                                 join = Join {
                                     left_field: identifier,

@@ -35,20 +35,27 @@ impl LintPass for SqlAttrError {
 /// Analyze the types of the SQL table struct.
 fn analyze_table_types(fields: &SqlFields, sql_tables: &SqlTables) -> SqlResult<()> {
     let mut errors = vec![];
-    let mut primary_key_count = 0;
+    let mut primary_key_count = 0u32;
+    // NOTE: At this stage (type analysis), at least one field exists, hence unwrap().
+    let mut position = fields.values().next().unwrap().span;
     for field in fields.values() {
         match field.node {
             Type::Custom(ref related_table_name) =>
                 if let None = sql_tables.get(related_table_name) {
                     unknown_table_error(related_table_name, field.span, sql_tables, &mut errors);
                 },
-            Type::Serial => primary_key_count += 1,
+            Type::Serial => {
+                position = field.span;
+                primary_key_count += 1;
+            }
             _ => (),
         }
     }
-    //match primary_key_count {
-        //0 => errors.push(Error.new_warning("No primary key found", )), // TODO
-    //}
+    match primary_key_count {
+        0 => errors.push(Error::new_warning("No primary key found".to_owned(), position)), // TODO: Mettre une meilleur position.
+        1 => (), // One primary key is OK.
+        _ => errors.push(Error::new_warning("More than one primary key is currently not supported".to_owned(), position)),
+    }
     res((), errors)
 }
 
@@ -61,8 +68,17 @@ fn argument_types<'a>(cx: &'a LateContext, arguments: &'a Expr_) -> Vec<Ty<'a>> 
                 if let ExprAddrOf(_, ref field) = element.node {
                     types.push(cx.tcx.node_id_to_type(field.id));
                 }
+                else {
+                    panic!("Argument should be a `&_`");
+                }
             }
         }
+        else {
+            panic!("Arguments should be a `&Vec<_>`");
+        }
+    }
+    else {
+        panic!("Arguments should be a `&Vec<_>`");
     }
     types
 }

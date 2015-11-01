@@ -199,11 +199,11 @@ pub fn query_type(query: &Query) -> QueryType {
             let mut typ = QueryType::SelectMulti;
             if let FilterExpression::Filter(ref filter) = *filter {
                 let tables = singleton();
-                if let Some(table) = tables.get(table) {
-                    if let RValue::Identifier(ref identifier) = filter.operand1 {
-                        if let Some(&Spanned { node: Type::Serial, .. }) = table.get(identifier) {
-                            typ = QueryType::SelectOne;
-                        }
+                // NOTE: At this stage (code generation), the table and the field exist, hence unwrap().
+                let table = tables.get(table).unwrap();
+                if let RValue::Identifier(ref identifier) = filter.operand1 {
+                    if table.get(identifier).unwrap().node == Type::Serial {
+                        typ = QueryType::SelectOne;
                     }
                 }
             }

@@ -1,16 +1,15 @@
 //! Query arguments extractor.
 
 use syntax::ast::Expr_::{ExprLit, ExprPath};
-use syntax::codemap::Spanned;
 use syntax::ext::base::ExtCtxt;
 
 use ast::{Assignment, Expression, FilterExpression, Identifier, Limit, MethodCall, Query, RValue, query_table};
 use plugin::field_access;
-use state::{SqlMethodTypes, get_primary_key_field, methods_singleton, singleton};
+use state::{get_field_type, get_method_types, get_primary_key_field_by_table_name};
 use types::Type;
 
 /// A Rust expression to be send as a parameter to the SQL query function.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Arg {
     pub expression: Expression,
     pub field_name: Option<Identifier>,
@@ -31,11 +30,10 @@ fn add(arguments: &mut Args, field_name: Option<Identifier>, typ: Type, expr: Ex
 
 /// Create arguments from the `assignments` and add them to `arguments`.
 fn add_assignments(assignments: Vec<Assignment>, arguments: &mut Args, table_name: &str) {
-    let tables = singleton();
     for assign in assignments {
-        if let Some(field_type) = tables.get(table_name).and_then(|table| table.get(&assign.identifier)) {
-            add(arguments, Some(assign.identifier), field_type.node.clone(), assign.value, table_name);
-        }
+        // NOTE: At this stage (code generation), the field exists, hence unwrap().
+        let field_type = get_field_type(table_name, &assign.identifier).unwrap();
+        add(arguments, Some(assign.identifier), field_type.clone(), assign.value, table_name);
     }
 }
 
@@ -45,14 +43,15 @@ fn add_expr(arguments: &mut Args, arg: Arg, table_name: &str) {
     match arg.expression.node {
         ExprLit(_) => return, // Do not add literal.
         ExprPath(_, ref path) => {
+            // The argument does not have a field name when it is a method call or a limit
             if let Some(ref field_name) = arg.field_name {
-                let sql_tables = singleton();
-                if let Some(&Spanned { node: Type::Custom(ref related_table_name), .. }) = sql_tables.get(table_name).and_then(|table| table.get(field_name)) {
-                    if let Some(table) = sql_tables.get(related_table_name) {
-                        if let Some(primary_key_field) = get_primary_key_field(table) {
-                            new_arg.expression = field_access(new_arg.expression, path, primary_key_field);
-                        }
-                    }
+                let field_type = get_field_type(table_name, field_name);
+                // If a foreign struct is sent as an argument, rewrite it to get its primary key
+                // field.
+                if let Some(&Type::Custom(ref related_table_name)) = field_type {
+                    // NOTE: At this stage (code generation), the primary key exists, hence unwrap().
+                    let primary_key_field = get_primary_key_field_by_table_name(related_table_name).unwrap();
+                    new_arg.expression = field_access(new_arg.expression, path, primary_key_field);
                 }
             }
         },
@@ -107,28 +106,25 @@ fn add_limit_arguments(cx: &mut ExtCtxt, limit: Limit, arguments: &mut Args, tab
 
 /// Construct an argument from the method and add it to `args`.
 fn add_with_method(args: &mut Args, method_name: &str, object_name: &str, index: usize, expr: Expression, table_name: &str) {
-    let tables = singleton();
-    let methods = methods_singleton();
-    if let Some(field_type) = tables.get(table_name).and_then(|table| table.get(object_name)) {
-        if let Some(&SqlMethodTypes { ref argument_types, .. }) = methods.get(&field_type.node).and_then(|type_methods| type_methods.get(method_name)) {
-            add_expr(args, Arg {
-                expression: expr,
-                field_name: None,
-                typ: argument_types[index].clone(),
-            }, table_name);
-        }
-    }
+    // NOTE: At this stage (code generation), the method exists, hence unwrap().
+    let method_types = get_method_types(table_name, object_name, method_name).unwrap();
+    add_expr(args, Arg {
+        expression: expr,
+        field_name: None,
+        typ: method_types.argument_types[index].clone(),
+    }, table_name);
 }
 
 /// Create arguments from the `rvalue` and add them to `arguments`.
 fn add_rvalue_arguments(rvalue: &RValue, args: &mut Args, table_name: &str, expression: Option<Expression>) {
     match *rvalue {
         RValue::Identifier(ref identifier) => {
+            // It is possible to have an identifier without expression, when the identifier is a
+            // boolean field name, hence this condition.
             if let Some(expr) = expression {
-                let tables = singleton();
-                if let Some(field_type) = tables.get(table_name).and_then(|table| table.get(identifier)) {
-                    add(args, Some(identifier.clone()), field_type.node.clone(), expr, table_name)
-                }
+                // NOTE: At this stage (code generation), the field exists, hence unwrap().
+                let field_type = get_field_type(table_name, identifier).unwrap();
+                add(args, Some(identifier.clone()), field_type.clone(), expr, table_name);
             }
         },
         RValue::MethodCall(MethodCall { ref arguments, ref method_name, ref object_name, .. }) => {

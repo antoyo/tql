@@ -30,14 +30,14 @@ pub fn argument_to_assignment(arg: &Expression, table_name: &str, table: &SqlFie
         }
         else {
             errors.push(Error::new(
-                "Expected identifier".to_owned(),
+                "Expected identifier".to_owned(), // TODO: améliorer ce message.
                 arg.span,
             ));
         }
     }
     else {
         errors.push(Error::new(
-            "Expected assignment".to_owned(),
+            "Expected assignment".to_owned(), // TODO: améliorer ce message.
             arg.span,
         ));
     }
