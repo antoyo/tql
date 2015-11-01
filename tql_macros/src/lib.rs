@@ -7,7 +7,6 @@
 
 // TODO: changer le courriel de l’auteur avant de mettre sur Github.
 
-// TODO: ne pas faire d’erreur pour un type Option<Unsupported> quand il est oublié dans insert().
 // TODO: utiliser unwrap pour faire planter quand l’erreur est dû à un bug.
 // TODO: mieux gérer les ExprPath (vérifier qu’il n’y a qu’un segment).
 // TODO: paramétriser le type ForeignKey et PrimaryKey pour que la macro puisse choisir de mettre
@@ -146,9 +145,10 @@ fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, _: &MetaItem, item: &Annotatable
             let table_name = item.ident.to_string();
             let fields = fields_vec_to_hashmap(struct_def.fields());
             for field in fields.values() {
-                if let Type::UnsupportedType(ref typ) = field.node {
-                    //panic!(format!("{:?}", field.node));
-                    cx.parse_sess.span_diagnostic.span_err_with_code(field.span, &format!("use of unsupported type name `{}`", typ), "E0412");
+                match field.node {
+                    Type::UnsupportedType(ref typ) | Type::Nullable(box Type::UnsupportedType(ref typ)) =>
+                        cx.parse_sess.span_diagnostic.span_err_with_code(field.span, &format!("use of unsupported type name `{}`", typ), "E0412"),
+                    _ => (),
                 }
             }
             sql_tables.insert(table_name, fields);

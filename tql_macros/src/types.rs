@@ -97,18 +97,14 @@ impl<'a> From<&'a Path> for Type {
                     match get_type_parameter_as_path(&segments[0].parameters) {
                         Some(ty) => {
                             let result = From::from(ty);
-                            if let Type::Nullable(_) = result {
-                                Type::UnsupportedType(result.to_string())
-                            }
-                            else {
-                                let result = From::from(ty);
-                                if let Type::UnsupportedType(_) = result {
-                                    result
+                            let typ =
+                                if let Type::Nullable(_) = result {
+                                    Type::UnsupportedType(result.to_string())
                                 }
                                 else {
-                                    Type::Nullable(box result)
-                                }
-                            }
+                                    From::from(ty)
+                                };
+                            Type::Nullable(box typ)
                         },
                         None => unsupported, // TODO
                     },
