@@ -8,6 +8,7 @@ use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloa
 use ast::{Aggregate, Assignment, Expression, FieldList, Filter, Filters, FilterExpression, Identifier, Join, Limit, LogicalOperator, MethodCall, Order, RelationalOperator, RValue, Query, TypedField};
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use sql::escape;
+use state::{get_primary_key_field, singleton};
 
 /// A generic trait for converting a value to SQL.
 pub trait ToSql {
@@ -199,7 +200,13 @@ impl ToSql for Query {
             Query::Insert { ref assignments, ref table } => {
                 let fields: Vec<_> = assignments.iter().map(|assign| assign.identifier.clone()).collect();
                 let values: Vec<_> = assignments.iter().map(|assign| assign.value.clone()).collect();
-                replace_placeholder(format!("INSERT INTO {}({}) VALUES({})", table, fields.to_sql(), values.to_sql()))
+                let tables = singleton();
+                let return_value =
+                    match get_primary_key_field(tables.get(table).unwrap()) {
+                        Some(ref primary_key) => " RETURNING ".to_owned() + primary_key,
+                        None => "".to_owned(), // TODO: que faire quand il n’y a pas de clé primaire?
+                    };
+                replace_placeholder(format!("INSERT INTO {}({}) VALUES({}){}", table, fields.to_sql(), values.to_sql(), return_value))
             },
             Query::Select{ref fields, ref filter, ref joins, ref limit, ref order, ref table} => {
                 let where_clause = filter_to_where_clause(filter);

@@ -281,14 +281,13 @@ fn main() {
     let new_age = 42i32;
     let _ = sql!(Person.filter(id == 1).update(name = "value1", age = new_age));
 
-    let num_inserted = match sql!(Person.insert(name = "Me", age = 91, address = address, birthdate = date, weight = 142)) {
-        Ok(number) => number,
-        Err(error) => {
-            println!("Error: {}", error);
-            0
+    let id_inserted = match sql!(Person.insert(name = "Me", age = 91, address = address, birthdate = date, weight = 142)) {
+        Some(id) => id,
+        None => {
+            -1
         },
     };
-    println!("{} inserted entries", num_inserted);
+    println!("Inserted with ID {}", id_inserted);
 
     let weight = 152;
     let _ = sql!(Person.insert(name = "Me", age = 91, address = address, birthdate = date, weight = weight));

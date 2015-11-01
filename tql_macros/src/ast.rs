@@ -163,6 +163,7 @@ pub enum Query {
 pub enum QueryType {
     AggregateOne,
     Exec,
+    InsertOne,
     SelectOne,
     SelectMulti,
 }
@@ -193,6 +194,7 @@ pub fn query_table(query: &Query) -> Identifier {
 pub fn query_type(query: &Query) -> QueryType {
     match *query {
         Query::Aggregate { .. } => QueryType::AggregateOne,
+        Query::Insert { .. } => QueryType::InsertOne,
         Query::Select { ref filter, ref limit, ref table, .. } => {
             let mut typ = QueryType::SelectMulti;
             if let FilterExpression::Filter(ref filter) = *filter {
@@ -210,6 +212,6 @@ pub fn query_type(query: &Query) -> QueryType {
             }
             typ
         },
-        Query::CreateTable { .. } | Query::Delete { .. } | Query::Drop { .. } | Query::Insert { .. } | Query::Update { .. } => QueryType::Exec,
+        Query::CreateTable { .. } | Query::Delete { .. } | Query::Drop { .. } | Query::Update { .. } => QueryType::Exec,
     }
 }

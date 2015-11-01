@@ -7,13 +7,7 @@
 
 // TODO: changer le courriel de l’auteur avant de mettre sur Github.
 
-// TODO: supporter les méthodes sur Nullable<Generic> et Nullable<i32> et autres?
 // TODO: ne pas faire d’erreur pour un type Option<Unsupported> quand il est oublié dans insert().
-// TODO: retourner l’élément inséré par l’appel à la méthode insert().
-// TODO: dans les aggrégations, permettre des opérations :
-// Table.aggregate(avg(field2 / field1))
-// TODO: dans les aggrégations, permettre de nommer le résultat :
-// Table.aggregate(average = avg(field2))
 // TODO: utiliser unwrap pour faire planter quand l’erreur est dû à un bug.
 // TODO: mieux gérer les ExprPath (vérifier qu’il n’y a qu’un segment).
 // TODO: paramétriser le type ForeignKey et PrimaryKey pour que la macro puisse choisir de mettre
@@ -31,6 +25,11 @@
 // TODO: rendre les messages d’erreur plus semblables à ceux de Rust.
 // TODO: rendre le moins d’identifiants publiques.
 // TODO: supporter plusieurs SGBDs.
+// TODO: supporter les méthodes sur Nullable<Generic> et Nullable<i32> et autres?
+// TODO: dans les aggrégations, permettre des opérations :
+// Table.aggregate(avg(field2 / field1))
+// TODO: dans les aggrégations, permettre de nommer le résultat :
+// Table.aggregate(average = avg(field2))
 // TODO: faire des benchmarks.
 // TODO: créer une macro qui permet de choisir le SGBD. Donner un paramètre optionel à cette macro
 // pour choisir le nom de la macro à créer (pour permettre d’utiliser plusieurs SGBDs à la fois).
@@ -250,6 +249,16 @@ fn gen_query_expr(cx: &mut ExtCtxt, ident: Ident, sql_query: Expression, args_ex
                 result.query(&$args_expr).unwrap().iter().next().map(|row| {
                     $aggregate_struct
                 })
+            })
+        },
+        QueryType::InsertOne => {
+            quote_expr!(cx, {
+                let result = $ident.prepare($sql_query).unwrap();
+                let count: Option<i32> =
+                    result.query(&$args_expr).unwrap().iter().next().map(|row| {
+                        row.get(0)
+                    });
+                count
             })
         },
         QueryType::SelectMulti => {
