@@ -58,7 +58,7 @@ impl Display for Type {
             Type::NaiveDate => "chrono::naive::datetime::NaiveDate".to_owned(),
             Type::NaiveDateTime => "chrono::naive::datetime::NaiveDateTime".to_owned(),
             Type::NaiveTime => "chrono::naive::datetime::NaiveTime".to_owned(),
-            Type::Nullable(ref typ) => typ.to_string(),
+            Type::Nullable(ref typ) => "Option<".to_owned() + &typ.to_string() + ">",
             Type::Serial => "i32".to_owned(),
             Type::String => "String".to_owned(),
             Type::UnsupportedType(_) => "".to_owned(),
@@ -93,18 +93,25 @@ impl<'a> From<&'a Path> for Type {
                 "NaiveDate" => Type::NaiveDate,
                 "NaiveDateTime" => Type::NaiveDateTime,
                 "NaiveTime" => Type::NaiveTime,
-                "Option" => match get_type_parameter_as_path(&segments[0].parameters) {
-                    Some(ty) => {
-                        let result = From::from(ty);
-                        if let Type::UnsupportedType(_) = result {
-                            result
-                        }
-                        else {
-                            Type::Nullable(box result)
-                        }
+                "Option" =>
+                    match get_type_parameter_as_path(&segments[0].parameters) {
+                        Some(ty) => {
+                            let result = From::from(ty);
+                            if let Type::Nullable(_) = result {
+                                Type::UnsupportedType(result.to_string())
+                            }
+                            else {
+                                let result = From::from(ty);
+                                if let Type::UnsupportedType(_) = result {
+                                    result
+                                }
+                                else {
+                                    Type::Nullable(box result)
+                                }
+                            }
+                        },
+                        None => unsupported, // TODO
                     },
-                    None => unsupported, // TODO
-                },
                 "PrimaryKey" => {
                     Type::Serial
                 },

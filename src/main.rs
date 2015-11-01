@@ -27,6 +27,7 @@ struct Person {
     //birthdate: NaiveTime,
     address: ForeignKey<Address>,
     weight: Option<i32>,
+    //w: Option<Option<String>>,
 }
 
 #[SqlTable]

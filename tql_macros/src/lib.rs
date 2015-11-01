@@ -8,12 +8,13 @@
 // TODO: changer le courriel de l’auteur avant de mettre sur Github.
 
 // TODO: supporter les méthodes sur Nullable<Generic> et Nullable<i32> et autres?
-// TODO: erreur pour les types Option<Option<_>>.
 // TODO: ne pas faire d’erreur pour un type Option<Unsupported> quand il est oublié dans insert().
 // TODO: avertissement pour un delete() sans filtre.
 // TODO: retourner l’élément inséré par l’appel à la méthode insert().
 // TODO: dans les aggrégations, permettre des opérations :
 // Table.aggregate(avg(field2 / field1))
+// TODO: dans les aggrégations, permettre de nommer le résultat :
+// Table.aggregate(average = avg(field2))
 // TODO: utiliser unwrap pour faire planter quand l’erreur est dû à un bug.
 // TODO: mieux gérer les ExprPath (vérifier qu’il n’y a qu’un segment).
 // TODO: paramétriser le type ForeignKey et PrimaryKey pour que la macro puisse choisir de mettre
