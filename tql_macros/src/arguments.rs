@@ -51,7 +51,7 @@ fn add_expr(arguments: &mut Args, arg: Arg, table_name: &str) {
                 if let Some(&Type::Custom(ref related_table_name)) = field_type {
                     // NOTE: At this stage (code generation), the primary key exists, hence unwrap().
                     let primary_key_field = get_primary_key_field_by_table_name(related_table_name).unwrap();
-                    new_arg.expression = field_access(new_arg.expression, path, primary_key_field);
+                    new_arg.expression = field_access(new_arg.expression, path, arg.expression.span, primary_key_field);
                 }
             }
         },

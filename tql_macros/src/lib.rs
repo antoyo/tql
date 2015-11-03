@@ -48,7 +48,7 @@ use rustc::plugin::Registry;
 use syntax::ast::{AngleBracketedParameters, AngleBracketedParameterData, Block, Field, Ident, MetaItem, Path, PathSegment, StructField_, StructFieldKind, TokenTree, Ty, Ty_, VariantData, Visibility};
 use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Item_::ItemStruct;
-use syntax::codemap::{DUMMY_SP, BytePos, Span, Spanned};
+use syntax::codemap::{BytePos, Span, Spanned};
 use syntax::ext::base::{Annotatable, DummyResult, ExtCtxt, MacEager, MacResult};
 use syntax::ext::base::SyntaxExtension::MultiDecorator;
 use syntax::ext::build::AstBuilder;
@@ -300,7 +300,7 @@ fn get_query_arguments(cx: &mut ExtCtxt, sp: Span, table_name: String, arguments
             // Do not add literal arguments as they are in the final string literal.
             ExprLit(_) => (),
             _ => {
-                arg_refs.push(cx.expr_addr_of(DUMMY_SP, arg.expression));
+                arg_refs.push(cx.expr_addr_of(sp, arg.expression));
             },
         }
     }
@@ -311,7 +311,7 @@ fn get_query_arguments(cx: &mut ExtCtxt, sp: Span, table_name: String, arguments
         table_name: table_name.to_owned(),
     });
 
-    cx.expr_vec(DUMMY_SP, arg_refs)
+    cx.expr_vec(sp, arg_refs)
 }
 
 /// Get the fully qualified field names for the struct expression needed by the generated code.
