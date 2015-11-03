@@ -404,9 +404,16 @@ fn main() {
     let new_address = sql!(Address.get(address_id)).unwrap();
     let _ = sql!(Person.insert(name = "Test", age = 18, address = new_address, birthdate = date, weight = weight));
 
-    //if let Some(aggregate1) = sql!(Person.values(address).aggregate(avg(age))) {
-        //println!("Average age: {}", aggregate1.age_avg);
-    //}
+    if let Some(aggregate1) = sql!(Person.aggregate(avg(age))) {
+        println!("Average age: {}", aggregate1.age_avg);
+    }
+
+    println!(to_sql!(Person.values(address).aggregate(avg(age))));
+    let aggregates = sql!(Person.values(address).aggregate(avg(age)));
+
+    for aggr in aggregates {
+        println!("Average age: {}", aggr.age_avg);
+    }
 
    //sql!(Person.delete());
 

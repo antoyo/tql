@@ -183,9 +183,16 @@ impl ToSql for RValue {
 impl ToSql for Query {
     fn to_sql(&self) -> String {
         match *self {
-            Query::Aggregate{ref aggregates, ref filter, ref joins, ref table} => {
+            Query::Aggregate{ref aggregates, ref filter, ref groups, ref joins, ref table} => {
                 let where_clause = filter_to_where_clause(filter);
-                replace_placeholder(format!("SELECT {} FROM {}{}{}{}", aggregates.to_sql(), table, joins.to_sql(), where_clause, filter.to_sql()))
+                let group_clause =
+                    if !groups.is_empty() {
+                        " GROUP BY "
+                    }
+                    else {
+                        ""
+                    };
+                replace_placeholder(format!("SELECT {} FROM {}{}{}{}{}{}", aggregates.to_sql(), table, joins.to_sql(), where_clause, filter.to_sql(), group_clause, groups.to_sql()))
             },
             Query::CreateTable { ref fields, ref table } => {
                 format!("CREATE TABLE {} ({})", table, fields.to_sql())

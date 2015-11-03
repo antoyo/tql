@@ -30,6 +30,7 @@
 // Table.aggregate(avg(field2 / field1))
 // TODO: dans les aggrégations, permettre de nommer le résultat :
 // Table.aggregate(average = avg(field2))
+// TODO: dans les aggrégations, permettre de sélectionner d’autres champs.
 // TODO: faire des benchmarks.
 // TODO: créer une macro qui permet de choisir le SGBD. Donner un paramètre optionel à cette macro
 // pour choisir le nom de la macro à créer (pour permettre d’utiliser plusieurs SGBDs à la fois).
@@ -232,6 +233,15 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
 /// Generate the Rust code using the `postgres` library depending on the `QueryType`.
 fn gen_query_expr(cx: &mut ExtCtxt, ident: Ident, sql_query: Expression, args_expr: Expression, struct_expr: Expression, aggregate_struct: P<Block>, query_type: QueryType) -> Expression {
     match query_type {
+        QueryType::AggregateMulti => {
+            quote_expr!(cx, {
+                let result = $ident.prepare($sql_query).unwrap();
+                // TODO: retourner un itérateur au lieu d’un vecteur.
+                result.query(&$args_expr).unwrap().iter().map(|row| {
+                    $aggregate_struct
+                }).collect::<Vec<_>>()
+            })
+        },
         QueryType::AggregateOne => {
             quote_expr!(cx, {
                 let result = $ident.prepare($sql_query).unwrap();

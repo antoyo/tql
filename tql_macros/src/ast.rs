@@ -9,6 +9,7 @@ use types::Type;
 
 pub type Expression = P<Expr>;
 pub type FieldList = Vec<Identifier>;
+pub type Groups = Vec<Identifier>;
 pub type Identifier = String;
 
 /// `Aggregate` for une in SQL Aggregate `Query`.
@@ -126,6 +127,7 @@ pub enum Query {
     Aggregate {
         aggregates: Vec<Aggregate>,
         filter: FilterExpression,
+        groups: Groups,
         joins: Vec<Join>,
         table: Identifier,
     },
@@ -161,11 +163,12 @@ pub enum Query {
 
 /// The type of the query.
 pub enum QueryType {
+    AggregateMulti,
     AggregateOne,
     Exec,
     InsertOne,
-    SelectOne,
     SelectMulti,
+    SelectOne,
 }
 
 /// An SQL field with its type.
@@ -193,7 +196,14 @@ pub fn query_table(query: &Query) -> Identifier {
 /// Get the query type.
 pub fn query_type(query: &Query) -> QueryType {
     match *query {
-        Query::Aggregate { .. } => QueryType::AggregateOne,
+        Query::Aggregate { ref groups, .. } => {
+            if !groups.is_empty() {
+                QueryType::AggregateMulti
+            }
+            else {
+                QueryType::AggregateOne
+            }
+        },
         Query::Insert { .. } => QueryType::InsertOne,
         Query::Select { ref filter, ref limit, ref table, .. } => {
             let mut typ = QueryType::SelectMulti;

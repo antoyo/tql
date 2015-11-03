@@ -2,9 +2,9 @@
 
 use syntax::ast::{ExprCall, ExprPath};
 
-use ast::{Aggregate, Expression};
+use ast::{Aggregate, Expression, Identifier};
 use error::{Error, SqlResult, res};
-use super::propose_similar_name;
+use super::{check_field, propose_similar_name};
 use state::{SqlFields, aggregates_singleton};
 
 /// Convert an `Expression` to an `Aggregate`.
@@ -61,4 +61,24 @@ pub fn argument_to_aggregate(arg: &Expression, _table_name: &str, _table: &SqlFi
     }
 
     res(aggregate, errors)
+}
+
+/// Convert an `Expression` to a group `Identifier`.
+pub fn argument_to_group(arg: &Expression, table_name: &str, table: &SqlFields) -> SqlResult<Identifier> {
+    let mut errors = vec![];
+    let mut group = "".to_owned();
+
+    if let ExprPath(_, ref path) = arg.node {
+        let identifier = path.segments[0].identifier.to_string();
+        check_field(&identifier, arg.span, table_name, table, &mut errors);
+        group = identifier;
+    }
+    else {
+        errors.push(Error::new(
+            "Expected identifier".to_owned(), // TODO: améliorer ce message.
+            arg.span,
+        ));
+    }
+
+    res(group, errors)
 }

@@ -22,11 +22,11 @@ mod join;
 mod limit;
 mod sort;
 
-use ast::{self, Aggregate, Assignment, Expression, FilterExpression, Identifier, Join, Limit, Order, RValue, Query, TypedField};
+use ast::{self, Aggregate, Assignment, Expression, FilterExpression, Groups, Identifier, Join, Limit, Order, RValue, Query, TypedField};
 use error::{Error, SqlResult, res};
 use gen::ToSql;
 use parser::{MethodCall, MethodCalls};
-use self::aggregate::argument_to_aggregate;
+use self::aggregate::{argument_to_aggregate, argument_to_group};
 use self::assignment::{analyze_assignments_types, argument_to_assignment};
 use self::filter::{analyze_filter_types, expression_to_filter_expression};
 use self::get::get_expression_to_filter_expression;
@@ -50,7 +50,7 @@ enum SqlQueryType {
 }
 
 /// The query data gathered during the analyze.
-type QueryData = (FilterExpression, Vec<Join>, Limit, Vec<Order>, Vec<Assignment>, Vec<TypedField>, Vec<Aggregate>, SqlQueryType);
+type QueryData = (FilterExpression, Vec<Join>, Limit, Vec<Order>, Vec<Assignment>, Vec<TypedField>, Vec<Aggregate>, Groups, SqlQueryType);
 
 /// Analyze and transform the AST.
 pub fn analyze(method_calls: MethodCalls, sql_tables: &SqlTables) -> SqlResult<Query> {
@@ -68,19 +68,19 @@ pub fn analyze(method_calls: MethodCalls, sql_tables: &SqlTables) -> SqlResult<Q
     let calls = &method_calls.calls;
     let mut delete_position = None;
 
-    let (fields, filter_expression, joins, limit, order, assignments, typed_fields, aggregates, query_type) =
+    let (fields, filter_expression, joins, limit, order, assignments, typed_fields, aggregates, groups, query_type) =
         match table {
             Some(table) => {
-                let (filter_expression, joins, limit, order, assignments, typed_fields, aggregates, query_type) =
+                let (filter_expression, joins, limit, order, assignments, typed_fields, aggregates, groups, query_type) =
                     try!(process_methods(&calls, table, &table_name, &mut delete_position));
                 let fields = get_query_fields(table, &table_name, &joins, sql_tables);
-                (fields, filter_expression, joins, limit, order, assignments, typed_fields, aggregates, query_type)
+                (fields, filter_expression, joins, limit, order, assignments, typed_fields, aggregates, groups, query_type)
 
             },
-            None => (vec![], FilterExpression::NoFilters, vec![], Limit::NoLimit, vec![], vec![], vec![], vec![], SqlQueryType::Select),
+            None => (vec![], FilterExpression::NoFilters, vec![], Limit::NoLimit, vec![], vec![], vec![], vec![], vec![], SqlQueryType::Select),
         };
 
-    let query = new_query(fields, filter_expression, joins, limit, order, assignments, typed_fields, aggregates, query_type, table_name);
+    let query = new_query(fields, filter_expression, joins, limit, order, assignments, typed_fields, aggregates, groups, query_type, table_name);
 
     check_delete(&query, delete_position, &mut errors);
 
@@ -159,6 +159,7 @@ fn check_methods(method_calls: &MethodCalls, errors: &mut Vec<Error>) {
         "limit".to_owned(),
         "sort".to_owned(),
         "update".to_owned(),
+        "values".to_owned(),
     ];
     for method_call in &method_calls.calls {
         if !methods.contains(&method_call.name) {
@@ -337,12 +338,13 @@ fn mismatched_types<S: Display, T: Display>(expected_type: S, actual_type: &T, p
 }
 
 /// Create a new query from all the data gathered by the method calls.
-fn new_query(fields: Vec<Identifier>, filter_expression: FilterExpression, joins: Vec<Join>, limit: Limit, order: Vec<Order>, assignments: Vec<Assignment>, typed_fields: Vec<TypedField>, aggregates: Vec<Aggregate>, query_type: SqlQueryType, table_name: String) -> Query {
+fn new_query(fields: Vec<Identifier>, filter_expression: FilterExpression, joins: Vec<Join>, limit: Limit, order: Vec<Order>, assignments: Vec<Assignment>, typed_fields: Vec<TypedField>, aggregates: Vec<Aggregate>, groups: Groups, query_type: SqlQueryType, table_name: String) -> Query {
     match query_type {
         SqlQueryType::Aggregate =>
             Query::Aggregate {
                 aggregates: aggregates,
                 filter: filter_expression,
+                groups: groups,
                 joins: joins,
                 table: table_name,
             },
@@ -399,6 +401,7 @@ fn process_methods(calls: &[MethodCall], table: &SqlFields, table_name: &str, de
     let mut query_type = SqlQueryType::Select;
     let mut typed_fields = vec![];
     let mut aggregates = vec![];
+    let mut groups = vec![];
     for method_call in calls {
         match &method_call.name[..] {
             "aggregate" => {
@@ -469,10 +472,15 @@ fn process_methods(calls: &[MethodCall], table: &SqlFields, table_name: &str, de
                 });
                 query_type = SqlQueryType::Update;
             },
+            "values" => {
+                try(convert_arguments(&method_call.arguments, &table_name, table, argument_to_group), &mut errors, |new_groups| {
+                    groups = new_groups;
+                });
+            },
             _ => (), // NOTE: Nothing to do since check_methods() check for unknown method.
         }
     }
-    res((filter_expression, joins, limit, order, assignments, typed_fields, aggregates, query_type), errors)
+    res((filter_expression, joins, limit, order, assignments, typed_fields, aggregates, groups, query_type), errors)
 }
 
 /// Check if a name similar to `identifier` exists in `choices` and show a message if one exists.
