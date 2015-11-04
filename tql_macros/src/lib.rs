@@ -4,9 +4,10 @@
 
 #![feature(box_patterns, box_syntax, convert, plugin, plugin_registrar, quote, rustc_private)]
 #![plugin(clippy)]
+#![allow(ptr_arg)]
 
 // TODO: permetre les opérateurs += et autre pour un update.
-// TODO: changer le courriel de l’auteur avant de mettre sur Github.
+// TODO: changer le courriel de l’auteur avant de mettre sur TuxFamily.
 
 // TODO: mieux gérer les ExprPath (vérifier qu’il n’y a qu’un segment).
 // TODO: utiliser tous les segments au lieu de juste segments[0].
@@ -15,7 +16,6 @@
 // modifications (dans le cas où l’ID existe).
 // TODO: ajouter une étape entre l’optimisation et la génération de code pour produire une
 // structure qui facilitera la génération du code.
-// FIXME: unreachable!() fait planter le compilateur.
 // FIXME: remplacer format!() par .to_owned() quand c’est possible.
 // FIXME: enlever les clone() inutiles.
 // FIXME: utiliser des fermetures à la place de fonctions internes.
@@ -23,7 +23,7 @@
 // TODO: créer différents types pour String (VARCHAR, CHAR(n), TEXT, …).
 // TODO: rendre les messages d’erreur plus semblables à ceux de Rust.
 // TODO: rendre le moins d’identifiants publiques.
-// TODO: utiliser unwrap pour faire planter quand l’erreur est dû à un bug.
+// TODO: utiliser unwrap() et unreachable!() pour faire planter quand l’erreur est dû à un bug.
 // TODO: supporter plusieurs SGBDs.
 // TODO: supporter les méthodes sur Nullable<Generic> et Nullable<i32> et autres?
 // TODO: dans les aggrégations, permettre des opérations :
@@ -84,7 +84,7 @@ use gen::ToSql;
 use optimizer::optimize;
 use parser::parse;
 use plugin::NODE_ID;
-use state::{SqlArg, SqlArgs, SqlFields, SqlTables, lint_singleton, singleton};
+use state::{SqlArg, SqlArgs, SqlFields, SqlTables, get_primary_key_field_by_table_name, lint_singleton, singleton};
 use type_analyzer::{SqlAttrError, SqlError};
 use types::Type;
 
@@ -123,16 +123,14 @@ fn expand_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult +
     }
 }
 
-/// Expand the `#[sql_table]` attribute.
+/// Expand the `#[SqlTable]` attribute.
 /// This attribute must be used on structs to tell tql that it represents an SQL table.
-fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, _: &MetaItem, item: &Annotatable, _: &mut FnMut(Annotatable)) {
+fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, _: &MetaItem, item: &Annotatable, push: &mut FnMut(Annotatable)) {
     // Add to sql_tables.
     let mut sql_tables = singleton();
 
     if let &Annotatable::Item(ref item) = item {
         if let ItemStruct(ref struct_def, _) = item.node {
-            // TODO: vérifier le type des champs de la structure.
-            // Pour ForeignKey, vérifier que le type T est une table existante.
             let table_name = item.ident.to_string();
             let fields = fields_vec_to_hashmap(struct_def.fields());
             for field in fields.values() {
@@ -142,7 +140,40 @@ fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, _: &MetaItem, item: &Annotatable
                     _ => (), // NOTE: Other types are supported.
                 }
             }
-            sql_tables.insert(table_name, fields);
+
+            sql_tables.insert(table_name.clone(), fields);
+
+            // Add the postgres::types::ToSql implementation for the struct.
+            // Its SQL representation is the same as the primary key SQL representation.
+            match get_primary_key_field_by_table_name(&table_name) {
+                Some(primary_key_field) => {
+                    let table_ident = str_to_ident(&table_name);
+                    let primary_key_ident = str_to_ident(&primary_key_field);
+                    let implementation = quote_item!(cx,
+                        impl postgres::types::ToSql for $table_ident {
+                            fn to_sql<W: std::io::Write + ?Sized>(&self, ty: &postgres::types::Type, out: &mut W, ctx: &postgres::types::SessionInfo) -> postgres::Result<postgres::types::IsNull> {
+                                self.$primary_key_ident.to_sql(ty, out, ctx)
+                            }
+
+                            fn accepts(ty: &postgres::types::Type) -> bool {
+                                match *ty {
+                                    postgres::types::Type::Int4 => true,
+                                    _ => false,
+                                }
+                            }
+
+                            fn to_sql_checked(&self, ty: &postgres::types::Type, out: &mut ::std::io::Write, ctx: &postgres::types::SessionInfo) -> postgres::Result<postgres::types::IsNull> {
+                                if !<Self as postgres::types::ToSql>::accepts(ty) {
+                                    return Err(postgres::error::Error::WrongType(ty.clone()));
+                                }
+                                self.to_sql(ty, out, ctx)
+                            }
+                        }
+                    );
+                    push(Annotatable::Item(implementation.unwrap()));
+                },
+                None => (), // NOTE: Do not add the implementation when there is no primary key.
+            }
         }
         else {
             cx.span_err(item.span, "Expected struct but found"); // TODO: améliorer ce message.

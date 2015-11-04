@@ -126,6 +126,7 @@ impl<'a> From<&'a Path> for Type {
 impl PartialEq<Expression> for Type {
     /// Check if an literal `expression` is equal to a `Type`.
     fn eq(&self, expression: &Expression) -> bool {
+        // If the field type is `Nullable`, `expected_type` needs not to be an `Option`.
         let typ =
             match *self {
                 Type::Nullable(box ref typ) => typ,
@@ -168,6 +169,7 @@ impl PartialEq<Expression> for Type {
 impl<'tcx> PartialEq<TyS<'tcx>> for Type {
     /// Compare the `expected_type` with `Type`.
     fn eq(&self, expected_type: &TyS<'tcx>) -> bool {
+        // If the field type is `Nullable`, `expected_type` needs not to be an `Option`.
         let typ =
             match *self {
                 Type::Nullable(box ref typ) => typ,
@@ -176,7 +178,7 @@ impl<'tcx> PartialEq<TyS<'tcx>> for Type {
         match expected_type.sty {
             TypeVariants::TyInt(IntTy::TyI32) => {
                 match *typ {
-                    Type::I32 | Type::Serial | Type::Custom(_) => true,
+                    Type::I32 | Type::Serial => true,
                     _ => false,
                 }
             },
@@ -214,7 +216,7 @@ impl<'tcx> PartialEq<TyS<'tcx>> for Type {
                     "NaiveDate" => *typ == Type::NaiveDate,
                     "NaiveDateTime" => *typ == Type::NaiveDateTime,
                     "NaiveTime" => *typ == Type::NaiveTime,
-                    _ => false,
+                    struct_type => *typ == Type::Custom(struct_type.to_owned()),
                 }
             },
             _ => false,

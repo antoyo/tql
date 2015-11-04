@@ -1,11 +1,10 @@
 //! Query arguments extractor.
 
-use syntax::ast::Expr_::{ExprLit, ExprPath};
+use syntax::ast::Expr_::ExprLit;
 use syntax::ext::base::ExtCtxt;
 
 use ast::{Assignment, Expression, FilterExpression, Identifier, Limit, MethodCall, Query, RValue, query_table};
-use plugin::field_access;
-use state::{get_field_type, get_method_types, get_primary_key_field_by_table_name};
+use state::{get_field_type, get_method_types};
 use types::Type;
 
 /// A Rust expression to be send as a parameter to the SQL query function.
@@ -20,12 +19,12 @@ pub struct Arg {
 pub type Args = Vec<Arg>;
 
 /// Create an argument from the parameters and add it to `arguments`.
-fn add(arguments: &mut Args, field_name: Option<Identifier>, typ: Type, expr: Expression, table_name: &str) {
+fn add(arguments: &mut Args, field_name: Option<Identifier>, typ: Type, expr: Expression) {
     add_expr(arguments, Arg {
         expression: expr,
         field_name: field_name,
         typ: typ,
-    }, table_name);
+    });
 }
 
 /// Create arguments from the `assignments` and add them to `arguments`.
@@ -33,31 +32,17 @@ fn add_assignments(assignments: Vec<Assignment>, arguments: &mut Args, table_nam
     for assign in assignments {
         // NOTE: At this stage (code generation), the field exists, hence unwrap().
         let field_type = get_field_type(table_name, &assign.identifier).unwrap();
-        add(arguments, Some(assign.identifier), field_type.clone(), assign.value, table_name);
+        add(arguments, Some(assign.identifier), field_type.clone(), assign.value);
     }
 }
 
 /// Add an argument to `arguments`.
-fn add_expr(arguments: &mut Args, arg: Arg, table_name: &str) {
-    let mut new_arg = arg.clone();
-    match arg.expression.node {
-        ExprLit(_) => return, // Do not add literal.
-        ExprPath(_, ref path) => {
-            // The argument does not have a field name when it is a method call or a limit
-            if let Some(ref field_name) = arg.field_name {
-                let field_type = get_field_type(table_name, field_name);
-                // If a foreign struct is sent as an argument, rewrite it to get its primary key
-                // field.
-                if let Some(&Type::Custom(ref related_table_name)) = field_type {
-                    // NOTE: At this stage (code generation), the primary key exists, hence unwrap().
-                    let primary_key_field = get_primary_key_field_by_table_name(related_table_name).unwrap();
-                    new_arg.expression = field_access(new_arg.expression, path, arg.expression.span, primary_key_field);
-                }
-            }
-        },
-        _ => (),
+fn add_expr(arguments: &mut Args, arg: Arg) {
+    // Do not add literal.
+    if let ExprLit(_) = arg.expression.node {
+        return;
     }
-    arguments.push(new_arg);
+    arguments.push(arg);
 }
 
 /// Create arguments from the `filter` and add them to `arguments`.
@@ -84,23 +69,23 @@ fn add_filter_arguments(filter: FilterExpression, args: &mut Args, table_name: &
 }
 
 /// Create arguments from the `limit` and add them to `arguments`.
-fn add_limit_arguments(cx: &mut ExtCtxt, limit: Limit, arguments: &mut Args, table_name: &str) {
+fn add_limit_arguments(cx: &mut ExtCtxt, limit: Limit, arguments: &mut Args) {
     match limit {
-        Limit::EndRange(expression) => add(arguments, None, Type::I64, expression, table_name),
-        Limit::Index(expression) => add(arguments, None, Type::I64, expression, table_name),
+        Limit::EndRange(expression) => add(arguments, None, Type::I64, expression),
+        Limit::Index(expression) => add(arguments, None, Type::I64, expression),
         Limit::LimitOffset(_, _) => (),
         Limit::NoLimit => (),
         Limit::Range(expression1, expression2) => {
             let offset = expression1.clone();
-            add(arguments, None, Type::I64, expression1, table_name);
+            add(arguments, None, Type::I64, expression1);
             let expr2 = expression2;
             add_expr(arguments, Arg {
                 expression: quote_expr!(cx, $expr2 - $offset),
                 field_name: None,
                 typ: Type::I64,
-            }, table_name);
+            });
         },
-        Limit::StartRange(expression) => add(arguments, None, Type::I64, expression, table_name),
+        Limit::StartRange(expression) => add(arguments, None, Type::I64, expression),
     }
 }
 
@@ -112,7 +97,7 @@ fn add_with_method(args: &mut Args, method_name: &str, object_name: &str, index:
         expression: expr,
         field_name: None,
         typ: method_types.argument_types[index].clone(),
-    }, table_name);
+    });
 }
 
 /// Create arguments from the `rvalue` and add them to `arguments`.
@@ -124,7 +109,7 @@ fn add_rvalue_arguments(rvalue: &RValue, args: &mut Args, table_name: &str, expr
             if let Some(expr) = expression {
                 // NOTE: At this stage (code generation), the field exists, hence unwrap().
                 let field_type = get_field_type(table_name, identifier).unwrap();
-                add(args, Some(identifier.clone()), field_type.clone(), expr, table_name);
+                add(args, Some(identifier.clone()), field_type.clone(), expr);
             }
         },
         RValue::MethodCall(MethodCall { ref arguments, ref method_name, ref object_name, .. }) => {
@@ -152,7 +137,7 @@ pub fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
         },
         Query::Select { filter, limit, ..} => {
             add_filter_arguments(filter, &mut arguments, &table_name);
-            add_limit_arguments(cx, limit, &mut arguments, &table_name);
+            add_limit_arguments(cx, limit, &mut arguments);
         },
         Query::Update { assignments, filter, .. } => {
             add_filter_arguments(filter, &mut arguments, &table_name);
