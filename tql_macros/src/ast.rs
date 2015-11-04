@@ -17,6 +17,7 @@ pub type Identifier = String;
 pub struct Aggregate {
     pub field: Identifier,
     pub function: Identifier,
+    pub result_name: Identifier,
 }
 
 /// `Assignment` for use in SQL Update `Query`.

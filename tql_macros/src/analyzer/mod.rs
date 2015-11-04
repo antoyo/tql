@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::fmt::Display;
 
 use syntax::ast::Expr;
-use syntax::ast::Expr_::ExprLit;
+use syntax::ast::Expr_::{ExprLit, ExprPath};
 use syntax::ast::FloatTy;
 use syntax::ast::IntTy;
 use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
@@ -35,7 +35,7 @@ use self::join::argument_to_join;
 use self::limit::{analyze_limit_types, arguments_to_limit};
 use self::sort::argument_to_order;
 use state::{SqlFields, SqlTables, get_field_type, methods_singleton, singleton};
-use string::find_near;
+use string::{find_near, plural_verb};
 use types::Type;
 
 /// The type of the SQL query.
@@ -114,6 +114,23 @@ pub fn analyze_types(query: Query) -> SqlResult<Query> {
     res(query, errors)
 }
 
+/// Check that the `arguments` vector contains `expected_count` elements.
+/// If this is not the case, add an error to `errors`.
+fn check_argument_count(arguments: &[Expression], expected_count: usize, position: Span, errors: &mut Vec<Error>) -> bool {
+    if arguments.len() == expected_count {
+        true
+    }
+    else {
+        let length = arguments.len();
+        errors.push(Error::new_with_code(
+            format!("this function takes 1 parameter but {} parameter{} supplied", length, plural_verb(length)),
+            position,
+            "E0061",
+        ));
+        false
+    }
+}
+
 /// Check that `Delete` `Query` contains a filter.
 fn check_delete(query: &Query, delete_position: Option<Span>, errors: &mut Vec<Error>) {
     if let Query::Delete { ref filter, .. } = *query {
@@ -185,14 +202,7 @@ fn check_methods(method_calls: &MethodCalls, errors: &mut Vec<Error>) {
 fn check_no_arguments(method_call: &MethodCall, errors: &mut Vec<Error>) {
     if !method_call.arguments.is_empty() {
         let length = method_call.arguments.len();
-        let plural_verb =
-            if length == 1 {
-                " was"
-            }
-            else {
-                "s were"
-            };
-        errors.push(Error::new_with_code(format!("this method takes 0 parameters but {} parameter{} supplied", length, plural_verb), method_call.position, "E0061"));
+        errors.push(Error::new_with_code(format!("this method takes 0 parameters but {} parameter{} supplied", length, plural_verb(length)), method_call.position, "E0061"));
     }
 }
 
@@ -388,6 +398,22 @@ fn new_query(fields: Vec<Identifier>, filter_expression: FilterExpression, joins
 /// Create an error about a table not having a primary key.
 pub fn no_primary_key(table_name: &str, position: Span) -> Error {
     Error::new(format!("Table {} does not have a primary key", table_name), position)
+}
+
+/// Convert an `Expression` to an `Identifier` if `expression` is an `ExprPath`.
+/// It adds an error to `errors` if `expression` is not an `ExprPath`.
+fn path_expr_to_identifier(expression: &Expression, errors: &mut Vec<Error>) -> Option<Identifier> {
+    if let ExprPath(_, ref path) = expression.node {
+        let identifier = path.segments[0].identifier.to_string();
+        Some(identifier)
+    }
+    else {
+        errors.push(Error::new(
+            "Expected identifier".to_owned(), // TODO: améliorer ce message.
+            expression.span,
+        ));
+        None
+    }
 }
 
 /// Gather data about the query in the method `calls`.

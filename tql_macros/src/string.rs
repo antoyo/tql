@@ -62,3 +62,13 @@ fn levenshtein_distance(string1: &str, string2: &str) -> usize {
     }
     d[string1.len()][string2.len()]
 }
+
+/// Returns " was" if count equals 1, "s were" otherwise.
+pub fn plural_verb<'a>(count: usize) -> &'a str {
+    if count == 1 {
+        " was"
+    }
+    else {
+        "s were"
+    }
+}

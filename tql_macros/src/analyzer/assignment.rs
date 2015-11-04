@@ -1,12 +1,12 @@
 /// Argument to assignment converter.
 
-use syntax::ast::Expr_::{ExprAssign, ExprPath};
+use syntax::ast::Expr_::ExprAssign;
 
 use ast::{Assignment, Expression, RValue};
 use error::{Error, SqlResult, res};
 use plugin::number_literal;
 use state::SqlFields;
-use super::{check_field, check_field_type};
+use super::{check_field, check_field_type, path_expr_to_identifier};
 
 /// Analyze the types of the `Assignment`s.
 pub fn analyze_assignments_types(assignments: &[Assignment], table_name: &str, errors: &mut Vec<Error>) {
@@ -24,15 +24,9 @@ pub fn argument_to_assignment(arg: &Expression, table_name: &str, table: &SqlFie
     };
     if let ExprAssign(ref expr1, ref expr2) = arg.node {
         assignment.value = expr2.clone();
-        if let ExprPath(_, ref path) = expr1.node {
-            assignment.identifier = path.segments[0].identifier.to_string();
-            check_field(&assignment.identifier, path.span, table_name, table, &mut errors);
-        }
-        else {
-            errors.push(Error::new(
-                "Expected identifier".to_owned(), // TODO: améliorer ce message.
-                arg.span,
-            ));
+        if let Some(identifier) = path_expr_to_identifier(expr1, &mut errors) {
+            assignment.identifier = identifier;
+            check_field(&assignment.identifier, expr1.span, table_name, table, &mut errors);
         }
     }
     else {

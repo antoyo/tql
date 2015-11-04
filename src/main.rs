@@ -333,6 +333,7 @@ fn main() {
     //let _ = sql!(Person.all(id == 1));
     //let _ = sql!(Person.filter(id == 1).delete(id == 1));
 
+    //let _ = to_sql!(Person.all().join(test));
     //let _ = to_sql!(Person.all().join(name, age));
     //let _ = to_sql!(Person.all().join(address, address)); // TODO: devrait causer une erreur.
 
@@ -410,15 +411,25 @@ fn main() {
 
     println!(to_sql!(Person.values(address).aggregate(avg(age))));
     let aggregates = sql!(Person.values(address).aggregate(avg(age)));
+    //sql!(Person.values(test).aggregate(avg(age)));
+    //sql!(Person.values("test").aggregate(avg(age)));
 
     for aggr in aggregates {
         println!("Average age: {}", aggr.age_avg);
     }
 
+    //if let Some(aggregate1) = sql!(Person.aggregate(avg(age, birthdate))) {
+        //println!("Average age: {}", aggregate1.age_avg);
+    //}
+
     //let person1 = sql!(Person.get(1)).unwrap();
     //sql!(Person.filter(address == person1));
 
-   //sql!(Person.delete());
+    if let Some(aggregate1) = sql!(Person.aggregate(average = avg(age))) {
+        println!("Average age: {}", aggregate1.average);
+    }
+
+    //sql!(Person.delete());
 
     let _ = sql!(Person.drop());
     let _ = sql!(Address.drop());

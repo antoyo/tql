@@ -28,8 +28,6 @@
 // TODO: supporter les méthodes sur Nullable<Generic> et Nullable<i32> et autres?
 // TODO: dans les aggrégations, permettre des opérations :
 // Table.aggregate(avg(field2 / field1))
-// TODO: dans les aggrégations, permettre de nommer le résultat :
-// Table.aggregate(average = avg(field2))
 // TODO: dans les aggrégations, permettre de sélectionner d’autres champs.
 // TODO: faire des benchmarks.
 // TODO: créer une macro qui permet de choisir le SGBD. Donner un paramètre optionel à cette macro
@@ -206,7 +204,7 @@ fn gen_aggregate_struct(cx: &mut ExtCtxt, sp: Span, aggregates: &[Aggregate]) ->
     let mut aggregate_fields = vec![];
     let mut fields = vec![];
     for (index, aggregate) in aggregates.iter().enumerate() {
-        let field_name = aggregate.field.clone() + "_" + &aggregate.function.to_lowercase();
+        let field_name = aggregate.result_name.clone();
         add_field(&mut aggregate_fields, quote_expr!(cx, row.get($index)), &field_name, sp);
         fields.push(Spanned {
             node: StructField_ {
