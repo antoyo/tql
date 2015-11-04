@@ -26,6 +26,7 @@ use ast::{self, Aggregate, AggregateFilterExpression, Assignment, Expression, Fi
 use error::{Error, SqlResult, res};
 use gen::ToSql;
 use parser::{MethodCall, MethodCalls};
+use plugin::number_literal;
 use self::aggregate::{argument_to_aggregate, argument_to_group, expression_to_aggregate_filter_expression};
 use self::assignment::{analyze_assignments_types, argument_to_assignment};
 use self::filter::{analyze_filter_types, expression_to_filter_expression};
@@ -507,11 +508,15 @@ fn process_methods(calls: &[MethodCall], table: &SqlFields, table_name: &str, de
                 }
             },
             "get" => {
-                // TODO: la méthode get() accepte d’être utilisée sans argument.
-                try(get_expression_to_filter_expression(&method_call.arguments[0], &table_name, table), &mut errors, |(filter, new_limit)| {
-                    filter_expression = filter;
-                    limit = new_limit;
-                });
+                if method_call.arguments.is_empty() {
+                    limit = Limit::Index(number_literal(0));
+                }
+                else {
+                    try(get_expression_to_filter_expression(&method_call.arguments[0], &table_name, table), &mut errors, |(filter, new_limit)| {
+                        filter_expression = filter;
+                        limit = new_limit;
+                    });
+                }
             },
             "insert" => {
                 try(convert_arguments(&method_call.arguments, &table_name, table, argument_to_assignment), &mut errors, |assigns| {

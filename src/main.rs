@@ -452,6 +452,9 @@ fn main() {
         println!("Average age: {}", aggr.average);
     }
 
+    let person = sql!(Person.filter(id == 2).get());
+    show_person_option(person);
+
     //sql!(Person.delete());
 
     let _ = sql!(Person.drop());
