@@ -4,7 +4,7 @@ use syntax::ast::Expr;
 use syntax::ast::Expr_::{ExprLit, ExprPath};
 use syntax::ptr::P;
 
-use ast::{Filter, FilterExpression, Limit, RelationalOperator, RValue};
+use ast::{Filter, FilterExpression, FilterValue, Limit, RelationalOperator};
 use error::{SqlResult, res};
 use plugin::number_literal;
 use state::{SqlFields, get_primary_key_field};
@@ -19,7 +19,7 @@ pub fn get_expression_to_filter_expression(arg: &P<Expr>, table_name: &str, tabl
             match arg.node {
                 ExprLit(_) | ExprPath(_, _) => {
                     let filter = FilterExpression::Filter(Filter {
-                        operand1: RValue::Identifier(primary_key_field),
+                        operand1: FilterValue::Identifier(primary_key_field),
                         operator: RelationalOperator::Equal,
                         operand2: arg.clone(),
                     });

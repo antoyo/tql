@@ -3,7 +3,7 @@
 use syntax::ast::Expr_::ExprLit;
 use syntax::ext::base::ExtCtxt;
 
-use ast::{Assignment, Expression, FilterExpression, Identifier, Limit, MethodCall, Query, RValue, query_table};
+use ast::{Assignment, Expression, FilterExpression, FilterValue, Identifier, Limit, MethodCall, Query, query_table};
 use state::{get_field_type, get_method_types};
 use types::Type;
 
@@ -49,7 +49,7 @@ fn add_expr(arguments: &mut Args, arg: Arg) {
 fn add_filter_arguments(filter: FilterExpression, args: &mut Args, table_name: &str) {
     match filter {
         FilterExpression::Filter(filter) => {
-            add_rvalue_arguments(&filter.operand1, args, table_name, Some(filter.operand2));
+            add_filter_value_arguments(&filter.operand1, args, table_name, Some(filter.operand2));
         },
         FilterExpression::Filters(filters) => {
             add_filter_arguments(*filters.operand1, args, table_name);
@@ -62,8 +62,8 @@ fn add_filter_arguments(filter: FilterExpression, args: &mut Args, table_name: &
         FilterExpression::ParenFilter(box filter) => {
             add_filter_arguments(filter, args, table_name);
         },
-        FilterExpression::RValue(rvalue) => {
-            add_rvalue_arguments(&rvalue.node, args, table_name, None);
+        FilterExpression::FilterValue(filter_value) => {
+            add_filter_value_arguments(&filter_value.node, args, table_name, None);
         },
     }
 }
@@ -100,10 +100,10 @@ fn add_with_method(args: &mut Args, method_name: &str, object_name: &str, index:
     });
 }
 
-/// Create arguments from the `rvalue` and add them to `arguments`.
-fn add_rvalue_arguments(rvalue: &RValue, args: &mut Args, table_name: &str, expression: Option<Expression>) {
-    match *rvalue {
-        RValue::Identifier(ref identifier) => {
+/// Create arguments from the `filter_value` and add them to `arguments`.
+fn add_filter_value_arguments(filter_value: &FilterValue, args: &mut Args, table_name: &str, expression: Option<Expression>) {
+    match *filter_value {
+        FilterValue::Identifier(ref identifier) => {
             // It is possible to have an identifier without expression, when the identifier is a
             // boolean field name, hence this condition.
             if let Some(expr) = expression {
@@ -112,7 +112,7 @@ fn add_rvalue_arguments(rvalue: &RValue, args: &mut Args, table_name: &str, expr
                 add(args, Some(identifier.clone()), field_type.clone(), expr);
             }
         },
-        RValue::MethodCall(MethodCall { ref arguments, ref method_name, ref object_name, .. }) => {
+        FilterValue::MethodCall(MethodCall { ref arguments, ref method_name, ref object_name, .. }) => {
             for (index, arg) in arguments.iter().enumerate() {
                 add_with_method(args, method_name, object_name, index, arg.clone(), table_name);
             }

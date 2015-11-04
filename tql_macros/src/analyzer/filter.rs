@@ -6,10 +6,10 @@ use syntax::ast::UnOp;
 use syntax::codemap::{Span, Spanned};
 use syntax::ptr::P;
 
-use ast::{self, Expression, Filter, FilterExpression, Filters, LogicalOperator, RelationalOperator, RValue};
+use ast::{self, Expression, Filter, FilterExpression, Filters, FilterValue, LogicalOperator, RelationalOperator};
 use error::{SqlResult, Error, res};
 use state::{SqlFields, SqlMethod, SqlMethodTypes, methods_singleton};
-use super::{check_field, check_field_type, check_type, check_type_rvalue, propose_similar_name};
+use super::{check_field, check_field_type, check_type, check_type_filter_value, propose_similar_name};
 use types::Type;
 
 /// Analyze the types of the `FilterExpression`.
@@ -30,8 +30,8 @@ pub fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors:
         FilterExpression::ParenFilter(ref filter) => {
             analyze_filter_types(filter, table_name, errors);
         },
-        FilterExpression::RValue(ref rvalue) => {
-            check_type_rvalue(&Type::Bool, rvalue, table_name, errors);
+        FilterExpression::FilterValue(ref filter_value) => {
+            check_type_filter_value(&Type::Bool, filter_value, table_name, errors);
         },
     }
 }
@@ -53,7 +53,7 @@ fn binary_expression_to_filter_expression(expr1: &Expression, op: BinOp_, expr2:
             })
         }
         else if is_relational_operator(op) {
-            if let FilterExpression::RValue(filter1) = filter1 {
+            if let FilterExpression::FilterValue(filter1) = filter1 {
                 FilterExpression::Filter(Filter {
                     operand1: filter1.node,
                     operator: binop_to_relational_operator(op),
@@ -71,7 +71,7 @@ fn binary_expression_to_filter_expression(expr1: &Expression, op: BinOp_, expr2:
 }
 
 /// Convert a `BinOp_` to an SQL `LogicalOperator`.
-fn binop_to_logical_operator(binop: BinOp_) -> LogicalOperator {
+pub fn binop_to_logical_operator(binop: BinOp_) -> LogicalOperator {
     match binop {
         BinOp_::BiAdd => unreachable!(),
         BinOp_::BiSub => unreachable!(),
@@ -95,7 +95,7 @@ fn binop_to_logical_operator(binop: BinOp_) -> LogicalOperator {
 }
 
 /// Convert a `BinOp_` to an SQL `RelationalOperator`.
-fn binop_to_relational_operator(binop: BinOp_) -> RelationalOperator {
+pub fn binop_to_relational_operator(binop: BinOp_) -> RelationalOperator {
     match binop {
         BinOp_::BiAdd => unreachable!(),
         BinOp_::BiSub => unreachable!(),
@@ -135,7 +135,7 @@ pub fn expression_to_filter_expression(arg: &P<Expr>, table_name: &str, table: &
                 try!(binary_expression_to_filter_expression(expr1, op, expr2, table_name, table))
             },
             ExprMethodCall(identifier, _, ref exprs) => {
-                FilterExpression::RValue(Spanned {
+                FilterExpression::FilterValue(Spanned {
                     node: method_call_expression_to_filter_expression(identifier, &exprs, table_name, table, &mut errors),
                     span: arg.span,
                 })
@@ -143,8 +143,8 @@ pub fn expression_to_filter_expression(arg: &P<Expr>, table_name: &str, table: &
             ExprPath(None, ref path) => {
                 let identifier = path.segments[0].identifier.to_string();
                 check_field(&identifier, path.span, table_name, table, &mut errors);
-                FilterExpression::RValue(Spanned {
-                    node: RValue::Identifier(identifier),
+                FilterExpression::FilterValue(Spanned {
+                    node: FilterValue::Identifier(identifier),
                     span: arg.span,
                 })
             },
@@ -200,7 +200,7 @@ fn get_method<'a>(object_type: &'a Spanned<Type>, exprs: &[Expression], method_n
 }
 
 /// Check if a `BinOp_` is a `LogicalOperator`.
-fn is_logical_operator(binop: BinOp_) -> bool {
+pub fn is_logical_operator(binop: BinOp_) -> bool {
     match binop {
         BinOp_::BiAnd | BinOp_::BiOr => true,
         _ => false,
@@ -208,7 +208,7 @@ fn is_logical_operator(binop: BinOp_) -> bool {
 }
 
 /// Check if a `BinOp_` is a `RelationalOperator`.
-fn is_relational_operator(binop: BinOp_) -> bool {
+pub fn is_relational_operator(binop: BinOp_) -> bool {
     match binop {
         BinOp_::BiEq | BinOp_::BiLt | BinOp_::BiLe | BinOp_::BiNe | BinOp_::BiGe | BinOp_::BiGt => true,
         _ => false,
@@ -216,9 +216,9 @@ fn is_relational_operator(binop: BinOp_) -> bool {
 }
 
 /// Convert a method call expression to a filter expression.
-fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: &[Expression], table_name: &str, table: &SqlFields, errors: &mut Vec<Error>) -> RValue {
+fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: &[Expression], table_name: &str, table: &SqlFields, errors: &mut Vec<Error>) -> FilterValue {
     let method_name = identifier.node.name.to_string();
-    let dummy = RValue::Identifier("".to_owned());
+    let dummy = FilterValue::Identifier("".to_owned());
     match exprs[0].node {
         ExprPath(_, ref path) => {
             path_method_call_to_filter(path, identifier, &method_name, exprs, table, table_name, errors)
@@ -234,16 +234,16 @@ fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: 
 }
 
 /// Convert a method call where the object is an identifier to a filter expression.
-fn path_method_call_to_filter(path: &Path, identifier: SpannedIdent, method_name: &str, exprs: &[Expression], table: &SqlFields, table_name: &str, errors: &mut Vec<Error>) -> RValue {
+fn path_method_call_to_filter(path: &Path, identifier: SpannedIdent, method_name: &str, exprs: &[Expression], table: &SqlFields, table_name: &str, errors: &mut Vec<Error>) -> FilterValue {
     // TODO: retourner des erreurs à la place de dummy.
-    let dummy = RValue::Identifier("".to_owned());
+    let dummy = FilterValue::Identifier("".to_owned());
     let object_name = path.segments[0].identifier.name.to_string();
     match table.get(&object_name) {
         Some(object_type) => {
             let type_method = get_method(object_type, exprs, method_name, identifier, errors);
 
             if let Some((&SqlMethodTypes { ref template, .. }, ref arguments)) = type_method {
-                RValue::MethodCall(ast::MethodCall {
+                FilterValue::MethodCall(ast::MethodCall {
                     arguments: arguments.clone(),
                     method_name: method_name.to_owned(),
                     object_name: object_name,

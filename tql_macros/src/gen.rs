@@ -5,10 +5,57 @@ use std::str::from_utf8;
 use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
 
-use ast::{Aggregate, Assignment, Expression, FieldList, Filter, Filters, FilterExpression, Identifier, Join, Limit, LogicalOperator, MethodCall, Order, RelationalOperator, RValue, Query, TypedField};
+use ast::{Aggregate, AggregateFilter, AggregateFilterExpression, AggregateFilters, AggregateFilterValue, Assignment, Expression, FieldList, Filter, Filters, FilterExpression, FilterValue, Identifier, Join, Limit, LogicalOperator, MethodCall, Order, RelationalOperator, Query, TypedField};
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use sql::escape;
 use state::{get_primary_key_field, singleton};
+
+macro_rules! filter_to_sql {
+    ( $name:ident ) => {
+        impl ToSql for $name {
+            fn to_sql(&self) -> String {
+                self.operand1.to_sql() + " " + &self.operator.to_sql() + " " + &self.operand2.to_sql()
+            }
+        }
+    };
+}
+
+macro_rules! filter_expression_to_sql {
+    ( $name:ident ) => {
+        impl ToSql for $name {
+            fn to_sql(&self) -> String {
+                match *self {
+                    $name::Filter(ref filter) => filter.to_sql(),
+                    $name::Filters(ref filters) => filters.to_sql(),
+                    $name::NegFilter(ref filter) => "NOT ".to_owned() + &filter.to_sql(),
+                    $name::NoFilters => "".to_owned(),
+                    $name::ParenFilter(ref filter) => "(".to_owned() + &filter.to_sql() + ")",
+                    $name::FilterValue(ref filter_value) => filter_value.node.to_sql(),
+                }
+            }
+        }
+    };
+}
+
+macro_rules! filters_to_sql {
+    ( $name:ident ) => {
+        impl ToSql for $name {
+            fn to_sql(&self) -> String {
+                self.operand1.to_sql() + " " + &self.operator.to_sql() + " " + &self.operand2.to_sql()
+            }
+        }
+    };
+}
+
+macro_rules! slice_to_sql {
+    ( $name:ty, $sep:expr ) => {
+        impl ToSql for [$name] {
+            fn to_sql(&self) -> String {
+                self.iter().map(ToSql::to_sql).collect::<Vec<_>>().join($sep)
+            }
+        }
+    };
+}
 
 /// A generic trait for converting a value to SQL.
 pub trait ToSql {
@@ -17,13 +64,24 @@ pub trait ToSql {
 
 impl ToSql for Aggregate {
     fn to_sql(&self) -> String {
+        // TODO: ne pas faire de conversion quand c’est pour mettre dans une clause HAVING.
         "CAST(".to_owned() + &self.function.to_sql() + "(" + &self.field.to_sql() + ") AS INT)" // TODO: ne pas hard-coder le type.
     }
 }
 
-impl ToSql for [Aggregate] {
+slice_to_sql!(Aggregate, ", ");
+
+filter_to_sql!(AggregateFilter);
+
+filter_expression_to_sql!(AggregateFilterExpression);
+
+filters_to_sql!(AggregateFilters);
+
+impl ToSql for AggregateFilterValue {
     fn to_sql(&self) -> String {
-        self.into_iter().map(ToSql::to_sql).collect::<Vec<_>>().join(", ")
+        match *self {
+            AggregateFilterValue::Sql(ref sql) => sql.clone(),
+        }
     }
 }
 
@@ -33,11 +91,7 @@ impl ToSql for Assignment {
     }
 }
 
-impl ToSql for [Assignment] {
-    fn to_sql(&self) -> String {
-        self.into_iter().map(ToSql::to_sql).collect::<Vec<_>>().join(", ")
-    }
-}
+slice_to_sql!(Assignment, ", ");
 
 impl ToSql for Expression {
     fn to_sql(&self) -> String {
@@ -60,11 +114,7 @@ impl ToSql for Expression {
     }
 }
 
-impl ToSql for [Expression] {
-    fn to_sql(&self) -> String {
-        self.iter().map(ToSql::to_sql).collect::<Vec<_>>().join(", ")
-    }
-}
+slice_to_sql!(Expression, ", ");
 
 impl ToSql for FieldList {
     fn to_sql(&self) -> String {
@@ -72,28 +122,26 @@ impl ToSql for FieldList {
     }
 }
 
-impl ToSql for Filter {
-    fn to_sql(&self) -> String {
-        self.operand1.to_sql() + " " + &self.operator.to_sql() + " " + &self.operand2.to_sql()
-    }
-}
+filter_to_sql!(Filter);
 
-impl ToSql for FilterExpression {
+filter_expression_to_sql!(FilterExpression);
+
+filters_to_sql!(Filters);
+
+impl ToSql for FilterValue {
     fn to_sql(&self) -> String {
         match *self {
-            FilterExpression::Filter(ref filter) => filter.to_sql(),
-            FilterExpression::Filters(ref filters) => filters.to_sql(),
-            FilterExpression::NegFilter(ref filter) => "NOT ".to_owned() + &filter.to_sql(),
-            FilterExpression::NoFilters => "".to_owned(),
-            FilterExpression::ParenFilter(ref filter) => "(".to_owned() + &filter.to_sql() + ")",
-            FilterExpression::RValue(ref rvalue) => rvalue.node.to_sql(),
+            FilterValue::Identifier(ref identifier) => identifier.to_sql(),
+            FilterValue::MethodCall(MethodCall { ref arguments, ref object_name, ref template, ..  }) => {
+                let mut sql = template.replace("$0", object_name);
+                let mut index = 1;
+                for argument in arguments {
+                    sql = sql.replace(&format!("${}", index), &argument.to_sql());
+                    index += 1;
+                }
+                sql
+            },
         }
-    }
-}
-
-impl ToSql for Filters {
-    fn to_sql(&self) -> String {
-        self.operand1.to_sql() + " " + &self.operator.to_sql() + " " + &self.operand2.to_sql()
     }
 }
 
@@ -103,16 +151,7 @@ impl ToSql for Join {
     }
 }
 
-impl ToSql for [Join] {
-    fn to_sql(&self) -> String {
-        if self.len() > 0 {
-            self.iter().map(ToSql::to_sql).collect::<Vec<_>>().join(" ")
-        }
-        else {
-            "".to_owned()
-        }
-    }
-}
+slice_to_sql!(Join, " ");
 
 impl ToSql for Identifier {
     fn to_sql(&self) -> String {
@@ -152,38 +191,12 @@ impl ToSql for Order {
     }
 }
 
-impl ToSql for [Order] {
-    fn to_sql(&self) -> String {
-        if self.len() > 0 {
-            " ORDER BY ".to_owned() + &self.iter().map(ToSql::to_sql).collect::<Vec<_>>().join(", ")
-        }
-        else {
-            "".to_owned()
-        }
-    }
-}
-
-impl ToSql for RValue {
-    fn to_sql(&self) -> String {
-        match *self {
-            RValue::Identifier(ref identifier) => identifier.to_sql(),
-            RValue::MethodCall(MethodCall { ref arguments, ref object_name, ref template, ..  }) => {
-                let mut sql = template.replace("$0", object_name);
-                let mut index = 1;
-                for argument in arguments {
-                    sql = sql.replace(&format!("${}", index), &argument.to_sql());
-                    index += 1;
-                }
-                sql
-            },
-        }
-    }
-}
+slice_to_sql!(Order, ", ");
 
 impl ToSql for Query {
     fn to_sql(&self) -> String {
         match *self {
-            Query::Aggregate{ref aggregates, ref filter, ref groups, ref joins, ref table} => {
+            Query::Aggregate{ref aggregates, ref aggregate_filter, ref filter, ref groups, ref joins, ref table} => {
                 let where_clause = filter_to_where_clause(filter);
                 let group_clause =
                     if !groups.is_empty() {
@@ -192,7 +205,14 @@ impl ToSql for Query {
                     else {
                         ""
                     };
-                replace_placeholder(format!("SELECT {} FROM {}{}{}{}{}{}", aggregates.to_sql(), table, joins.to_sql(), where_clause, filter.to_sql(), group_clause, groups.to_sql()))
+                let having_clause =
+                    if let AggregateFilterExpression::NoFilters = *aggregate_filter {
+                        ""
+                    }
+                    else {
+                        " HAVING "
+                    };
+                replace_placeholder(format!("SELECT {} FROM {}{}{}{}{}{}{}{}", aggregates.to_sql(), table, joins.to_sql(), where_clause, filter.to_sql(), group_clause, groups.to_sql(), having_clause, aggregate_filter.to_sql()))
             },
             Query::CreateTable { ref fields, ref table } => {
                 format!("CREATE TABLE {} ({})", table, fields.to_sql())
@@ -205,8 +225,8 @@ impl ToSql for Query {
                 format!("DROP TABLE {}", table)
             },
             Query::Insert { ref assignments, ref table } => {
-                let fields: Vec<_> = assignments.iter().map(|assign| assign.identifier.clone()).collect();
-                let values: Vec<_> = assignments.iter().map(|assign| assign.value.clone()).collect();
+                let fields: Vec<_> = assignments.iter().map(|assign| assign.identifier.to_sql()).collect();
+                let values: Vec<_> = assignments.iter().map(|assign| assign.value.to_sql()).collect();
                 let tables = singleton();
                 let return_value =
                     match get_primary_key_field(tables.get(table).unwrap()) {
@@ -217,7 +237,14 @@ impl ToSql for Query {
             },
             Query::Select{ref fields, ref filter, ref joins, ref limit, ref order, ref table} => {
                 let where_clause = filter_to_where_clause(filter);
-                replace_placeholder(format!("SELECT {} FROM {}{}{}{}{}{}", fields.to_sql(), table, joins.to_sql(), where_clause, filter.to_sql(), order.to_sql(), limit.to_sql()))
+                let order_clause =
+                    if !order.is_empty() {
+                        " ORDER BY "
+                    }
+                    else {
+                        ""
+                    };
+                replace_placeholder(format!("SELECT {} FROM {}{}{}{}{}{}{}", fields.to_sql(), table, joins.to_sql(), where_clause, filter.to_sql(), order_clause, order.to_sql(), limit.to_sql()))
             },
             Query::Update { ref assignments, ref filter, ref table } => {
                 let where_clause = filter_to_where_clause(filter);
@@ -246,16 +273,12 @@ impl ToSql for TypedField {
     }
 }
 
-impl ToSql for [TypedField] {
-    fn to_sql(&self) -> String {
-        self.iter().map(ToSql::to_sql).collect::<Vec<_>>().join(", ")
-    }
-}
+slice_to_sql!(TypedField, ", ");
 
 /// Convert a `FilterExpression` to either " WHERE " or the empty string if there are no filters.
 fn filter_to_where_clause(filter: &FilterExpression) -> &str {
     match *filter {
-        FilterExpression::Filter(_) | FilterExpression::Filters(_) | FilterExpression::NegFilter(_) | FilterExpression::ParenFilter(_) | FilterExpression::RValue(_) => " WHERE ",
+        FilterExpression::Filter(_) | FilterExpression::Filters(_) | FilterExpression::NegFilter(_) | FilterExpression::ParenFilter(_) | FilterExpression::FilterValue(_) => " WHERE ",
         FilterExpression::NoFilters => "",
     }
 }

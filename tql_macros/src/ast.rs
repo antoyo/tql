@@ -12,12 +12,69 @@ pub type FieldList = Vec<Identifier>;
 pub type Groups = Vec<Identifier>;
 pub type Identifier = String;
 
+macro_rules! filter {
+    ( $name:ident, $ty:ty ) => {
+        #[derive(Debug)]
+        pub struct $name {
+            /// The filter value to be compared to `operand2`.
+            pub operand1: $ty,
+            /// The `operator` used to compare `operand1` to `operand2`.
+            pub operator: RelationalOperator,
+            /// The expression to be compared to `operand1`.
+            pub operand2: Expression,
+        }
+    };
+}
+
+macro_rules! filter_expression {
+    ( $name:ident, $filter_name:ty, $filters_name:ty, $filter_expression_name:ty, $filter_value_name:ty ) => {
+        #[derive(Debug)]
+        pub enum $name {
+            Filter($filter_name),
+            Filters($filters_name),
+            NegFilter(Box<$filter_expression_name>),
+            NoFilters,
+            ParenFilter(Box<$filter_expression_name>),
+            FilterValue(Spanned<$filter_value_name>),
+        }
+    };
+}
+
+macro_rules! filters {
+    ( $name:ident, $ty:ty ) => {
+        #[derive(Debug)]
+        pub struct $name {
+            /// The `T` to be combined with `operand2`.
+            pub operand1: Box<$ty>,
+            /// The `LogicalOperator` used to combine the `FilterExpression`s.
+            pub operator: LogicalOperator,
+            /// The `T` to be combined with `operand1`.
+            pub operand2: Box<$ty>,
+        }
+    };
+}
+
 /// `Aggregate` for une in SQL Aggregate `Query`.
 #[derive(Clone, Debug)]
 pub struct Aggregate {
     pub field: Identifier,
     pub function: Identifier,
     pub result_name: Identifier,
+}
+
+/// `AggregateFilter` for SQL `Query` (HAVING clause).
+filter!(AggregateFilter, AggregateFilterValue);
+
+/// Aggregate filter expression.
+filter_expression!(AggregateFilterExpression, AggregateFilter, AggregateFilters, AggregateFilterExpression, AggregateFilterValue);
+
+/// A `Filters` is used to combine `AggregateFilterExpression`s with a `LogicalOperator`.
+filters!(AggregateFilters, AggregateFilterExpression);
+
+/// Either an identifier or a method call.
+#[derive(Debug)]
+pub enum AggregateFilterValue {
+    Sql(String),
 }
 
 /// `Assignment` for use in SQL Update `Query`.
@@ -28,36 +85,19 @@ pub struct Assignment {
 }
 
 /// `Filter` for SQL `Query` (WHERE clause).
-#[derive(Debug)]
-pub struct Filter {
-    /// The field from the SQL table to be compared to `operand2`.
-    pub operand1: RValue,
-    /// The `operator` used to compare `operand1` to `operand2`.
-    pub operator: RelationalOperator,
-    /// The expression to be compared to `operand1`.
-    pub operand2: Expression,
-}
+filter!(Filter, FilterValue);
 
-/// Either a single `Filter`, `Filters` or `NoFilters`.
-#[derive(Debug)]
-pub enum FilterExpression {
-    Filter(Filter),
-    Filters(Filters),
-    NegFilter(Box<FilterExpression>),
-    NoFilters,
-    ParenFilter(Box<FilterExpression>),
-    RValue(Spanned<RValue>),
-}
+/// Either a single `Filter`, `Filters`, `NegFilter`, `NoFilters`, `ParenFilter` or a `FilterValue`.
+filter_expression!(FilterExpression, Filter, Filters, FilterExpression, FilterValue);
 
 /// A `Filters` is used to combine `FilterExpression`s with a `LogicalOperator`.
+filters!(Filters, FilterExpression);
+
+/// Either an identifier or a method call.
 #[derive(Debug)]
-pub struct Filters {
-    /// The `FilterExpression` to be combined with `operand2`.
-    pub operand1: Box<FilterExpression>,
-    /// The `LogicalOperator` used to combine the `FilterExpression`s.
-    pub operator: LogicalOperator,
-    /// The `FilterExpression` to be combined with `operand1`.
-    pub operand2: Box<FilterExpression>,
+pub enum FilterValue {
+    Identifier(Identifier),
+    MethodCall(MethodCall),
 }
 
 /// A `Join` with another `table` via a specific `field`.
@@ -115,18 +155,12 @@ pub enum RelationalOperator {
     GreaterThanEqual,
 }
 
-/// Either an identifier or a method call.
-#[derive(Debug)]
-pub enum RValue {
-    Identifier(Identifier),
-    MethodCall(MethodCall),
-}
-
 /// An SQL `Query`.
 #[derive(Debug)]
 pub enum Query {
     Aggregate {
         aggregates: Vec<Aggregate>,
+        aggregate_filter: AggregateFilterExpression,
         filter: FilterExpression,
         groups: Groups,
         joins: Vec<Join>,
@@ -212,7 +246,7 @@ pub fn query_type(query: &Query) -> QueryType {
                 let tables = singleton();
                 // NOTE: At this stage (code generation), the table and the field exist, hence unwrap().
                 let table = tables.get(table).unwrap();
-                if let RValue::Identifier(ref identifier) = filter.operand1 {
+                if let FilterValue::Identifier(ref identifier) = filter.operand1 {
                     if table.get(identifier).unwrap().node == Type::Serial {
                         typ = QueryType::SelectOne;
                     }

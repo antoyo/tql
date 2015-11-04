@@ -29,6 +29,9 @@
 // TODO: dans les aggrégations, permettre des opérations :
 // Table.aggregate(avg(field2 / field1))
 // TODO: dans les aggrégations, permettre de sélectionner d’autres champs.
+// TODO: dans les filtres d’aggrégations, permettre les appels de fonctions d’aggrégat.
+// TODO: rendre plus uniforme les filtres et les filtres d’aggrégation pour éviter la duplication
+// de code.
 // TODO: faire des benchmarks.
 // TODO: créer une macro qui permet de choisir le SGBD. Donner un paramètre optionel à cette macro
 // pour choisir le nom de la macro à créer (pour permettre d’utiliser plusieurs SGBDs à la fois).

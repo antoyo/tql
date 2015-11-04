@@ -2,7 +2,7 @@
 
 use syntax::ast::Expr_::ExprAssign;
 
-use ast::{Assignment, Expression, RValue};
+use ast::{Assignment, Expression, FilterValue};
 use error::{Error, SqlResult, res};
 use plugin::number_literal;
 use state::SqlFields;
@@ -11,7 +11,7 @@ use super::{check_field, check_field_type, path_expr_to_identifier};
 /// Analyze the types of the `Assignment`s.
 pub fn analyze_assignments_types(assignments: &[Assignment], table_name: &str, errors: &mut Vec<Error>) {
     for assignment in assignments {
-        check_field_type(table_name, &RValue::Identifier(assignment.identifier.clone()), &assignment.value, errors);
+        check_field_type(table_name, &FilterValue::Identifier(assignment.identifier.clone()), &assignment.value, errors);
     }
 }
 

@@ -135,6 +135,7 @@ fn main() {
     //let people = sql!(Person.filter(age >= 3.141592f64));
     //let people = sql!(Person.filter(age >= 3.141592));
     //let people = sql!(Person.filter(age >= 42).sort(nam));
+    //let people = sql!(Person.filter(age >= 42).sort(-nam));
     //let people = sql!(Person.filter(ag >= 42));
     //let people = sql!(Person.filter(age == true));
     //let people = sql!(Person.filter(age == false));
@@ -427,6 +428,28 @@ fn main() {
 
     if let Some(aggregate1) = sql!(Person.aggregate(average = avg(age))) {
         println!("Average age: {}", aggregate1.average);
+    }
+
+    //sql!(Person.values(address).aggregate(average = avg(age)).filter(avg < 20));
+    println!(to_sql!(Person.values(address).aggregate(average = avg(age)).filter(average < 20)));
+    let aggregates = sql!(Person.values(address).aggregate(average = avg(age)).filter(average < 20));
+    for aggr in aggregates {
+        println!("Average age: {}", aggr.average);
+    }
+    let aggregates = sql!(Person.values(address).aggregate(avg(age)).filter(age_avg < 20));
+    for aggr in aggregates {
+        println!("Average age: {}", aggr.age_avg);
+    }
+
+    let aggregates = sql!(Person.values(address).aggregate(average = avg(age)).filter(average < 50));
+    for aggr in aggregates {
+        println!("Average age: {}", aggr.average);
+    }
+
+    println!(to_sql!(Person.filter(age > 20).values(address).aggregate(average = avg(age)).filter(average < 50)));
+    let aggregates = sql!(Person.filter(age > 20).values(address).aggregate(average = avg(age)).filter(average < 50));
+    for aggr in aggregates {
+        println!("Average age: {}", aggr.average);
     }
 
     //sql!(Person.delete());

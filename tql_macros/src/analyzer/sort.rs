@@ -1,36 +1,31 @@
 /// Analyzer for the sort() method.
 
-use syntax::ast::{Expr, Path};
 use syntax::ast::Expr_::{ExprPath, ExprUnary};
 use syntax::ast::UnOp;
 
 use ast::{Expression, Order};
 use error::{Error, SqlResult, res};
 use state::SqlFields;
-use super::check_field;
+use super::{check_field, path_expr_to_identifier};
 
 /// Convert an `Expression` to an `Order`.
 pub fn argument_to_order(arg: &Expression, table_name: &str, table: &SqlFields) -> SqlResult<Order> {
-    fn identifier(arg: &Expression, identifier: &Expr, table_name: &str, table: &SqlFields) -> SqlResult<String> {
+    fn identifier(identifier_expr: &Expression, table_name: &str, table: &SqlFields) -> SqlResult<String> {
         let mut errors = vec![];
-        if let ExprPath(_, Path { ref segments, span, .. }) = identifier.node {
-            if segments.len() == 1 {
-                let identifier = segments[0].identifier.to_string();
-                check_field(&identifier, span, table_name, table, &mut errors);
-                return res(identifier, errors);
-            }
+        if let Some(identifier) = path_expr_to_identifier(identifier_expr, &mut errors) {
+            check_field(&identifier, identifier_expr.span, table_name, table, &mut errors);
+            res(identifier, errors)
         }
-        Err(vec![Error::new(
-            "Expected an identifier".to_owned(),
-            arg.span,
-        )])
+        else {
+            Err(errors)
+        }
     }
 
     let mut errors = vec![];
     let order =
         match arg.node {
             ExprUnary(UnOp::UnNeg, ref expr) => {
-                let ident = try!(identifier(&arg, expr, table_name, table));
+                let ident = try!(identifier(expr, table_name, table));
                 Order::Descending(ident)
             }
             ExprPath(None, ref path) => {
