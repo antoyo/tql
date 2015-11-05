@@ -6,7 +6,6 @@
 #![plugin(clippy)]
 #![allow(ptr_arg)]
 
-// TODO: permetre les opérateurs += et autre pour un update.
 // TODO: changer le courriel de l’auteur avant de mettre sur TuxFamily.
 
 // TODO: mieux gérer les ExprPath (vérifier qu’il n’y a qu’un segment).
@@ -29,6 +28,7 @@
 // TODO: dans les aggrégations, permettre des opérations :
 // Table.aggregate(avg(field2 / field1))
 // TODO: dans les aggrégations, permettre de sélectionner d’autres champs.
+// TODO: ajouter la méthode annotate() pour les aggrégations par objet.
 // TODO: dans les filtres d’aggrégations, permettre les appels de fonctions d’aggrégat.
 // TODO: rendre plus uniforme les filtres et les filtres d’aggrégation pour éviter la duplication
 // de code.

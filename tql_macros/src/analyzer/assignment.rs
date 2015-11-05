@@ -1,8 +1,10 @@
 /// Argument to assignment converter.
 
-use syntax::ast::Expr_::ExprAssign;
+use syntax::ast::BinOp_;
+use syntax::ast::Expr_::{ExprAssign, ExprAssignOp};
+use syntax::codemap::Spanned;
 
-use ast::{Assignment, Expression, FilterValue};
+use ast::{Assignment, AssignementOperator, Expression, FilterValue};
 use error::{Error, SqlResult, res};
 use plugin::number_literal;
 use state::SqlFields;
@@ -17,23 +19,64 @@ pub fn analyze_assignments_types(assignments: &[Assignment], table_name: &str, e
 
 /// Convert an `Expression` to an `Assignment`.
 pub fn argument_to_assignment(arg: &Expression, table_name: &str, table: &SqlFields) -> SqlResult<Assignment> {
+    fn assign_values(assignment: &mut Assignment, expr1: &Expression, expr2: &Expression, table_name: &str, table: &SqlFields, errors: &mut Vec<Error>) {
+        assignment.value = expr2.clone();
+        if let Some(identifier) = path_expr_to_identifier(expr1, errors) {
+            assignment.identifier = identifier;
+            check_field(&assignment.identifier, expr1.span, table_name, table, errors);
+        }
+    }
+
     let mut errors = vec![];
     let mut assignment = Assignment {
         identifier: "".to_owned(),
+        operator: Spanned {
+            node: AssignementOperator::Equal,
+            span: arg.span,
+        },
         value: number_literal(0),
     };
-    if let ExprAssign(ref expr1, ref expr2) = arg.node {
-        assignment.value = expr2.clone();
-        if let Some(identifier) = path_expr_to_identifier(expr1, &mut errors) {
-            assignment.identifier = identifier;
-            check_field(&assignment.identifier, expr1.span, table_name, table, &mut errors);
-        }
-    }
-    else {
-        errors.push(Error::new(
-            "Expected assignment".to_owned(), // TODO: améliorer ce message.
-            arg.span,
-        ));
+    match arg.node {
+        ExprAssign(ref expr1, ref expr2) => {
+            assign_values(&mut assignment, expr1, expr2, table_name, table, &mut errors);
+        },
+        ExprAssignOp(ref binop, ref expr1, ref expr2) => {
+            assignment.operator = Spanned {
+                node: binop_to_assignment_operator(binop.node),
+                span: binop.span,
+            };
+            assign_values(&mut assignment, expr1, expr2, table_name, table, &mut errors);
+        },
+        _ => {
+            errors.push(Error::new(
+                "Expected assignment".to_owned(), // TODO: améliorer ce message.
+                arg.span,
+            ));
+        },
     }
     res(assignment, errors)
+}
+
+/// Convert a `BinOp_` to an SQL `AssignmentOperator`.
+fn binop_to_assignment_operator(binop: BinOp_) -> AssignementOperator {
+    match binop {
+        BinOp_::BiAdd => AssignementOperator::Add,
+        BinOp_::BiSub => AssignementOperator::Sub,
+        BinOp_::BiMul => AssignementOperator::Mul,
+        BinOp_::BiDiv => AssignementOperator::Divide,
+        BinOp_::BiRem => AssignementOperator::Modulo,
+        BinOp_::BiAnd => unreachable!(),
+        BinOp_::BiOr => unreachable!(),
+        BinOp_::BiBitXor => unreachable!(),
+        BinOp_::BiBitAnd => unreachable!(),
+        BinOp_::BiBitOr => unreachable!(),
+        BinOp_::BiShl => unreachable!(),
+        BinOp_::BiShr => unreachable!(),
+        BinOp_::BiEq => AssignementOperator::Equal,
+        BinOp_::BiLt => unreachable!(),
+        BinOp_::BiLe => unreachable!(),
+        BinOp_::BiNe => unreachable!(),
+        BinOp_::BiGe => unreachable!(),
+        BinOp_::BiGt => unreachable!(),
+    }
 }

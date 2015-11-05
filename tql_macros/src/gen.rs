@@ -5,7 +5,7 @@ use std::str::from_utf8;
 use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
 
-use ast::{Aggregate, AggregateFilter, AggregateFilterExpression, AggregateFilters, AggregateFilterValue, Assignment, Expression, FieldList, Filter, Filters, FilterExpression, FilterValue, Identifier, Join, Limit, LogicalOperator, MethodCall, Order, RelationalOperator, Query, TypedField};
+use ast::{Aggregate, AggregateFilter, AggregateFilterExpression, AggregateFilters, AggregateFilterValue, Assignment, AssignementOperator, Expression, FieldList, Filter, Filters, FilterExpression, FilterValue, Identifier, Join, Limit, LogicalOperator, MethodCall, Order, RelationalOperator, Query, TypedField};
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use sql::escape;
 use state::{get_primary_key_field, singleton};
@@ -87,11 +87,32 @@ impl ToSql for AggregateFilterValue {
 
 impl ToSql for Assignment {
     fn to_sql(&self) -> String {
-        self.identifier.to_sql() + " = " + &self.value.to_sql()
+        if let AssignementOperator::Equal = self.operator.node {
+            self.identifier.to_sql() + &self.operator.node.to_sql() + &self.value.to_sql()
+        }
+        else {
+            let identifier = self.identifier.to_sql();
+            identifier.clone() + &self.operator.node.to_sql().replace("{}", &identifier) + &self.value.to_sql()
+        }
     }
 }
 
 slice_to_sql!(Assignment, ", ");
+
+impl ToSql for AssignementOperator {
+    fn to_sql(&self) -> String {
+        let string =
+            match *self {
+                AssignementOperator::Add => " = {} + ",
+                AssignementOperator::Divide => " = {} / ",
+                AssignementOperator::Equal => " = ",
+                AssignementOperator::Modulo => " = {} % ",
+                AssignementOperator::Mul => " = {} * ",
+                AssignementOperator::Sub => " = {} - ",
+            };
+        string.to_owned()
+    }
+}
 
 impl ToSql for Expression {
     fn to_sql(&self) -> String {

@@ -1,5 +1,7 @@
 //! Abstract syntax tree for SQL generation.
 
+use std::fmt::{Display, Error, Formatter};
+
 use syntax::ast::Expr;
 use syntax::codemap::Spanned;
 use syntax::ptr::P;
@@ -77,11 +79,39 @@ pub enum AggregateFilterValue {
     Sql(String),
 }
 
-/// `Assignment` for use in SQL Update `Query`.
+/// `Assignment` for use in SQL Insert and Update `Query`.
 #[derive(Debug)]
 pub struct Assignment {
     pub identifier: Identifier,
+    pub operator: Spanned<AssignementOperator>,
     pub value: Expression,
+}
+
+/// `AssignementOperator` for use in SQL Insert and Update `Query`.
+#[derive(Debug, PartialEq)]
+pub enum AssignementOperator {
+    Add,
+    Divide,
+    Equal,
+    Modulo,
+    Mul,
+    Sub,
+}
+
+impl Display for AssignementOperator {
+    fn fmt(&self, formatter: &mut Formatter) -> Result<(), Error> {
+        let op =
+            match *self {
+                AssignementOperator::Add => "+=",
+                AssignementOperator::Divide => "/=",
+                AssignementOperator::Equal => "=",
+                AssignementOperator::Modulo => "%=",
+                AssignementOperator::Mul => "*=",
+                AssignementOperator::Sub => "-=",
+            };
+        write!(formatter, "{}", op).unwrap();
+        Ok(())
+    }
 }
 
 /// `Filter` for SQL `Query` (WHERE clause).

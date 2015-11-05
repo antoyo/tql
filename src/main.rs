@@ -143,8 +143,8 @@ fn main() {
     //sql!(Person.all()[true..false]);
     let people = sql!(Person.all()[..2]);
     show_people(people);
-    println!(to_sql!(Person.all()[1..3]));
-    let people = sql!(Person.all()[1..3]);
+    println!(to_sql!(Person[1..3]));
+    let people = sql!(Person[1..3]);
     show_people(people);
     println!(to_sql!(Person.all()[2]));
     let person = sql!(Person.all()[2]);
@@ -454,6 +454,42 @@ fn main() {
 
     let person = sql!(Person.filter(id == 2).get());
     show_person_option(person);
+
+    let person = sql!(Person.get(1));
+    show_person_option(person);
+
+    let _ = sql!(Person.get(1).update(age += 1));
+
+    let person = sql!(Person.get(1));
+    show_person_option(person);
+
+    let _ = sql!(Person.get(1).update(age -= 3));
+
+    let person = sql!(Person.get(1));
+    show_person_option(person);
+
+    let _ = sql!(Person.get(1).update(age %= 7));
+
+    let person = sql!(Person.get(1));
+    show_person_option(person);
+
+    let _ = sql!(Person.get(1).update(age *= 2));
+
+    let person = sql!(Person.get(1));
+    show_person_option(person);
+
+    let _ = sql!(Person.get(1).update(age /= 3));
+
+    let person = sql!(Person.get(1));
+    show_person_option(person);
+
+    //sql!(Address.insert(number += 42, street = "Street Ave"));
+    //sql!(Address.insert(number = 42, street -= "Street Ave"));
+
+    //let _ = sql!(Person.get(1).update(value += " test"));
+
+    //let person = sql!(Person.get(1));
+    //show_person_option(person);
 
     //sql!(Person.delete());
 
