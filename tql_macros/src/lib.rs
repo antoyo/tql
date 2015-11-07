@@ -106,7 +106,7 @@ fn add_field(fields: &mut Vec<Field>, expr: Expression, name: &str, position: Sp
 /// `postgres` library.
 fn expand_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult + 'static> {
     // TODO: si le premier paramètre n’est pas fourni, utiliser "connection".
-    if let TokenTree::TtToken(_, Token::Ident(ident, _)) = args[0] {
+    if let TokenTree::Token(_, Token::Ident(ident, _)) = args[0] {
         let sql_result = to_sql(cx, args);
         match sql_result {
             Ok(sql_query_with_args) => {
@@ -426,7 +426,7 @@ fn to_sql(cx: &mut ExtCtxt, args: &[TokenTree]) -> SqlResult<SqlQueryWithArgs> {
     }
 
     let mut parser = cx.new_parser_from_tts(args);
-    let expression = parser.parse_expr();
+    let expression = parser.parse_expr_panic();
     let sql_tables = singleton();
     let method_calls = try!(parse(expression));
     let mut query = try!(analyze(method_calls, sql_tables));
