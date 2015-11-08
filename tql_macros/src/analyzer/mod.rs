@@ -522,7 +522,11 @@ fn process_methods(calls: &[MethodCall], table: &SqlFields, table_name: &str, de
                 try(convert_arguments(&method_call.arguments, &table_name, table, argument_to_assignment), &mut errors, |assigns| {
                     assignments = assigns;
                 });
-                check_insert_arguments(&assignments, method_call.position, &table, &mut errors);
+                if !assignments.is_empty() {
+                    // TODO: vérifier aussi même s’il y a des erreurs de type dans les
+                    // assignations.
+                    check_insert_arguments(&assignments, method_call.position, &table, &mut errors);
+                }
                 query_type = SqlQueryType::Insert;
             },
             "join" => {

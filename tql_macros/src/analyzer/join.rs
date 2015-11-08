@@ -3,9 +3,9 @@
 use syntax::codemap::Spanned;
 
 use ast::{Expression, Join};
-use error::{Error, SqlResult, res};
+use error::{SqlResult, res};
 use state::{SqlFields, get_primary_key_field_by_table_name};
-use super::{check_field, no_primary_key, path_expr_to_identifier};
+use super::{check_field, mismatched_types, no_primary_key, path_expr_to_identifier};
 use types::Type;
 
 /// Convert an `Expression` to a `Join`
@@ -35,11 +35,7 @@ pub fn argument_to_join(arg: &Expression, table_name: &str, table: &SqlFields) -
                     }
                 }
                 else {
-                    errors.push(Error::new_with_code(
-                        format!("mismatched types:\n expected `ForeignKey<_>`,\n    found `{}`", field_type),
-                        arg.span,
-                        "E0308",
-                    ));
+                    mismatched_types("ForeignKey<_>", field_type, arg.span, &mut errors);
                 }
             },
             None => (), // This case is handled by the check_field() call above.

@@ -354,8 +354,8 @@ fn main() {
     println!(to_sql!(Person.filter(name.contains("value") == true)));
     let people = sql!(Person.filter(name.contains("value") == true));
     show_people(people);
-    //let people = sql!(Person.filter(name.contains("value")));
-    //show_people(people);
+    let people = sql!(Person.filter(name.contains("value")));
+    show_people(people);
     let people = sql!(Person.filter(name.starts_with("va")));
     show_people(people);
     let people = sql!(Person.filter(name.ends_with("1")));
@@ -488,8 +488,8 @@ fn main() {
 
     //let _ = sql!(Person.get(1).update(value += " test"));
 
-    //let person = sql!(Person.get(1));
-    //show_person_option(person);
+    let person = sql!(Person.get(1));
+    show_person_option(person);
 
     //sql!(Person.delete());
 

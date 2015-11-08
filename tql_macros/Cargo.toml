@@ -14,3 +14,4 @@ clippy = "0.0.23"
 
 [dev-dependencies]
 compiletest_rs = "0.0.10"
+postgres = { version = "0.10.0", features = ["chrono"] }

@@ -8,6 +8,8 @@
 
 // TODO: changer le courriel de l’auteur avant de mettre sur TuxFamily.
 
+// TODO: l’attribut #[SqlTable] devrait ajouter l’attribute #[derive(Debug)] s’il n’est pas déjà
+// présent.
 // TODO: mieux gérer les ExprPath (vérifier qu’il n’y a qu’un segment).
 // TODO: utiliser tous les segments au lieu de juste segments[0].
 // TODO: paramétriser le type ForeignKey et PrimaryKey pour que la macro puisse choisir de mettre
@@ -106,21 +108,21 @@ fn add_field(fields: &mut Vec<Field>, expr: Expression, name: &str, position: Sp
 /// `postgres` library.
 fn expand_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult + 'static> {
     // TODO: si le premier paramètre n’est pas fourni, utiliser "connection".
-    if let TokenTree::Token(_, Token::Ident(ident, _)) = args[0] {
-        let sql_result = to_sql(cx, args);
-        match sql_result {
-            Ok(sql_query_with_args) => {
+    let sql_result = to_sql(cx, args);
+    match sql_result {
+        Ok(sql_query_with_args) => {
+            if let TokenTree::Token(_, Token::Ident(ident, _)) = args[0] {
                 gen_query(cx, sp, ident, sql_query_with_args)
             }
-            Err(errors) => {
-                span_errors(errors, cx);
+            else {
+                cx.span_err(sp, "Expected table identifier"); // TODO: améliorer ce message.
                 DummyResult::any(sp)
             }
-        }
-    }
-    else {
-        cx.span_err(sp, "Expected table identifier"); // TODO: améliorer ce message.
-        DummyResult::any(sp)
+        },
+        Err(errors) => {
+            span_errors(errors, cx);
+            DummyResult::any(sp)
+        },
     }
 }
 
@@ -194,11 +196,11 @@ fn expand_to_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResul
         Ok((sql, _, _, _, _)) => {
             let string_literal = intern(&sql);
             MacEager::expr(cx.expr_str(sp, InternedString::new_from_name(string_literal)))
-        }
+        },
         Err(errors) => {
             span_errors(errors, cx);
             DummyResult::any(sp)
-        }
+        },
     }
 }
 
