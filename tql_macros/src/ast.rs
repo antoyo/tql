@@ -277,7 +277,7 @@ pub fn query_type(query: &Query) -> QueryType {
                 // NOTE: At this stage (code generation), the table and the field exist, hence unwrap().
                 let table = tables.get(table).unwrap();
                 if let FilterValue::Identifier(ref identifier) = filter.operand1 {
-                    if table.get(identifier).unwrap().node == Type::Serial {
+                    if table.fields.get(identifier).unwrap().node == Type::Serial {
                         typ = QueryType::SelectOne;
                     }
                 }

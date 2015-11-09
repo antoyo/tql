@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::mem;
 
-use syntax::codemap::Spanned;
+use syntax::codemap::{Span, Spanned};
 
 use methods::{add_initial_aggregates, add_initial_methods};
 use types::Type;
@@ -50,14 +50,20 @@ pub struct SqlMethodTypes {
     pub template: String,
 }
 
+pub struct SqlTable {
+    pub fields: SqlFields,
+    pub name: String,
+    pub position: Span,
+}
+
 /// A collection of SQL tables.
-pub type SqlTables = HashMap<String, SqlFields>;
+pub type SqlTables = HashMap<String, SqlTable>;
 
 /// Get the type of the field if it exists.
 pub fn get_field_type<'a, 'b>(table_name: &'a str, identifier: &'b str) -> Option<&'a Type> {
     let tables = singleton();
     tables.get(table_name)
-        .and_then(|table| table.get(identifier))
+        .and_then(|table| table.fields.get(identifier))
         .map(|field_type| &field_type.node)
 }
 
@@ -66,7 +72,7 @@ pub fn get_method_types<'a>(table_name: &str, field_name: &str, method_name: &st
     let tables = singleton();
     let methods = methods_singleton();
     tables.get(table_name)
-        .and_then(|table| table.get(field_name))
+        .and_then(|table| table.fields.get(field_name))
         .and_then(move |field_type|
             methods.get(&field_type.node)
                 .and_then(|type_methods| type_methods.get(method_name))
@@ -74,8 +80,8 @@ pub fn get_method_types<'a>(table_name: &str, field_name: &str, method_name: &st
 }
 
 /// Get the name of the primary key field.
-pub fn get_primary_key_field(fields: &SqlFields) -> Option<String> {
-    for (field, typ) in fields {
+pub fn get_primary_key_field(table: &SqlTable) -> Option<String> {
+    for (field, typ) in &table.fields {
         if let Type::Serial = typ.node {
             return Some(field.clone());
         }

@@ -87,7 +87,7 @@ use gen::ToSql;
 use optimizer::optimize;
 use parser::parse;
 use plugin::NODE_ID;
-use state::{SqlArg, SqlArgs, SqlFields, SqlTables, get_primary_key_field_by_table_name, lint_singleton, singleton};
+use state::{SqlArg, SqlArgs, SqlFields, SqlTable, SqlTables, get_primary_key_field_by_table_name, lint_singleton, singleton};
 use type_analyzer::{SqlAttrError, SqlError};
 use types::Type;
 
@@ -144,7 +144,11 @@ fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, _: &MetaItem, item: &Annotatable
                 }
             }
 
-            sql_tables.insert(table_name.clone(), fields);
+            sql_tables.insert(table_name.clone(), SqlTable {
+                fields: fields,
+                name: table_name.clone(),
+                position: item.span,
+            });
 
             // Add the postgres::types::ToSql implementation for the struct.
             // Its SQL representation is the same as the primary key SQL representation.
@@ -253,7 +257,7 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
     let table_name = table_ident.to_string();
     match sql_tables.get(&table_name) {
         Some(table) => {
-            let fields = get_query_fields(cx, sp, table, sql_tables, joins);
+            let fields = get_query_fields(cx, sp, &table.fields, sql_tables, joins);
             let struct_expr = cx.expr_struct(sp, cx.path_ident(sp, table_ident), fields);
             let aggregate_struct = gen_aggregate_struct(cx, sp, &aggregates);
             let args_expr = get_query_arguments(cx, sp, table_name, arguments);
@@ -366,27 +370,28 @@ fn get_query_fields(cx: &mut ExtCtxt, sp: Span, table: &SqlFields, sql_tables: &
         match typ.node {
             Type::Custom(ref foreign_table) => {
                 let table_name = foreign_table;
-                // NOTE: At this stage (code generation), the table exists, hence unwrap().
-                let foreign_table = sql_tables.get(foreign_table).unwrap();
-                if has_joins(&joins, name) {
-                    let mut foreign_fields = vec![];
-                    for (field, typ) in foreign_table {
-                        match typ.node {
-                            Type::Custom(_) | Type::UnsupportedType(_) => (), // Do not add foreign key recursively.
-                            _ => {
-                                add_field(&mut foreign_fields, quote_expr!(cx, row.get($index)), field, sp);
-                                index += 1;
-                            },
+                if let Some(foreign_table) = sql_tables.get(foreign_table) {
+                    if has_joins(&joins, name) {
+                        let mut foreign_fields = vec![];
+                        for (field, typ) in &foreign_table.fields {
+                            match typ.node {
+                                Type::Custom(_) | Type::UnsupportedType(_) => (), // Do not add foreign key recursively.
+                                _ => {
+                                    add_field(&mut foreign_fields, quote_expr!(cx, row.get($index)), &field, sp);
+                                    index += 1;
+                                },
+                            }
                         }
+                        let related_struct = cx.expr_struct(sp, cx.path_ident(sp, str_to_ident(table_name)), foreign_fields);
+                        add_field(&mut fields, quote_expr!(cx, Some($related_struct)), name, sp);
                     }
-                    let related_struct = cx.expr_struct(sp, cx.path_ident(sp, str_to_ident(table_name)), foreign_fields);
-                    add_field(&mut fields, quote_expr!(cx, Some($related_struct)), name, sp);
+                    else {
+                        // Since a `ForeignKey` is an `Option`, we output `None` when the field
+                        // is not `join`ed.
+                        add_field(&mut fields, quote_expr!(cx, None), name, sp);
+                    }
                 }
-                else {
-                    // Since a `ForeignKey` is an `Option`, we output `None` when the field
-                    // is not `join`ed.
-                    add_field(&mut fields, quote_expr!(cx, None), name, sp);
-                }
+                // NOTE: if the field type is not an SQL table, an error is thrown by the linter.
             },
             Type::UnsupportedType(_) => (),
             _ => {

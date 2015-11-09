@@ -26,6 +26,7 @@ struct Person {
     //birthdate: NaiveDate,
     //birthdate: NaiveTime,
     address: ForeignKey<Address>,
+    //address: ForeignKey<Connection>,
     weight: Option<i32>,
     //c: Connection,
     //c: Option<Connection>,

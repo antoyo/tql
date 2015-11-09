@@ -11,7 +11,7 @@ use syntax::codemap::{NO_EXPANSION, BytePos, Span};
 
 use analyzer::unknown_table_error;
 use error::{Error, ErrorType, SqlResult, res};
-use state::{SqlFields, SqlTables, lint_singleton, singleton};
+use state::{SqlTable, SqlTables, lint_singleton, singleton};
 use types::Type;
 
 declare_lint!(SQL_LINT, Forbid, "Err about SQL type errors");
@@ -33,28 +33,25 @@ impl LintPass for SqlAttrError {
 }
 
 /// Analyze the types of the SQL table struct.
-fn analyze_table_types(fields: &SqlFields, sql_tables: &SqlTables) -> SqlResult<()> {
+fn analyze_table_types(table: &SqlTable, sql_tables: &SqlTables) -> SqlResult<()> {
     let mut errors = vec![];
     let mut primary_key_count = 0u32;
-    // NOTE: At this stage (type analysis), at least one field exists, hence unwrap().
-    let mut position = fields.values().next().unwrap().span;
-    for field in fields.values() {
+    for field in table.fields.values() {
         match field.node {
             Type::Custom(ref related_table_name) =>
                 if let None = sql_tables.get(related_table_name) {
                     unknown_table_error(related_table_name, field.span, sql_tables, &mut errors);
                 },
             Type::Serial => {
-                position = field.span;
                 primary_key_count += 1;
             }
             _ => (),
         }
     }
     match primary_key_count {
-        0 => errors.push(Error::new_warning("No primary key found".to_owned(), position)), // TODO: Mettre une meilleur position.
+        0 => errors.insert(0, Error::new_warning("No primary key found".to_owned(), table.position)),
         1 => (), // One primary key is OK.
-        _ => errors.push(Error::new_warning("More than one primary key is currently not supported".to_owned(), position)),
+        _ => errors.insert(0, Error::new_warning("More than one primary key is currently not supported".to_owned(), table.position)),
     }
     res((), errors)
 }
@@ -91,8 +88,8 @@ impl EarlyLintPass for SqlAttrError {
         let done = unsafe { analyze_done };
         if !done {
             let sql_tables = singleton();
-            for fields in sql_tables.values() {
-                if let Err(errors) = analyze_table_types(&fields, &sql_tables) {
+            for table in sql_tables.values() {
+                if let Err(errors) = analyze_table_types(&table, &sql_tables) {
                     span_errors(errors, cx);
                 }
             }

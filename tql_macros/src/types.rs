@@ -257,10 +257,14 @@ fn type_to_sql(typ: &Type, mut nullable: bool) -> String {
             Type::I8 | Type::Char => "CHARACTER(1)".to_owned(),
             Type::Custom(ref related_table_name) => {
                 let tables = singleton();
-                // NOTE: At this stage (code generation), the table and the primary key exist, hence unwrap().
-                let table = tables.get(related_table_name).unwrap();
-                let primary_key_field = get_primary_key_field(table).unwrap();
-                "INTEGER REFERENCES ".to_owned() + &related_table_name + "(" + &primary_key_field + ")"
+                if let Some(table) = tables.get(related_table_name) {
+                    let primary_key_field = get_primary_key_field(table).unwrap();
+                    "INTEGER REFERENCES ".to_owned() + &related_table_name + "(" + &primary_key_field + ")"
+                }
+                else {
+                    "".to_owned()
+                }
+                // NOTE: if the field type is not an SQL table, an error is thrown by the linter.
             },
             Type::F32 => "REAL".to_owned(),
             Type::F64 => "DOUBLE PRECISION".to_owned(),

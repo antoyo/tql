@@ -8,7 +8,7 @@ use syntax::ptr::P;
 
 use ast::{self, Expression, Filter, FilterExpression, Filters, FilterValue, LogicalOperator, RelationalOperator};
 use error::{SqlResult, Error, res};
-use state::{SqlFields, SqlMethod, SqlMethodTypes, methods_singleton};
+use state::{SqlMethod, SqlMethodTypes, SqlTable, methods_singleton};
 use super::{check_field, check_field_type, check_type, check_type_filter_value, propose_similar_name};
 use types::Type;
 
@@ -37,15 +37,15 @@ pub fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors:
 }
 
 /// Convert a Rust binary expression to a `FilterExpression`.
-fn binary_expression_to_filter_expression(expr1: &Expression, op: BinOp_, expr2: &Expression, table_name: &str, table: &SqlFields) -> SqlResult<FilterExpression> {
+fn binary_expression_to_filter_expression(expr1: &Expression, op: BinOp_, expr2: &Expression, table: &SqlTable) -> SqlResult<FilterExpression> {
     // TODO: accumuler les erreurs au lieu d’arrêter à la première.
-    let filter1 = try!(expression_to_filter_expression(expr1, table_name, table));
+    let filter1 = try!(expression_to_filter_expression(expr1, table));
     // TODO: retourner des erreurs à la place de dummy.
     let dummy = FilterExpression::NoFilters;
 
     let filter =
         if is_logical_operator(op) {
-            let filter2 = try!(expression_to_filter_expression(expr2, table_name, table));
+            let filter2 = try!(expression_to_filter_expression(expr2, table));
             FilterExpression::Filters(Filters {
                 operand1: Box::new(filter1),
                 operator: binop_to_logical_operator(op),
@@ -126,34 +126,34 @@ fn check_method_arguments(arguments: &[Expression], argument_types: &[Type], err
 }
 
 /// Convert a Rust expression to a `FilterExpression`.
-pub fn expression_to_filter_expression(arg: &P<Expr>, table_name: &str, table: &SqlFields) -> SqlResult<FilterExpression> {
+pub fn expression_to_filter_expression(arg: &P<Expr>, table: &SqlTable) -> SqlResult<FilterExpression> {
     let mut errors = vec![];
 
     let filter =
         match arg.node {
             ExprBinary(Spanned { node: op, .. }, ref expr1, ref expr2) => {
-                try!(binary_expression_to_filter_expression(expr1, op, expr2, table_name, table))
+                try!(binary_expression_to_filter_expression(expr1, op, expr2, table))
             },
             ExprMethodCall(identifier, _, ref exprs) => {
                 FilterExpression::FilterValue(Spanned {
-                    node: method_call_expression_to_filter_expression(identifier, &exprs, table_name, table, &mut errors),
+                    node: method_call_expression_to_filter_expression(identifier, &exprs, table, &mut errors),
                     span: arg.span,
                 })
             },
             ExprPath(None, ref path) => {
                 let identifier = path.segments[0].identifier.to_string();
-                check_field(&identifier, path.span, table_name, table, &mut errors);
+                check_field(&identifier, path.span, table, &mut errors);
                 FilterExpression::FilterValue(Spanned {
                     node: FilterValue::Identifier(identifier),
                     span: arg.span,
                 })
             },
             ExprParen(ref expr) => {
-                let filter = try!(expression_to_filter_expression(expr, table_name, table));
+                let filter = try!(expression_to_filter_expression(expr, table));
                 FilterExpression::ParenFilter(box filter)
             },
             ExprUnary(UnOp::UnNot, ref expr) => {
-                let filter = try!(expression_to_filter_expression(expr, table_name, table));
+                let filter = try!(expression_to_filter_expression(expr, table));
                 FilterExpression::NegFilter(box filter)
             },
             _ => {
@@ -216,12 +216,12 @@ pub fn is_relational_operator(binop: BinOp_) -> bool {
 }
 
 /// Convert a method call expression to a filter expression.
-fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: &[Expression], table_name: &str, table: &SqlFields, errors: &mut Vec<Error>) -> FilterValue {
+fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: &[Expression], table: &SqlTable, errors: &mut Vec<Error>) -> FilterValue {
     let method_name = identifier.node.name.to_string();
     let dummy = FilterValue::Identifier("".to_owned());
     match exprs[0].node {
         ExprPath(_, ref path) => {
-            path_method_call_to_filter(path, identifier, &method_name, exprs, table, table_name, errors)
+            path_method_call_to_filter(path, identifier, &method_name, exprs, table, errors)
         },
         _ => {
             errors.push(Error::new(
@@ -234,11 +234,11 @@ fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: 
 }
 
 /// Convert a method call where the object is an identifier to a filter expression.
-fn path_method_call_to_filter(path: &Path, identifier: SpannedIdent, method_name: &str, exprs: &[Expression], table: &SqlFields, table_name: &str, errors: &mut Vec<Error>) -> FilterValue {
+fn path_method_call_to_filter(path: &Path, identifier: SpannedIdent, method_name: &str, exprs: &[Expression], table: &SqlTable, errors: &mut Vec<Error>) -> FilterValue {
     // TODO: retourner des erreurs à la place de dummy.
     let dummy = FilterValue::Identifier("".to_owned());
     let object_name = path.segments[0].identifier.name.to_string();
-    match table.get(&object_name) {
+    match table.fields.get(&object_name) {
         Some(object_type) => {
             let type_method = get_method(object_type, exprs, method_name, identifier, errors);
 
@@ -256,7 +256,7 @@ fn path_method_call_to_filter(path: &Path, identifier: SpannedIdent, method_name
             }
         },
         None => {
-            check_field(&object_name, path.span, table_name, table, errors);
+            check_field(&object_name, path.span, table, errors);
             dummy
         },
     }

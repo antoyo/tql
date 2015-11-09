@@ -6,14 +6,16 @@
 use syntax::codemap::Span;
 
 /// `Error` is a type that represents an error with its position.
+#[derive(Debug)]
 pub struct Error {
     pub code: Option<String>,
-    pub kind: ErrorType,
+    pub kind: ErrorType, // TODO: utiliser une énumération.
     pub message: String,
     pub position: Span,
 }
 
 /// `ErrorType` is an `Error` type.
+#[derive(Debug)]
 pub enum ErrorType {
     Error,
     Help,
