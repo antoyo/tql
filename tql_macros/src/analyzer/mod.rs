@@ -85,7 +85,6 @@ impl QueryData {
 
 /// Analyze and transform the AST.
 pub fn analyze(method_calls: MethodCalls, sql_tables: &SqlTables) -> SqlResult<Query> {
-    // TODO: vérifier que la suite d’appels de méthode est valide (de même que l’ordre pour filter).
     let mut errors = vec![];
 
     let table_name = method_calls.name.clone();
@@ -94,6 +93,7 @@ pub fn analyze(method_calls: MethodCalls, sql_tables: &SqlTables) -> SqlResult<Q
     }
 
     check_methods(&method_calls, &mut errors);
+    check_method_calls_validity(&method_calls, &mut errors);
 
     let table = sql_tables.get(&table_name);
     let calls = &method_calls.calls;
@@ -192,23 +192,45 @@ fn check_field_type(table_name: &str, filter_value: &FilterValue, value: &Expres
     check_type(field_type, value, errors);
 }
 
+/// Check if the method calls sequence is valid.
+/// For instance, one cannot call both insert() and delete() methods in the same query.
+fn check_method_calls_validity(method_calls: &MethodCalls, errors: &mut Vec<Error>) {
+    let method_map =
+        hashmap!{
+            "aggregate" => vec!["filter", "join", "values"],
+            "all" => vec!["filter", "get", "join", "limit", "sort"],
+            "create" => vec![],
+            "delete" => vec!["filter", "get"],
+            "drop" => vec![],
+            "insert" => vec![],
+            "update" => vec!["filter", "get"],
+        };
+
+    let main_method = method_calls.calls.iter()
+        .filter(|call| method_map.contains_key(&*call.name) )
+        .next()
+        .map(|call| call.name.as_str())
+        .unwrap_or("all");
+
+    // TODO: vérifier que insert, update ou delete n’est pas appelé plus d’une fois.
+    let mut valid_methods = vec![main_method];
+    valid_methods.append(&mut method_map[&*main_method].clone());
+
+    let methods = get_methods();
+    let invalid_methods = method_calls.calls.iter()
+        .filter(|call| methods.contains(&call.name) && !valid_methods.contains(&&*call.name));
+
+    for method in invalid_methods {
+        errors.push(Error::new(
+            format!("cannot call the {}() method with the {}() method", method.name, main_method),
+            method.position,
+        ));
+    }
+}
+
 /// Check if the method `calls` exist.
 fn check_methods(method_calls: &MethodCalls, errors: &mut Vec<Error>) {
-    let methods = vec![
-        "aggregate".to_owned(),
-        "all".to_owned(),
-        "create".to_owned(),
-        "delete".to_owned(),
-        "drop".to_owned(),
-        "filter".to_owned(),
-        "get".to_owned(),
-        "insert".to_owned(),
-        "join".to_owned(),
-        "limit".to_owned(),
-        "sort".to_owned(),
-        "update".to_owned(),
-        "values".to_owned(),
-    ];
+    let methods = get_methods();
     for method_call in &method_calls.calls {
         if !methods.contains(&method_call.name) {
             errors.push(Error::new(
@@ -290,6 +312,25 @@ fn get_field_type_by_filter_value<'a>(table_name: &'a str, filter_value: &Filter
             &method.return_type
         },
     }
+}
+
+/// Get all the existing methods.
+fn get_methods() -> Vec<String> {
+    vec![
+        "aggregate".to_owned(),
+        "all".to_owned(),
+        "create".to_owned(),
+        "delete".to_owned(),
+        "drop".to_owned(),
+        "filter".to_owned(),
+        "get".to_owned(),
+        "insert".to_owned(),
+        "join".to_owned(),
+        "limit".to_owned(),
+        "sort".to_owned(),
+        "update".to_owned(),
+        "values".to_owned(),
+    ]
 }
 
 /// Get the query field fully qualified names.

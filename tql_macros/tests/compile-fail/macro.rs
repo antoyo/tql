@@ -27,4 +27,8 @@ fn main() {
 
     sql!(Table());
     //~^ ERROR Expected method call
+
+    sql!(Table.insert().filter(i32_field == 10).delete());
+    //~^ ERROR cannot call the filter() method with the insert() method
+    //~| ERROR cannot call the delete() method with the insert() method
 }

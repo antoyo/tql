@@ -11,7 +11,6 @@ use tql::PrimaryKey;
 
 #[SqlTable]
 #[derive(Debug)]
-#[allow(dead_code)]
 struct Table {
     id: PrimaryKey,
     field1: String,

@@ -60,6 +60,8 @@ use syntax::owned_slice::OwnedSlice;
 use syntax::parse::token::{InternedString, Token, intern, str_to_ident};
 use syntax::ptr::P;
 
+#[macro_use]
+pub mod hashmap;
 pub mod analyzer;
 pub mod arguments;
 pub mod ast;
