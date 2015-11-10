@@ -8,6 +8,8 @@
 
 // TODO: changer le courriel de l’auteur avant de mettre sur TuxFamily.
 
+// TODO: ajouter un avertissement lors de l’appel à update() s’il n’y a pas de filtres.
+// TODO: vérifier dans l’attribut #[SqlTable] si un champ est défini plus d’une fois.
 // TODO: l’attribut #[SqlTable] devrait ajouter l’attribute #[derive(Debug)] s’il n’est pas déjà
 // présent.
 // TODO: mieux gérer les ExprPath (vérifier qu’il n’y a qu’un segment).
