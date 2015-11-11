@@ -47,7 +47,7 @@ fn main() {
     //~| HELP run `rustc --explain E0308` to see a detailed explanation
     //~| NOTE in this expansion of sql! (defined in tql)
 
-    sql!(Table.filter(field1.len() == "toto"));
+    sql!(Table.filter(field1.len() == "test"));
     //~^ ERROR mismatched types:
     //~| expected `i32`,
     //~| found `String` [E0308]

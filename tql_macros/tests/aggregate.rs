@@ -41,4 +41,8 @@ fn test_aggregate() {
         "SELECT CAST(AVG(field2) AS INT) FROM Table WHERE field2 > 10 GROUP BY field1 HAVING CAST(AVG(field2) AS INT) < 20",
         to_sql!(Table.filter(field2 > 10).values(field1).aggregate(avg(field2)).filter(field2_avg < 20))
     );
+    assert_eq!(
+        "SELECT CAST(AVG(field2) AS INT) FROM Table WHERE field2 > 10 GROUP BY field1 HAVING CAST(AVG(field2) AS INT) < 20",
+        to_sql!(Table.filter(field2 > 10).values(field1).aggregate(average = avg(field2)).filter(average < 20))
+    );
 }

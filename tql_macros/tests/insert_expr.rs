@@ -14,6 +14,7 @@ struct Table {
     field1: String,
     field2: i32,
     related_field: ForeignKey<RelatedTable>,
+    optional_field: Option<i32>,
 }
 
 #[SqlTable]
@@ -26,6 +27,8 @@ struct RelatedTable {
 
 #[test]
 fn test_insert() {
+    // TODO: réécrire ce test pour utiliser la macro sql!() à la place et faire de vraies
+    // insertions.
     // TODO: vérifier que le retour de la clé est bon.
     // TODO: vérifier que la clé primaire peut-être différente de id.
     assert_eq!(

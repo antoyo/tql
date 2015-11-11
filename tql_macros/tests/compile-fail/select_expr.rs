@@ -72,4 +72,7 @@ fn main() {
     //~| found `Table` [E0308]
     //~| HELP run `rustc --explain E0308` to see a detailed explanation
     //~| NOTE in this expansion of sql! (defined in tql)
+
+    let other = sql!(OtherTable.get(1)).unwrap();
+    sql!(Table.filter(other == other));
 }

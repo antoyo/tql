@@ -75,6 +75,8 @@ impl<'a> From<&'a Path> for Type {
         if segments.len() == 1 {
             let ident = segments[0].identifier.to_string();
             match &ident[..] {
+                "bool" => Type::Bool,
+                "char" => Type::Char,
                 "DateTime" => match get_type_parameter(&segments[0].parameters) {
                     Some(ty) => match ty.as_ref() {
                         "Local" => Type::LocalDateTime,
@@ -83,9 +85,12 @@ impl<'a> From<&'a Path> for Type {
                     },
                     None => unsupported, // TODO
                 },
-                "i32" => {
-                    Type::I32
-                },
+                "f32" => Type::F32,
+                "f64" => Type::F64,
+                "i8" => Type::I8,
+                "i16" => Type::I16,
+                "i32" => Type::I32,
+                "i64" => Type::I64,
                 "ForeignKey" => match get_type_parameter(&segments[0].parameters) {
                     Some(ty) => Type::Custom(ty),
                     None => unsupported, // TODO
@@ -113,6 +118,13 @@ impl<'a> From<&'a Path> for Type {
                 },
                 "String" => {
                     Type::String
+                },
+                "Vec" => match get_type_parameter(&segments[0].parameters) {
+                    Some(ty) => match ty.as_ref() {
+                        "u8" => Type::ByteString,
+                        _ => unsupported, // TODO
+                    },
+                    None => unsupported, // TODO
                 },
                 typ => Type::UnsupportedType(typ.to_owned()),
             }

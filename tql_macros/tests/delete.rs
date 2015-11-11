@@ -26,4 +26,5 @@ fn test_delete() {
         "DELETE FROM Table WHERE field1 = 'test'",
         to_sql!(Table.filter(field1 == "test").delete())
     );
+    // TODO: Dans tests/delete_expr.rs, vérifier que le nombre retourné par delete() est correct.
 }

@@ -14,6 +14,7 @@ struct Table {
     field1: String,
     field2: i32,
     related_field: ForeignKey<RelatedTable>,
+    optional_field: Option<i32>,
 }
 
 #[SqlTable]
@@ -37,5 +38,9 @@ fn test_insert() {
     assert_eq!(
         "INSERT INTO Table(field1, field2, related_field) VALUES('value1', $1, $2) RETURNING id",
         to_sql!(Table.insert(field1 = "value1", field2 = new_field2, related_field = related_object))
+    );
+    assert_eq!(
+        "INSERT INTO Table(field1, field2, related_field, optional_field) VALUES('value1', 55, $1, 42) RETURNING id",
+        to_sql!(Table.insert(field1 = "value1", field2 = 55, related_field = related_object, optional_field = 42))
     );
 }

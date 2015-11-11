@@ -7,11 +7,13 @@
 #![allow(ptr_arg)]
 
 // TODO: changer le courriel de l’auteur avant de mettre sur TuxFamily.
-
-// TODO: ajouter un avertissement lors de l’appel à update() s’il n’y a pas de filtres.
-// TODO: vérifier dans l’attribut #[SqlTable] si un champ est défini plus d’une fois.
 // TODO: l’attribut #[SqlTable] devrait ajouter l’attribute #[derive(Debug)] s’il n’est pas déjà
 // présent.
+// TODO: vérifier dans l’attribut #[SqlTable] si un champ est défini plus d’une fois (en ce moment,
+// une deuxième définition écrase la première ce qui cause des erreurs étranges).
+
+// TODO: ajouter un avertissement lors de l’appel à update() s’il n’y a pas de filtres.
+// TODO: supporter des méthodes de String dans la méthode update() (par exemple push(), push_str(), truncate(), pop(), remove()).
 // TODO: mieux gérer les ExprPath (vérifier qu’il n’y a qu’un segment).
 // TODO: utiliser tous les segments au lieu de juste segments[0].
 // TODO: paramétriser le type ForeignKey et PrimaryKey pour que la macro puisse choisir de mettre
@@ -23,15 +25,23 @@
 // FIXME: enlever les clone() inutiles.
 // FIXME: utiliser des fermetures à la place de fonctions internes.
 // FIXME: utiliser use self au lieu de deux lignes.
+// TODO: implémenter le trait Default sur les structures de table afin de pouvoir créer un objet
+// par défaut et assigner seulement les champs qui ont été récupérés par la requête (pour only() et
+// defer()).
+// TODO: faire des vérifications de byte string (par exemple: b"\u{a66e}").
 // TODO: créer différents types pour String (VARCHAR, CHAR(n), TEXT, …).
 // TODO: rendre les messages d’erreur plus semblables à ceux de Rust.
 // TODO: rendre le moins d’identifiants publiques.
 // TODO: utiliser unwrap() et unreachable!() pour faire planter quand l’erreur est dû à un bug.
 // TODO: supporter plusieurs SGBDs.
 // TODO: supporter les méthodes sur Nullable<Generic> et Nullable<i32> et autres?
-// TODO: dans les aggrégations, permettre des opérations :
+// TODO: supporter les slices (par exemple: Table.filter(field1[3..6] == "te")).
+// TODO: ajouter la méthode in() (par exemple: Table.filter(field1.in([3, 4, 5]) ou Table.filter(field1.len().in(3..6)))).
+// TODO: dans les aggrégations, permettre des opérations:
 // Table.aggregate(avg(field2 / field1))
-// TODO: dans les aggrégations, permettre de sélectionner d’autres champs.
+// TODO: vérifier les types des arguments pour les aggrégations.
+// TODO: dans les aggrégations, permettre de sélectionner d’autres champs (les champs groupés
+// seulement?).
 // TODO: ajouter la méthode annotate() pour les aggrégations par objet.
 // TODO: dans les filtres d’aggrégations, permettre les appels de fonctions d’aggrégat.
 // TODO: rendre plus uniforme les filtres et les filtres d’aggrégation pour éviter la duplication
@@ -41,7 +51,6 @@
 // pour choisir le nom de la macro à créer (pour permettre d’utiliser plusieurs SGBDs à la fois).
 // TODO: utiliser une compilation en 2 passes pour détecter les champs utilisés et les jointures
 // utiles (peut-être possible avec un lint plugin).
-// TODO: peut-être utiliser Spanned pour conserver la position dans l’AST.
 // TODO: supporter les clés primaires composées.
 // TODO: enlever les attributs allow qui ont été ajoutés à cause de bogues dans clippy.
 

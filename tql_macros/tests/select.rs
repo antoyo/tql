@@ -40,46 +40,6 @@ fn test_all() {
 }
 
 #[test]
-fn test_get() {
-    assert_eq!(
-        format!("{} FROM Table WHERE id = 1", SELECT),
-        to_sql!(Table.get(1))
-    );
-    assert_eq!(
-        format!("{} FROM Table WHERE id = $1", SELECT),
-        to_sql!(Table.get(id))
-    );
-    assert_eq!(
-        format!("{} FROM Table WHERE field2 = 24 OFFSET 0 LIMIT 1", SELECT),
-        to_sql!(Table.get(field2 == 24))
-    ); // TODO: remove the "OFFSET 0" in the optimizer.
-    assert_eq!(
-        format!("{} FROM Table WHERE field1 = 'test' AND field2 = 24 OFFSET 0 LIMIT 1", SELECT),
-        to_sql!(Table.get(field1 == "test" && field2 == 24))
-    );
-    assert_eq!(
-        format!("{} FROM Table WHERE (field1 = 'test' AND field2 = 24) OFFSET 0 LIMIT 1", SELECT),
-        to_sql!(Table.get((field1 == "test" && field2 == 24)))
-    );
-    assert_eq!(
-        format!("{} FROM Table WHERE NOT (field1 = 'test' AND field2 = 24) OFFSET 0 LIMIT 1", SELECT),
-        to_sql!(Table.get(!(field1 == "test" && field2 == 24)))
-    );
-    assert_eq!(
-        format!("{} FROM Table WHERE NOT (field2 < 24) OFFSET 0 LIMIT 1", SELECT),
-        to_sql!(Table.get(!(field2 < 24)))
-    );
-}
-
-#[test]
-fn test_join() {
-    assert_eq!(
-        format!("{}, RelatedTable.field1, RelatedTable.id FROM Table INNER JOIN RelatedTable ON Table.related_field = RelatedTable.id", SELECT),
-        to_sql!(Table.join(related_field))
-    );
-}
-
-#[test]
 fn test_filter() {
     assert_eq!(
         format!("{} FROM Table WHERE field1 = 'value1'", SELECT),
@@ -112,6 +72,18 @@ fn test_filter() {
     assert_eq!(
         format!("{} FROM Table WHERE (field1 = 'value2' OR field2 < 100) AND field1 = 'value1'", SELECT),
         to_sql!(Table.filter((field1 == "value2" || field2 < 100) && field1 == "value1"))
+    );
+    assert_eq!(
+        format!("{} FROM Table WHERE (field1 = 'test' AND field2 = 24)", SELECT),
+        to_sql!(Table.filter((field1 == "test" && field2 == 24)))
+    );
+    assert_eq!(
+        format!("{} FROM Table WHERE NOT (field1 = 'test' AND field2 = 24)", SELECT),
+        to_sql!(Table.filter(!(field1 == "test" && field2 == 24)))
+    );
+    assert_eq!(
+        format!("{} FROM Table WHERE NOT (field2 < 24)", SELECT),
+        to_sql!(Table.filter(!(field2 < 24)))
     );
 }
 
@@ -204,10 +176,58 @@ fn test_filter_sort_limit() {
 }
 
 #[test]
+fn test_get() {
+    assert_eq!(
+        format!("{} FROM Table WHERE id = 1", SELECT),
+        to_sql!(Table.get(1))
+    );
+    assert_eq!(
+        format!("{} FROM Table WHERE id = $1", SELECT),
+        to_sql!(Table.get(id))
+    );
+    assert_eq!(
+        format!("{} FROM Table WHERE field2 = 24 OFFSET 0 LIMIT 1", SELECT),
+        to_sql!(Table.get(field2 == 24))
+    ); // TODO: remove the "OFFSET 0" in the optimizer.
+    assert_eq!(
+        format!("{} FROM Table WHERE field1 = 'test' AND field2 = 24 OFFSET 0 LIMIT 1", SELECT),
+        to_sql!(Table.get(field1 == "test" && field2 == 24))
+    );
+    assert_eq!(
+        format!("{} FROM Table WHERE (field1 = 'test' AND field2 = 24) OFFSET 0 LIMIT 1", SELECT),
+        to_sql!(Table.get((field1 == "test" && field2 == 24)))
+    );
+    assert_eq!(
+        format!("{} FROM Table WHERE NOT (field1 = 'test' AND field2 = 24) OFFSET 0 LIMIT 1", SELECT),
+        to_sql!(Table.get(!(field1 == "test" && field2 == 24)))
+    );
+    assert_eq!(
+        format!("{} FROM Table WHERE NOT (field2 < 24) OFFSET 0 LIMIT 1", SELECT),
+        to_sql!(Table.get(!(field2 < 24)))
+    );
+}
+
+#[test]
+fn test_join() {
+    assert_eq!(
+        format!("{}, RelatedTable.field1, RelatedTable.id FROM Table INNER JOIN RelatedTable ON Table.related_field = RelatedTable.id", SELECT),
+        to_sql!(Table.join(related_field))
+    );
+    assert_eq!(
+        format!("{}, RelatedTable.field1, RelatedTable.id FROM Table INNER JOIN RelatedTable ON Table.related_field = RelatedTable.id", SELECT),
+        to_sql!(Table.all().join(related_field))
+    );
+}
+
+#[test]
 fn test_limit() {
     assert_eq!(
         format!("{} FROM Table LIMIT 2", SELECT),
         to_sql!(Table.all()[..2])
+    );
+    assert_eq!(
+        format!("{} FROM Table LIMIT 2", SELECT),
+        to_sql!(Table[..2])
     );
     assert_eq!(
         format!("{} FROM Table OFFSET 1 LIMIT 2", SELECT),
@@ -216,6 +236,10 @@ fn test_limit() {
     assert_eq!(
         format!("{} FROM Table OFFSET 2 LIMIT 1", SELECT),
         to_sql!(Table.all()[2])
+    );
+    assert_eq!(
+        format!("{} FROM Table OFFSET 2 LIMIT 1", SELECT),
+        to_sql!(Table[2])
     );
     assert_eq!(
         format!("{} FROM Table OFFSET 42 LIMIT 1", SELECT),
