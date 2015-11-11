@@ -240,7 +240,7 @@ impl ToSql for Query {
             },
             Query::Delete { ref filter, ref table } => {
                 let where_clause = filter_to_where_clause(filter);
-                replace_placeholder(format!("DELETE FROM {} {}{}", table, where_clause, filter.to_sql()))
+                replace_placeholder(format!("DELETE FROM {}{}{}", table, where_clause, filter.to_sql()))
             },
             Query::Drop { ref table } => {
                 format!("DROP TABLE {}", table)
