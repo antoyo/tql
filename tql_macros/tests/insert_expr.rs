@@ -4,43 +4,43 @@
 extern crate postgres;
 extern crate tql;
 
-use tql::{ForeignKey, PrimaryKey};
+use postgres::{Connection, SslMode};
+use tql::PrimaryKey;
 
 #[SqlTable]
 #[allow(dead_code)]
 #[derive(Debug)]
-struct Table {
-    id: PrimaryKey,
+struct SqlTable {
+    primary_key: PrimaryKey,
     field1: String,
     field2: i32,
-    related_field: ForeignKey<RelatedTable>,
-    optional_field: Option<i32>,
 }
 
-#[SqlTable]
-#[allow(dead_code)]
-#[derive(Debug)]
-struct RelatedTable {
-    id: PrimaryKey,
-    field1: String,
+fn get_connection() -> Connection {
+    Connection::connect("postgres://test:test@localhost/database", &SslMode::None).unwrap()
 }
 
 #[test]
 fn test_insert() {
-    // TODO: réécrire ce test pour utiliser la macro sql!() à la place et faire de vraies
-    // insertions.
-    // TODO: vérifier que le retour de la clé est bon.
-    // TODO: vérifier que la clé primaire peut-être différente de id.
-    assert_eq!(
-        "INSERT INTO RelatedTable(field1) VALUES('test') RETURNING id",
-        to_sql!(RelatedTable.insert(field1 = "test"))
-    );
-    assert_eq!(
-        "INSERT INTO Table(field1, field2, related_field) VALUES('value1', 55, $1) RETURNING id",
-        to_sql!(Table.insert(field1 = "value1", field2 = 55, related_field = related_object))
-    );
-    assert_eq!(
-        "INSERT INTO Table(field1, field2, related_field) VALUES('value1', $1, $2) RETURNING id",
-        to_sql!(Table.insert(field1 = "value1", field2 = new_field2, related_field = related_object))
-    );
+    let connection = get_connection();
+
+    let _ = sql!(SqlTable.drop()); // NOTE: In case a test failed.
+    let _ = sql!(SqlTable.create());
+
+    let id = sql!(SqlTable.insert(field1 = "value1", field2 = 55)).unwrap();
+    assert_eq!(1, id);
+
+    let table = sql!(SqlTable.get(id)).unwrap();
+    assert_eq!("value1", table.field1);
+    assert_eq!(55, table.field2);
+
+    let new_field2 = 42;
+    let id = sql!(SqlTable.insert(field1 = "value2", field2 = new_field2)).unwrap();
+    assert_eq!(2, id);
+
+    let table = sql!(SqlTable.get(id)).unwrap();
+    assert_eq!("value2", table.field1);
+    assert_eq!(42, table.field2);
+
+    let _ = sql!(SqlTable.drop());
 }

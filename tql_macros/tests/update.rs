@@ -63,5 +63,4 @@ fn test_update_operation() {
         "UPDATE Table SET field2 = field2 + 10, field3 = field3 / 3 WHERE id = 1",
         to_sql!(Table.get(1).update(field2 += 10, field3 /= 3))
     );
-    // TODO: Dans tests/update_expr.rs, vérifier que le nombre retourné par update() est correct.
 }

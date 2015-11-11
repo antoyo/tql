@@ -11,7 +11,10 @@
 // présent.
 // TODO: vérifier dans l’attribut #[SqlTable] si un champ est défini plus d’une fois (en ce moment,
 // une deuxième définition écrase la première ce qui cause des erreurs étranges).
+// TODO: ne pas utiliser unwrap() dans le code généré.
 
+// TODO: l’utilisation de mot-clés dans les noms de table ou de champs devrait causer une erreur
+// (ou être renommé?).
 // TODO: ajouter un avertissement lors de l’appel à update() s’il n’y a pas de filtres.
 // TODO: supporter des méthodes de String dans la méthode update() (par exemple push(), push_str(), truncate(), pop(), remove()).
 // TODO: mieux gérer les ExprPath (vérifier qu’il n’y a qu’un segment).
@@ -330,8 +333,8 @@ fn gen_query_expr(cx: &mut ExtCtxt, ident: Ident, sql_query: Expression, args_ex
         },
         QueryType::Exec => {
             quote_expr!(cx, {
-                let result = $ident.prepare($sql_query).unwrap();
-                result.execute(&$args_expr)
+                $ident.prepare($sql_query)
+                    .and_then(|result| result.execute(&$args_expr))
             })
         },
     }

@@ -140,8 +140,8 @@ pub fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
             add_limit_arguments(cx, limit, &mut arguments);
         },
         Query::Update { assignments, filter, .. } => {
-            add_filter_arguments(filter, &mut arguments, &table_name);
             add_assignments(assignments, &mut arguments, &table_name);
+            add_filter_arguments(filter, &mut arguments, &table_name);
         },
     }
 
