@@ -1,10 +1,12 @@
-#![feature(plugin)]
+#![feature(box_patterns, plugin)]
 #![plugin(tql_macros)]
 
 extern crate postgres;
 extern crate tql;
 
 use postgres::{Connection, SslMode};
+use postgres::error::Error::DbError;
+use postgres::error::SqlState::UndefinedTable;
 use tql::PrimaryKey;
 
 #[SqlTable]
@@ -24,7 +26,15 @@ fn get_connection() -> Connection {
 fn test_insert() {
     let connection = get_connection();
 
-    let _ = sql!(SqlTable.drop()); // NOTE: In case a test failed.
+    let _ = sql!(SqlTable.drop());
+
+    let result = sql!(SqlTable.insert(field1 = "value1", field2 = 55));
+    match result {
+        Err(DbError(box db_error)) => assert_eq!(UndefinedTable, *db_error.code()),
+        Ok(_) => assert!(false),
+        Err(_) => assert!(false),
+    }
+
     let _ = sql!(SqlTable.create());
 
     let id = sql!(SqlTable.insert(field1 = "value1", field2 = 55)).unwrap();

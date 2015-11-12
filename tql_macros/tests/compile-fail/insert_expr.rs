@@ -27,7 +27,7 @@ fn main() {
 
     let value = 42;
 
-    sql!(Table.insert(field1 = value, i32_field = 91, field2 = "test"));
+    sql!(Table.insert(field1 = value, i32_field = 91, field2 = "test")).unwrap();
     //~^ ERROR mismatched types:
     //~| expected `String`,
     //~| found `i32` [E0308]

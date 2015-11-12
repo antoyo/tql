@@ -11,10 +11,10 @@
 // présent.
 // TODO: vérifier dans l’attribut #[SqlTable] si un champ est défini plus d’une fois (en ce moment,
 // une deuxième définition écrase la première ce qui cause des erreurs étranges).
-// TODO: ne pas utiliser unwrap() dans le code généré.
 
 // TODO: l’utilisation de mot-clés dans les noms de table ou de champs devrait causer une erreur
 // (ou être renommé?).
+// TODO: ne pas utiliser unwrap() dans le code généré.
 // TODO: ajouter un avertissement lors de l’appel à update() s’il n’y a pas de filtres.
 // TODO: supporter des méthodes de String dans la méthode update() (par exemple push(), push_str(), truncate(), pop(), remove()).
 // TODO: mieux gérer les ExprPath (vérifier qu’il n’y a qu’un segment).
@@ -306,12 +306,15 @@ fn gen_query_expr(cx: &mut ExtCtxt, ident: Ident, sql_query: Expression, args_ex
         },
         QueryType::InsertOne => {
             quote_expr!(cx, {
-                let result = $ident.prepare($sql_query).unwrap();
-                let count: Option<i32> =
-                    result.query(&$args_expr).unwrap().iter().next().map(|row| {
-                        row.get(0)
-                    });
-                count
+                $ident.prepare($sql_query)
+                    .and_then(|result| {
+                        // NOTE: The query is not supposed to fail, hence unwrap().
+                        let rows = result.query(&$args_expr).unwrap();
+                        // NOTE: There is always one result (the inserted id), hence unwrap().
+                        let row = rows.iter().next().unwrap();
+                        let count: i32 = row.get(0);
+                        Ok(count)
+                    })
             })
         },
         QueryType::SelectMulti => {
