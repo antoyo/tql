@@ -10,7 +10,7 @@ use tql::PrimaryKey;
 #[SqlTable]
 #[allow(dead_code)]
 #[derive(Debug)]
-struct SqlTable {
+struct TableDeleteExpr {
     id: PrimaryKey,
     field1: String,
     field2: i32,
@@ -24,63 +24,63 @@ fn get_connection() -> Connection {
 fn test_delete() {
     let connection = get_connection();
 
-    let _ = sql!(SqlTable.create());
+    let _ = sql!(TableDeleteExpr.create());
 
-    let id = sql!(SqlTable.insert(field1 = "", field2 = 0)).unwrap();
+    let id = sql!(TableDeleteExpr.insert(field1 = "", field2 = 0)).unwrap();
 
-    let table = sql!(SqlTable.get(id));
+    let table = sql!(TableDeleteExpr.get(id));
     assert!(table.is_some());
 
     //assert_eq!(
-        //"DELETE FROM SqlTable",
-        //to_sql!(SqlTable.delete()) // TODO: ceci ne fonctionne pas. Le problème vient du fait que
+        //"DELETE FROM TableDeleteExpr",
+        //to_sql!(TableDeleteExpr.delete()) // TODO: ceci ne fonctionne pas. Le problème vient du fait que
         //les erreurs (incluant les avertissements) retourne un résultat bidon.
     //);
 
-    let num_deleted = sql!(SqlTable.filter(field1 == "").delete()).unwrap();
+    let num_deleted = sql!(TableDeleteExpr.filter(field1 == "").delete()).unwrap();
     assert_eq!(1, num_deleted);
 
-    let table = sql!(SqlTable.get(id));
+    let table = sql!(TableDeleteExpr.get(id));
     assert!(table.is_none());
 
-    let id1 = sql!(SqlTable.insert(field1 = "", field2 = 1)).unwrap();
-    let id2 = sql!(SqlTable.insert(field1 = "", field2 = 2)).unwrap();
-    let id3 = sql!(SqlTable.insert(field1 = "", field2 = 3)).unwrap();
+    let id1 = sql!(TableDeleteExpr.insert(field1 = "", field2 = 1)).unwrap();
+    let id2 = sql!(TableDeleteExpr.insert(field1 = "", field2 = 2)).unwrap();
+    let id3 = sql!(TableDeleteExpr.insert(field1 = "", field2 = 3)).unwrap();
 
-    let table = sql!(SqlTable.get(id1));
+    let table = sql!(TableDeleteExpr.get(id1));
     assert!(table.is_some());
 
-    let table = sql!(SqlTable.get(id2));
+    let table = sql!(TableDeleteExpr.get(id2));
     assert!(table.is_some());
 
-    let table = sql!(SqlTable.get(id3));
+    let table = sql!(TableDeleteExpr.get(id3));
     assert!(table.is_some());
 
-    let num_deleted = sql!(SqlTable.filter(field2 < 5).delete()).unwrap();
+    let num_deleted = sql!(TableDeleteExpr.filter(field2 < 5).delete()).unwrap();
     assert_eq!(3, num_deleted);
 
-    let table = sql!(SqlTable.get(id1));
+    let table = sql!(TableDeleteExpr.get(id1));
     assert!(table.is_none());
 
-    let table = sql!(SqlTable.get(id2));
+    let table = sql!(TableDeleteExpr.get(id2));
     assert!(table.is_none());
 
-    let table = sql!(SqlTable.get(id3));
+    let table = sql!(TableDeleteExpr.get(id3));
     assert!(table.is_none());
 
-    let id = sql!(SqlTable.insert(field1 = "", field2 = 1)).unwrap();
+    let id = sql!(TableDeleteExpr.insert(field1 = "", field2 = 1)).unwrap();
 
-    let num_deleted = sql!(SqlTable.filter(field2 > 5).delete()).unwrap();
+    let num_deleted = sql!(TableDeleteExpr.filter(field2 > 5).delete()).unwrap();
     assert_eq!(0, num_deleted);
 
-    let table = sql!(SqlTable.get(id));
+    let table = sql!(TableDeleteExpr.get(id));
     assert!(table.is_some());
 
-    let num_deleted = sql!(SqlTable.get(id).delete()).unwrap();
+    let num_deleted = sql!(TableDeleteExpr.get(id).delete()).unwrap();
     assert_eq!(1, num_deleted);
 
-    let table = sql!(SqlTable.get(id));
+    let table = sql!(TableDeleteExpr.get(id));
     assert!(table.is_none());
 
-    let _ = sql!(SqlTable.drop());
+    let _ = sql!(TableDeleteExpr.drop());
 }
