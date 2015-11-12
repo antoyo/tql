@@ -8,7 +8,6 @@ use tql::PrimaryKey;
 
 #[SqlTable]
 #[allow(dead_code)]
-#[derive(Debug)]
 struct Table {
     id: PrimaryKey,
     field1: String,

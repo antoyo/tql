@@ -11,7 +11,6 @@ use tql::{ForeignKey, PrimaryKey};
 
 #[SqlTable]
 #[allow(dead_code)]
-#[derive(Debug)]
 struct TableUpdateExpr {
     id: PrimaryKey,
     field1: String,
@@ -22,7 +21,6 @@ struct TableUpdateExpr {
 
 #[SqlTable]
 #[allow(dead_code)]
-#[derive(Debug)]
 struct RelatedTable {
     id: PrimaryKey,
     field1: String,

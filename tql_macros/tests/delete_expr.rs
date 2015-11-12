@@ -9,7 +9,6 @@ use tql::PrimaryKey;
 
 #[SqlTable]
 #[allow(dead_code)]
-#[derive(Debug)]
 struct TableDeleteExpr {
     id: PrimaryKey,
     field1: String,

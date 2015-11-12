@@ -7,7 +7,6 @@ extern crate tql;
 use tql::{ForeignKey, PrimaryKey};
 
 #[SqlTable]
-#[derive(Debug)]
 struct Table {
     id: PrimaryKey,
     field1: String,
@@ -17,7 +16,6 @@ struct Table {
 }
 
 #[SqlTable]
-#[derive(Debug)]
 struct RelatedTable {
     id: PrimaryKey,
     field1: String,

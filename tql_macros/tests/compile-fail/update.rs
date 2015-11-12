@@ -8,7 +8,6 @@ extern crate tql;
 use tql::PrimaryKey;
 
 #[SqlTable]
-#[derive(Debug)]
 struct Table {
     id: PrimaryKey,
     field1: String,

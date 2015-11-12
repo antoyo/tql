@@ -10,7 +10,6 @@ use postgres::{Connection, SslMode};
 use tql::PrimaryKey;
 
 #[SqlTable]
-#[derive(Debug)]
 struct Table {
     id: PrimaryKey,
     field1: String,

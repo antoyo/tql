@@ -10,7 +10,6 @@ use postgres::{Connection, SslMode};
 use tql::{ForeignKey, PrimaryKey};
 
 #[SqlTable]
-#[derive(Debug)]
 struct OtherTable {
     id: PrimaryKey,
     field1: i32,
@@ -18,7 +17,6 @@ struct OtherTable {
 }
 
 #[SqlTable]
-#[derive(Debug)]
 struct Table {
     id: PrimaryKey,
     field1: String,

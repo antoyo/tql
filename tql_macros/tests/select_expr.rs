@@ -8,7 +8,6 @@ use postgres::{Connection, SslMode};
 use tql::{ForeignKey, PrimaryKey};
 
 #[SqlTable]
-#[derive(Debug)]
 struct TableSelectExpr {
     id: PrimaryKey,
     field1: String,
@@ -17,7 +16,6 @@ struct TableSelectExpr {
 }
 
 #[SqlTable]
-#[derive(Debug)]
 struct RelatedTableSelectExpr {
     id: PrimaryKey,
     field1: i32,

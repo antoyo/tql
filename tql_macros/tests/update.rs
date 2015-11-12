@@ -8,7 +8,6 @@ use tql::{ForeignKey, PrimaryKey};
 
 #[SqlTable]
 #[allow(dead_code)]
-#[derive(Debug)]
 struct Table {
     id: PrimaryKey,
     field1: String,
@@ -19,7 +18,6 @@ struct Table {
 
 #[SqlTable]
 #[allow(dead_code)]
-#[derive(Debug)]
 struct RelatedTable {
     id: PrimaryKey,
     field1: String,

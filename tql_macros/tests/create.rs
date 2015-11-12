@@ -14,7 +14,6 @@ use chrono::offset::utc::UTC;
 use tql::{ForeignKey, PrimaryKey};
 
 #[SqlTable]
-#[derive(Debug)]
 struct Table {
     id: PrimaryKey,
     field1: String,
@@ -24,14 +23,12 @@ struct Table {
 }
 
 #[SqlTable]
-#[derive(Debug)]
 struct RelatedTable {
     id: PrimaryKey,
     field1: String,
 }
 
 #[SqlTable]
-#[derive(Debug)]
 struct Dates {
     pk: PrimaryKey,
     date1: NaiveDateTime,
@@ -42,7 +39,6 @@ struct Dates {
 }
 
 #[SqlTable]
-#[derive(Debug)]
 struct OtherTypes {
     pk: PrimaryKey,
     boolean: bool,

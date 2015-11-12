@@ -7,8 +7,6 @@
 #![allow(ptr_arg)]
 
 // TODO: changer le courriel de l’auteur avant de mettre sur TuxFamily.
-// TODO: l’attribut #[SqlTable] devrait ajouter l’attribute #[derive(Debug)] s’il n’est pas déjà
-// présent.
 // TODO: vérifier dans l’attribut #[SqlTable] si un champ est défini plus d’une fois (en ce moment,
 // une deuxième définition écrase la première ce qui cause des erreurs étranges).
 
@@ -66,10 +64,13 @@ use rustc::plugin::Registry;
 use syntax::ast::{AngleBracketedParameters, AngleBracketedParameterData, Block, Field, Ident, MetaItem, Path, PathSegment, StructField_, StructFieldKind, TokenTree, Ty, Ty_, VariantData, Visibility};
 use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Item_::ItemStruct;
+use syntax::ast::MetaItem_::MetaWord;
 use syntax::codemap::{BytePos, Span, Spanned};
 use syntax::ext::base::{Annotatable, DummyResult, ExtCtxt, MacEager, MacResult};
+use syntax::ext::base::Annotatable::Item;
 use syntax::ext::base::SyntaxExtension::MultiDecorator;
 use syntax::ext::build::AstBuilder;
+use syntax::ext::deriving::debug::expand_deriving_debug;
 use syntax::owned_slice::OwnedSlice;
 use syntax::parse::token::{InternedString, Token, intern, str_to_ident};
 use syntax::ptr::P;
@@ -144,11 +145,26 @@ fn expand_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult +
 
 /// Expand the `#[SqlTable]` attribute.
 /// This attribute must be used on structs to tell tql that it represents an SQL table.
-fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, _: &MetaItem, item: &Annotatable, push: &mut FnMut(Annotatable)) {
+// TODO: séparer cette fonction en plusieurs.
+#[allow(cmp_owned)]
+fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, meta_item: &MetaItem, annotatable: &Annotatable, push: &mut FnMut(Annotatable)) {
     // Add to sql_tables.
     let mut sql_tables = singleton();
 
-    if let &Annotatable::Item(ref item) = item {
+    // Add the #[derive(Debug)] attribute if needed.
+    let attrs = annotatable.attrs();
+    if let &Item(_) = annotatable {
+        if attrs.iter().all(|item| {
+                if let MetaWord(ref word) = item.node.value.node {
+                    return word.to_string() != "derive_Debug"
+                }
+                true
+            }) {
+            expand_deriving_debug(cx, sp, meta_item, annotatable, push);
+        }
+    }
+
+    if let &Annotatable::Item(ref item) = annotatable {
         if let ItemStruct(ref struct_def, _) = item.node {
             let table_name = item.ident.to_string();
             let fields = fields_vec_to_hashmap(struct_def.fields());
