@@ -29,8 +29,8 @@ fn get_connection() -> Connection {
 fn test_select() {
     let connection = get_connection();
 
-    let _ = sql!(TableSelectExpr.create());
     let _ = sql!(RelatedTableSelectExpr.create());
+    let _ = sql!(TableSelectExpr.create());
 
     let id = sql!(RelatedTableSelectExpr.insert(field1 = 42)).unwrap();
     let related_field = sql!(RelatedTableSelectExpr.get(id)).unwrap();
@@ -136,6 +136,6 @@ fn test_select() {
     assert_eq!(id1, table1.id);
     assert_eq!(id2, table2.id);
 
-    let _ = sql!(RelatedTableSelectExpr.drop());
     let _ = sql!(TableSelectExpr.drop());
+    let _ = sql!(RelatedTableSelectExpr.drop());
 }
