@@ -6,9 +6,12 @@
 #![plugin(clippy)]
 #![allow(ptr_arg)]
 
-// TODO: changer le courriel de l’auteur avant de mettre sur TuxFamily.
+// TODO: utiliser le mutex dans chaque test pour s’assurer que les tables sont détruites même si le
+// test échoue.
 // TODO: vérifier dans l’attribut #[SqlTable] si un champ est défini plus d’une fois (en ce moment,
 // une deuxième définition écrase la première ce qui cause des erreurs étranges).
+// TODO: supported Syntex.
+// TODO: mettre des messages dans les assert!().
 
 // TODO: l’utilisation de mot-clés dans les noms de table ou de champs devrait causer une erreur
 // (ou être renommé?).
