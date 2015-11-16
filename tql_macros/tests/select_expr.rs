@@ -24,6 +24,10 @@ extern crate tql;
 use postgres::{Connection, SslMode};
 use tql::{ForeignKey, PrimaryKey};
 
+mod teardown;
+
+use teardown::TearDown;
+
 #[SqlTable]
 struct TableSelectExpr {
     id: PrimaryKey,
@@ -45,6 +49,11 @@ fn get_connection() -> Connection {
 #[test]
 fn test_select() {
     let connection = get_connection();
+
+    let _teardown = TearDown::new(|| {
+        let _ = sql!(TableSelectExpr.drop());
+        let _ = sql!(RelatedTableSelectExpr.drop());
+    });
 
     let _ = sql!(RelatedTableSelectExpr.create());
     let _ = sql!(TableSelectExpr.create());
@@ -152,7 +161,4 @@ fn test_select() {
     assert_eq!(2, tables.len());
     assert_eq!(id1, table1.id);
     assert_eq!(id2, table2.id);
-
-    let _ = sql!(TableSelectExpr.drop());
-    let _ = sql!(RelatedTableSelectExpr.drop());
 }

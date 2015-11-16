@@ -21,8 +21,12 @@
 extern crate postgres;
 extern crate tql;
 
+mod teardown;
+
 use postgres::{Connection, SslMode};
 use tql::PrimaryKey;
+
+use teardown::TearDown;
 
 #[SqlTable]
 #[allow(dead_code)]
@@ -39,6 +43,10 @@ fn get_connection() -> Connection {
 #[test]
 fn test_delete() {
     let connection = get_connection();
+
+    let _teardown = TearDown::new(|| {
+        let _ = sql!(TableDeleteExpr.drop());
+    });
 
     let _ = sql!(TableDeleteExpr.create());
 
@@ -97,6 +105,4 @@ fn test_delete() {
 
     let table = sql!(TableDeleteExpr.get(id));
     assert!(table.is_none());
-
-    let _ = sql!(TableDeleteExpr.drop());
 }
