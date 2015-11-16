@@ -49,7 +49,7 @@ pub fn argument_to_assignment(arg: &Expression, table: &SqlTable) -> SqlResult<A
         },
         _ => {
             errors.push(Error::new(
-                "Expected assignment".to_owned(), // TODO: améliorer ce message.
+                "Expected assignment".to_owned(), // TODO: improve this message.
                 arg.span,
             ));
         },

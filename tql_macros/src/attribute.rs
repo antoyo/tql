@@ -44,7 +44,10 @@ pub fn fields_vec_to_hashmap(fields: &[StructField]) -> SqlFields {
     let mut sql_fields = BTreeMap::new();
     for field in fields {
         if let StructFieldKind::NamedField(ident, _) = field.node.kind {
-            sql_fields.insert(ident.to_string(), field_ty_to_type(&*field.node.ty));
+            if !sql_fields.contains_key(&ident.to_string()) {
+                sql_fields.insert(ident.to_string(), field_ty_to_type(&*field.node.ty));
+            }
+            // NOTE: do not override the field type. Rust will show an error.
         }
     }
     sql_fields

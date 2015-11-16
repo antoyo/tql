@@ -482,7 +482,7 @@ fn path_expr_to_identifier(expression: &Expression, errors: &mut Vec<Error>) -> 
     }
     else {
         errors.push(Error::new(
-            "Expected identifier".to_owned(), // TODO: améliorer ce message.
+            "Expected identifier".to_owned(), // TODO: improve this message.
             expression.span,
         ));
         None

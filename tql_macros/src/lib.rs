@@ -135,7 +135,7 @@ fn expand_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult +
                 gen_query(cx, sp, ident, sql_query_with_args)
             }
             else {
-                cx.span_err(sp, "Expected table identifier"); // TODO: améliorer ce message.
+                cx.span_err(sp, "Expected table identifier"); // TODO: improve this message.
                 DummyResult::any(sp)
             }
         },
@@ -170,59 +170,64 @@ fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, meta_item: &MetaItem, annotatabl
     if let &Annotatable::Item(ref item) = annotatable {
         if let ItemStruct(ref struct_def, _) = item.node {
             let table_name = item.ident.to_string();
-            let fields = fields_vec_to_hashmap(struct_def.fields());
-            for field in fields.values() {
-                match field.node {
-                    Type::UnsupportedType(ref typ) | Type::Nullable(box Type::UnsupportedType(ref typ)) =>
-                        cx.parse_sess.span_diagnostic.span_err_with_code(field.span, &format!("use of unsupported type name `{}`", typ), "E0412"),
-                    _ => (), // NOTE: Other types are supported.
+            if !sql_tables.contains_key(&table_name) {
+                let fields = fields_vec_to_hashmap(struct_def.fields());
+                for field in fields.values() {
+                    match field.node {
+                        Type::UnsupportedType(ref typ) | Type::Nullable(box Type::UnsupportedType(ref typ)) =>
+                            cx.parse_sess.span_diagnostic.span_err_with_code(field.span, &format!("use of unsupported type name `{}`", typ), "E0412"),
+                        _ => (), // NOTE: Other types are supported.
+                    }
+                }
+
+                sql_tables.insert(table_name.clone(), SqlTable {
+                    fields: fields,
+                    name: table_name.clone(),
+                    position: item.span,
+                });
+
+                // Add the postgres::types::ToSql implementation for the struct.
+                // Its SQL representation is the same as the primary key SQL representation.
+                match get_primary_key_field_by_table_name(&table_name) {
+                    Some(primary_key_field) => {
+                        let table_ident = str_to_ident(&table_name);
+                        let primary_key_ident = str_to_ident(&primary_key_field);
+                        let implementation = quote_item!(cx,
+                            impl postgres::types::ToSql for $table_ident {
+                                fn to_sql<W: std::io::Write + ?Sized>(&self, ty: &postgres::types::Type, out: &mut W, ctx: &postgres::types::SessionInfo) -> postgres::Result<postgres::types::IsNull> {
+                                    self.$primary_key_ident.to_sql(ty, out, ctx)
+                                }
+
+                                fn accepts(ty: &postgres::types::Type) -> bool {
+                                    match *ty {
+                                        postgres::types::Type::Int4 => true,
+                                        _ => false,
+                                    }
+                                }
+
+                                fn to_sql_checked(&self, ty: &postgres::types::Type, out: &mut ::std::io::Write, ctx: &postgres::types::SessionInfo) -> postgres::Result<postgres::types::IsNull> {
+                                    if !<Self as postgres::types::ToSql>::accepts(ty) {
+                                        return Err(postgres::error::Error::WrongType(ty.clone()));
+                                    }
+                                    self.to_sql(ty, out, ctx)
+                                }
+                            }
+                        );
+                        push(Annotatable::Item(implementation.unwrap()));
+                    },
+                    None => (), // NOTE: Do not add the implementation when there is no primary key.
                 }
             }
-
-            sql_tables.insert(table_name.clone(), SqlTable {
-                fields: fields,
-                name: table_name.clone(),
-                position: item.span,
-            });
-
-            // Add the postgres::types::ToSql implementation for the struct.
-            // Its SQL representation is the same as the primary key SQL representation.
-            match get_primary_key_field_by_table_name(&table_name) {
-                Some(primary_key_field) => {
-                    let table_ident = str_to_ident(&table_name);
-                    let primary_key_ident = str_to_ident(&primary_key_field);
-                    let implementation = quote_item!(cx,
-                        impl postgres::types::ToSql for $table_ident {
-                            fn to_sql<W: std::io::Write + ?Sized>(&self, ty: &postgres::types::Type, out: &mut W, ctx: &postgres::types::SessionInfo) -> postgres::Result<postgres::types::IsNull> {
-                                self.$primary_key_ident.to_sql(ty, out, ctx)
-                            }
-
-                            fn accepts(ty: &postgres::types::Type) -> bool {
-                                match *ty {
-                                    postgres::types::Type::Int4 => true,
-                                    _ => false,
-                                }
-                            }
-
-                            fn to_sql_checked(&self, ty: &postgres::types::Type, out: &mut ::std::io::Write, ctx: &postgres::types::SessionInfo) -> postgres::Result<postgres::types::IsNull> {
-                                if !<Self as postgres::types::ToSql>::accepts(ty) {
-                                    return Err(postgres::error::Error::WrongType(ty.clone()));
-                                }
-                                self.to_sql(ty, out, ctx)
-                            }
-                        }
-                    );
-                    push(Annotatable::Item(implementation.unwrap()));
-                },
-                None => (), // NOTE: Do not add the implementation when there is no primary key.
+            else {
+                cx.parse_sess.span_diagnostic.span_err_with_code(item.span, &format!("duplicate definition of table `{}`", table_name), "E0428");
             }
         }
         else {
-            cx.span_err(item.span, "Expected struct but found"); // TODO: améliorer ce message.
+            cx.span_err(item.span, "Expected struct but found"); // TODO: improve this message.
         }
     }
     else {
-        cx.span_err(sp, "Expected struct item"); // TODO: améliorer ce message.
+        cx.span_err(sp, "Expected struct item"); // TODO: improve this message.
     }
 }
 

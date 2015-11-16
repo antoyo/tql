@@ -63,7 +63,7 @@ pub fn argument_to_aggregate(arg: &Expression, _table: &SqlTable) -> SqlResult<A
     }
     else {
         errors.push(Error::new(
-            "Expected function call".to_owned(), // TODO: améliorer ce message.
+            "Expected function call".to_owned(), // TODO: improve this message.
             arg.span,
         ));
     }
@@ -123,7 +123,7 @@ fn check_aggregate_field<'a>(identifier: &str, aggregates: &'a [Aggregate], posi
     let result = aggregates.iter().find(|aggr| aggr.result_name == identifier);
     if let None = result {
         errors.push(Error::new(
-            format!("no aggregate field named `{}` found", identifier), // TODO: améliorer ce message.
+            format!("no aggregate field named `{}` found", identifier), // TODO: improve this message.
             position
         ));
         // TODO: proposer des noms similaires.

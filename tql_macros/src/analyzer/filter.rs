@@ -225,7 +225,7 @@ fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: 
         },
         _ => {
             errors.push(Error::new(
-                "expected identifier".to_owned(), // TODO: améliorer ce message.
+                "expected identifier".to_owned(), // TODO: improve this message.
                 exprs[0].span,
             ));
             dummy
