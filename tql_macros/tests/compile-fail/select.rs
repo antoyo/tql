@@ -184,5 +184,5 @@ fn main() {
     //~| HELP run `rustc --explain E0308` to see a detailed explanation
     //~| NOTE in this expansion of sql! (defined in tql)
 
-    //to_sql!(Table.all().join(address, address)); // TODO: devrait causer une erreur.
+    //to_sql!(Table.all().join(address, address)); // TODO: should span an error.
 }

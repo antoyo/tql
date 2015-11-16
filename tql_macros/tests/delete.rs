@@ -18,8 +18,8 @@ struct Table {
 fn test_delete() {
     //assert_eq!(
         //"DELETE FROM Table",
-        //to_sql!(Table.delete()) // TODO: ceci ne fonctionne pas. Le problème vient du fait que
-        //les erreurs (incluant les avertissements) retourne un résultat bidon.
+        //to_sql!(Table.delete()) // TODO: this does not work because the errors (including
+        //warnings) return a dummy result.
     //);
     assert_eq!(
         "DELETE FROM Table WHERE field1 = 'test'",

@@ -33,7 +33,7 @@ fn main() {
     //~^ ERROR no aggregate field named `avg` found
 
     //sql!(Table.values(i32_field).aggregate(average = avg(i32_field)).filter(avrage < 20));
-    // TODO: proposer des noms similaires.
+    // TODO: propose similar names.
 
     if let Some(aggregate) = sql!(Table.aggregate(average = avg(field2))) {
         println!("{}", aggregate.averag);

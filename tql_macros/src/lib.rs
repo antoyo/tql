@@ -6,57 +6,47 @@
 #![plugin(clippy)]
 #![allow(ptr_arg)]
 
-// TODO: utiliser le mutex dans chaque test pour s’assurer que les tables sont détruites même si le
-// test échoue.
-// TODO: vérifier dans l’attribut #[SqlTable] si un champ est défini plus d’une fois (en ce moment,
-// une deuxième définition écrase la première ce qui cause des erreurs étranges).
-// TODO: supported Syntex.
-// TODO: mettre des messages dans les assert!().
+// TODO: use a mutex in each test to drop the tables even when the test fails.
+// TODO: add support for Syntex.
+// TODO: to benchmarks.
 
-// TODO: l’utilisation de mot-clés dans les noms de table ou de champs devrait causer une erreur
-// (ou être renommé?).
-// TODO: ne pas utiliser unwrap() dans le code généré.
-// TODO: ajouter un avertissement lors de l’appel à update() s’il n’y a pas de filtres.
-// TODO: supporter des méthodes de String dans la méthode update() (par exemple push(), push_str(), truncate(), pop(), remove()).
-// TODO: mieux gérer les ExprPath (vérifier qu’il n’y a qu’un segment).
-// TODO: utiliser tous les segments au lieu de juste segments[0].
-// TODO: paramétriser le type ForeignKey et PrimaryKey pour que la macro puisse choisir de mettre
-// le type en question ou rien (dans le cas où la jointure n’est pas faite) ou empêcher les
-// modifications (dans le cas où l’ID existe).
-// TODO: ajouter une étape entre l’optimisation et la génération de code pour produire une
-// structure qui facilitera la génération du code.
-// FIXME: remplacer format!() par .to_owned() quand c’est possible.
-// FIXME: enlever les clone() inutiles.
-// FIXME: utiliser des fermetures à la place de fonctions internes.
-// FIXME: utiliser use self au lieu de deux lignes.
-// TODO: implémenter le trait Default sur les structures de table afin de pouvoir créer un objet
-// par défaut et assigner seulement les champs qui ont été récupérés par la requête (pour only() et
-// defer()).
-// TODO: faire des vérifications de byte string (par exemple: b"\u{a66e}").
-// TODO: créer différents types pour String (VARCHAR, CHAR(n), TEXT, …).
-// TODO: rendre les messages d’erreur plus semblables à ceux de Rust.
-// TODO: rendre le moins d’identifiants publiques.
-// TODO: utiliser unwrap() et unreachable!() pour faire planter quand l’erreur est dû à un bug.
-// TODO: supporter plusieurs SGBDs.
-// TODO: supporter les méthodes sur Nullable<Generic> et Nullable<i32> et autres?
-// TODO: supporter les slices (par exemple: Table.filter(field1[3..6] == "te")).
-// TODO: ajouter la méthode in() (par exemple: Table.filter(field1.in([3, 4, 5]) ou Table.filter(field1.len().in(3..6)))).
-// TODO: dans les aggrégations, permettre des opérations:
+// TODO: span error when an SQL keyword is used in a table or field name (or renamed it?).
+// TODO: do not use unwrap() in the generated code (unless this indicates a bug).
+// TODO: add a warning for an update() without filters.
+// TODO: support String methods in the update() method (for instance push(), push_str(), truncate(), pop(), remove()).
+// TODO: improve ExprPath identifier extraction (check if there is only one segment).
+// TODO: use all segments instead of only segments[0].
+// TODO: find a way to stop the user from updating an item id.
+// TODO: find a way to stop the user from accessing a related field when a join() is not done.
+// TODO: add a step between the optimization and code generation to create a structure facilitating
+// the code generation.
+// FIXME: replace format!() by .to_owned() when possible.
+// FIXME: remove useless clone().
+// FIXME: use closures instead of internal functions.
+// FIXME: use "use self" instead of two lines.
+// TODO: implement the Default trait on table structures to be able to create a default object and
+// only assign the fields that were fetched by the query (for only() and defer()).
+// TODO: check byte strings (for instance: b"\u{a66e}").
+// TODO: create different types for String (VARCHAR, CHAR(n), TEXT, …).
+// TODO: make the error messages similar to Rust ones.
+// TODO: make private most module identifiers.
+// TODO: use unwrap() and unreachable!() to panics the compiler when there is a bug.
+// TODO: support more database management systems.
+// TODO: support methods on Nullable<Generic> and Nullable<i32> and other?
+// TODO: support slices (for istance: Table.filter(field1[3..6] == "te")).
+// TODO: add the method in() (for instance: Table.filter(field1.in([3, 4, 5]) ou Table.filter(field1.len().in(3..6)))).
+// TODO: in aggregates, allow operations:
 // Table.aggregate(avg(field2 / field1))
-// TODO: vérifier les types des arguments pour les aggrégations.
-// TODO: dans les aggrégations, permettre de sélectionner d’autres champs (les champs groupés
-// seulement?).
-// TODO: ajouter la méthode annotate() pour les aggrégations par objet.
-// TODO: dans les filtres d’aggrégations, permettre les appels de fonctions d’aggrégat.
-// TODO: rendre plus uniforme les filtres et les filtres d’aggrégation pour éviter la duplication
-// de code.
-// TODO: faire des benchmarks.
-// TODO: créer une macro qui permet de choisir le SGBD. Donner un paramètre optionel à cette macro
-// pour choisir le nom de la macro à créer (pour permettre d’utiliser plusieurs SGBDs à la fois).
-// TODO: utiliser une compilation en 2 passes pour détecter les champs utilisés et les jointures
-// utiles (peut-être possible avec un lint plugin).
-// TODO: supporter les clés primaires composées.
-// TODO: enlever les attributs allow qui ont été ajoutés à cause de bogues dans clippy.
+// TODO: check argument types in aggregations.
+// TODO: in aggregates, allow selecting other fields (grouped fields only?).
+// TODO: add the annotate() method for object aggregates.
+// TODO: in aggregate filters, allow aggregate function calls.
+// TODO: make more similar filters and aggregate filters to avoid code duplicate.
+// TODO: create a macro to choose a DBMS. Give an optional parameter to this macro to choose the
+// name of the macro to create (to allow using many DBMS at the same time).
+// TODO: use a 2-pass compilation to detect used fields and joins (perhaps using a lint plugin).
+// TODO: support compound primary keys.
+// TODO: remove allow attributes that were added because of clippy bugs.
 
 #[macro_use]
 extern crate rustc;
@@ -127,7 +117,7 @@ fn add_field(fields: &mut Vec<Field>, expr: Expression, name: &str, position: Sp
 /// This macro converts the Rust code provided as argument to SQL and outputs Rust code using the
 /// `postgres` library.
 fn expand_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult + 'static> {
-    // TODO: si le premier paramètre n’est pas fourni, utiliser "connection".
+    // TODO: if the first parameter is not provided, use "connection".
     let sql_result = to_sql(cx, args);
     match sql_result {
         Ok(sql_query_with_args) => {
@@ -148,7 +138,7 @@ fn expand_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult +
 
 /// Expand the `#[SqlTable]` attribute.
 /// This attribute must be used on structs to tell tql that it represents an SQL table.
-// TODO: séparer cette fonction en plusieurs.
+// TODO: divide this function in many functions.
 #[allow(cmp_owned)]
 fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, meta_item: &MetaItem, annotatable: &Annotatable, push: &mut FnMut(Annotatable)) {
     // Add to sql_tables.
@@ -265,7 +255,7 @@ fn gen_aggregate_struct(cx: &mut ExtCtxt, sp: Span, aggregates: &[Aggregate]) ->
                         span: sp,
                         global: false,
                         segments: vec![PathSegment {
-                            identifier: str_to_ident("i32"), // TODO: choisir le type en fonction du champ?
+                            identifier: str_to_ident("i32"), // TODO: choose the type from the field?
                             parameters: AngleBracketedParameters(AngleBracketedParameterData {
                                 bindings: OwnedSlice::empty(),
                                 lifetimes: vec![],
@@ -314,7 +304,7 @@ fn gen_query_expr(cx: &mut ExtCtxt, ident: Ident, sql_query: Expression, args_ex
         QueryType::AggregateMulti => {
             quote_expr!(cx, {
                 let result = $ident.prepare($sql_query).unwrap();
-                // TODO: retourner un itérateur au lieu d’un vecteur.
+                // TODO: return an iterator instead of a vector.
                 result.query(&$args_expr).unwrap().iter().map(|row| {
                     $aggregate_struct
                 }).collect::<Vec<_>>()
@@ -344,7 +334,7 @@ fn gen_query_expr(cx: &mut ExtCtxt, ident: Ident, sql_query: Expression, args_ex
         QueryType::SelectMulti => {
             quote_expr!(cx, {
                 let result = $ident.prepare($sql_query).unwrap();
-                // TODO: retourner un itérateur au lieu d’un vecteur.
+                // TODO: return an iterator instead of a vector.
                 result.query(&$args_expr).unwrap().iter().map(|row| {
                     $struct_expr
                 }).collect::<Vec<_>>()

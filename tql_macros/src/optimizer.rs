@@ -1,6 +1,6 @@
 /// A Query optimizer.
 
-// TODO: simplifier les expressions composées seulement de litéraux.
+// TODO: simplify expression composed of only literals.
 
 use syntax::ast::BinOp_::{BiAdd, BiSub};
 use syntax::ast::Expr_::{ExprBinary, ExprLit};

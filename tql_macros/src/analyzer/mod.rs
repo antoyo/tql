@@ -212,7 +212,7 @@ fn check_method_calls_validity(method_calls: &MethodCalls, errors: &mut Vec<Erro
         .map(|call| call.name.as_str())
         .unwrap_or("all");
 
-    // TODO: vérifier que insert, update ou delete n’est pas appelé plus d’une fois.
+    // TODO: check that the insert, update or delete methods are not called more than once.
     let mut valid_methods = vec![main_method];
     valid_methods.append(&mut method_map[&*main_method].clone());
 
@@ -338,7 +338,7 @@ fn get_query_fields(table: &SqlTable, joins: &[Join], sql_tables: &SqlTables) ->
     let mut fields = vec![];
     for (field, typ) in &table.fields {
         match typ.node {
-            // TODO: faire attention aux conflits de nom.
+            // TODO: pay attention to name conflicts (join on same table twice).
             Type::Custom(ref foreign_table) => {
                 let table_name = foreign_table;
                 if let Some(foreign_table) = sql_tables.get(foreign_table) {
@@ -415,7 +415,7 @@ fn mismatched_types<S: Display, T: Display>(expected_type: S, actual_type: &T, p
     ));
     errors.push(Error::new_note(
         "in this expansion of sql! (defined in tql)".to_owned(),
-        position, // TODO: mettre la position de l’appel de macro sql!.
+        position, // TODO: put the position of the sql! macro call.
     ));
 }
 
@@ -564,8 +564,7 @@ fn process_methods(calls: &[MethodCall], table: &SqlTable, delete_position: &mut
                     assignments = assigns;
                 });
                 if !assignments.is_empty() {
-                    // TODO: vérifier aussi même s’il y a des erreurs de type dans les
-                    // assignations.
+                    // TODO: check even if there are errors in the assignation types.
                     check_insert_arguments(&assignments, method_call.position, &table, &mut errors);
                 }
                 query_type = SqlQueryType::Insert;

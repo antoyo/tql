@@ -9,7 +9,7 @@ use syntax::codemap::Span;
 #[derive(Debug)]
 pub struct Error {
     pub code: Option<String>,
-    pub kind: ErrorType, // TODO: utiliser une énumération.
+    pub kind: ErrorType, // TODO: use an enum.
     pub message: String,
     pub position: Span,
 }

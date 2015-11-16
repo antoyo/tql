@@ -32,8 +32,8 @@ fn test_delete() {
 
     //assert_eq!(
         //"DELETE FROM TableDeleteExpr",
-        //to_sql!(TableDeleteExpr.delete()) // TODO: ceci ne fonctionne pas. Le problème vient du fait que
-        //les erreurs (incluant les avertissements) retourne un résultat bidon.
+        //to_sql!(Table.delete()) // TODO: this does not work because the errors (including
+        //warnings) return a dummy result.
     //);
 
     let num_deleted = sql!(TableDeleteExpr.filter(field1 == "").delete()).unwrap();

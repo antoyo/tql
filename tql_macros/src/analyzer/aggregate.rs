@@ -57,7 +57,7 @@ pub fn argument_to_aggregate(arg: &Expression, _table: &SqlTable) -> SqlResult<A
                 }
             }
             else {
-                // TODO: aussi permettre des expressions (field2 / field1).
+                // TODO: allow expressions (field2 / field1).
             }
         }
     }
@@ -86,9 +86,9 @@ pub fn argument_to_group(arg: &Expression, table: &SqlTable) -> SqlResult<Identi
 
 /// Convert a Rust binary expression to a `AggregateFilterExpression` for an aggregate filter.
 fn binary_expression_to_aggregate_filter_expression(expr1: &Expression, op: BinOp_, expr2: &Expression, aggregates: &[Aggregate], table: &SqlTable) -> SqlResult<AggregateFilterExpression> {
-    // TODO: accumuler les erreurs au lieu d’arrêter à la première.
+    // TODO: accumulate the errors instead of stopping at the first one.
     let filter1 = try!(expression_to_aggregate_filter_expression(expr1, aggregates, table));
-    // TODO: retourner des erreurs à la place de dummy.
+    // TODO: return errors instead of dummy.
     let dummy = AggregateFilterExpression::NoFilters;
 
     let filter =
@@ -126,7 +126,7 @@ fn check_aggregate_field<'a>(identifier: &str, aggregates: &'a [Aggregate], posi
             format!("no aggregate field named `{}` found", identifier), // TODO: improve this message.
             position
         ));
-        // TODO: proposer des noms similaires.
+        // TODO: propose similar names.
     }
     result
 }
@@ -164,7 +164,7 @@ pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &
             },
             _ => {
                 errors.push(Error::new(
-                    "Expected binary operation".to_owned(), // TODO: corriger ce message.
+                    "Expected binary operation".to_owned(), // TODO: improve this message.
                     arg.span,
                 ));
                 AggregateFilterExpression::NoFilters

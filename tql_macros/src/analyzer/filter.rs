@@ -14,7 +14,8 @@ use types::Type;
 
 /// Analyze the types of the `FilterExpression`.
 pub fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors: &mut Vec<Error>) {
-    // TODO: vérifier que les opérateurs sont utilisé avec les bons types.
+    // TODO: check that operators are used with the good types (perhaps not necessary because all
+    // types may support all operators)?
     match *filter {
         FilterExpression::Filter(ref filter) => {
             check_field_type(table_name, &filter.operand1, &filter.operand2, errors);
@@ -38,9 +39,9 @@ pub fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors:
 
 /// Convert a Rust binary expression to a `FilterExpression`.
 fn binary_expression_to_filter_expression(expr1: &Expression, op: BinOp_, expr2: &Expression, table: &SqlTable) -> SqlResult<FilterExpression> {
-    // TODO: accumuler les erreurs au lieu d’arrêter à la première.
+    // TODO: accumulate the errors instead of stopping when the first one is encountered.
     let filter1 = try!(expression_to_filter_expression(expr1, table));
-    // TODO: retourner des erreurs à la place de dummy.
+    // TODO: return errors instead of dummy.
     let dummy = FilterExpression::NoFilters;
 
     let filter =
@@ -158,7 +159,7 @@ pub fn expression_to_filter_expression(arg: &P<Expr>, table: &SqlTable) -> SqlRe
             },
             _ => {
                 errors.push(Error::new(
-                    "Expected binary operation".to_owned(), // TODO: corriger ce message.
+                    "Expected binary operation".to_owned(), // TODO: improve this message.
                     arg.span,
                 ));
                 FilterExpression::NoFilters
@@ -235,7 +236,7 @@ fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: 
 
 /// Convert a method call where the object is an identifier to a filter expression.
 fn path_method_call_to_filter(path: &Path, identifier: SpannedIdent, method_name: &str, exprs: &[Expression], table: &SqlTable, errors: &mut Vec<Error>) -> FilterValue {
-    // TODO: retourner des erreurs à la place de dummy.
+    // TODO: return errors instead of dummy.
     let dummy = FilterValue::Identifier("".to_owned());
     let object_name = path.segments[0].identifier.name.to_string();
     match table.fields.get(&object_name) {

@@ -39,7 +39,7 @@ pub fn arguments_to_limit(expression: &P<Expr>) -> SqlResult<Limit> {
                 Limit::StartRange(range_start.clone())
             }
             ExprRange(Some(ref range_start), Some(ref range_end)) => {
-                // TODO: vérifier que range_start < range_end.
+                // TODO: check that range_start < range_end.
                 Limit::Range(range_start.clone(), range_end.clone())
             }
             ExprLit(_) | ExprPath(_, _) | ExprCall(_, _) | ExprMethodCall(_, _, _) | ExprBinary(_, _, _) | ExprUnary(_, _) | ExprCast(_, _)  => {
@@ -54,8 +54,8 @@ pub fn arguments_to_limit(expression: &P<Expr>) -> SqlResult<Limit> {
             }
         };
 
-    // TODO: vérifier si la limite ou le décalage est 0. Le cas échéant, ne pas les mettre dans
-    // la requête (optimisation).
+    // TODO: check if the limit or offset is 0. If this is the case, do not put them in the query
+    // (optimization).
 
     res(limit, errors)
 }

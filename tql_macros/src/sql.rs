@@ -1,6 +1,6 @@
 //! A module providing SQL related functions.
 
-// TODO: vérifier si les caractères spéciaux (\n, \t, …) doivent être échappés.
+// TODO: check if special characters (\n, \t, …) should be escaped.
 
 /// Escape the following characters: \ and '.
 pub fn escape(string: String) -> String {

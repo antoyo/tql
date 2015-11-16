@@ -39,5 +39,5 @@ pub fn check_insert_arguments(assignments: &[Assignment], position: Span, table:
         errors.push(Error::new_with_code(format!("missing fields: {}", fields), position, "E0063"));
     }
 
-    // TODO: vérifier que la clé primaire n’est pas dans les champs insérés?
+    // TODO: check if the primary key is not in the inserted field?
 }

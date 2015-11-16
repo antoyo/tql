@@ -32,9 +32,9 @@ pub fn add_initial_aggregates() {
 pub fn add_initial_methods() {
     let date_types = [Type::LocalDateTime, Type::NaiveDate, Type::NaiveDateTime, Type::UTCDateTime];
     for date_type in &date_types {
-        // TODO: mettre ce code dans le module gen.
+        // TODO: put this code in the gen module.
         add_method(date_type, Type::I32, vec![], "year", "EXTRACT(YEAR FROM $0)");
-        add_method(date_type, Type::I32, vec![], "month", "EXTRACT(MONTH FROM $0)"); // TODO: utiliser le type U32.
+        add_method(date_type, Type::I32, vec![], "month", "EXTRACT(MONTH FROM $0)"); // TODO: use the U32 type.
         add_method(date_type, Type::I32, vec![], "day", "EXTRACT(DAY FROM $0)");
     }
 

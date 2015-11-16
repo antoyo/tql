@@ -198,7 +198,7 @@ impl<'tcx> PartialEq<TyS<'tcx>> for Type {
                 *typ == Type::I64
             },
             TypeVariants::TyRef(_, TypeAndMut { ty, .. }) => {
-                // TODO: supporter les références de références.
+                // TODO: support reference's reference.
                 match ty.sty {
                     TypeVariants::TyStr => {
                         *typ == Type::String

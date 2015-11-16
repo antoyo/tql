@@ -64,8 +64,8 @@ pub trait ToSql {
 
 impl ToSql for Aggregate {
     fn to_sql(&self) -> String {
-        // TODO: ne pas faire de conversion quand c’est pour mettre dans une clause HAVING.
-        "CAST(".to_owned() + &self.function.to_sql() + "(" + &self.field.to_sql() + ") AS INT)" // TODO: ne pas hard-coder le type.
+        // TODO: do not use CAST when this is in a HAVING clause.
+        "CAST(".to_owned() + &self.function.to_sql() + "(" + &self.field.to_sql() + ") AS INT)" // TODO: do not hard-code the type.
     }
 }
 
@@ -121,7 +121,7 @@ impl ToSql for Expression {
                 match literal.node {
                     LitBool(boolean) => boolean.to_string().to_uppercase(),
                     LitByte(byte) => "'".to_owned() + &escape((byte as char).to_string()) + "'",
-                    // TODO: vérifier si l’utilisation de unwrap() est sécuritaire ici.
+                    // TODO: check if using unwrap() is secure here.
                     LitByteStr(ref bytestring) => "'".to_owned() + &escape(from_utf8(&bytestring[..]).unwrap().to_owned()) + "'",
                     LitChar(character) => "'".to_owned() + &escape(character.to_string()) + "'",
                     LitFloat(ref float, _) => float.to_string(),
@@ -252,7 +252,7 @@ impl ToSql for Query {
                 let return_value =
                     match get_primary_key_field(tables.get(table).unwrap()) {
                         Some(ref primary_key) => " RETURNING ".to_owned() + primary_key,
-                        None => "".to_owned(), // TODO: que faire quand il n’y a pas de clé primaire?
+                        None => "".to_owned(), // TODO: what to do whene there is no primary key?
                     };
                 replace_placeholder(format!("INSERT INTO {}({}) VALUES({}){}", table, fields.to_sql(), values.to_sql(), return_value))
             },
@@ -304,7 +304,7 @@ fn filter_to_where_clause(filter: &FilterExpression) -> &str {
     }
 }
 
-// TODO: essayer de trouver une meilleure façon de mettre les symboles ($1, $2, …) dans la requête.
+// TODO: find a better way to write the symbols ($1, $2, …) in the query.
 /// Replace the placeholders `{}` by $# by # where # is the index of the placeholder.
 fn replace_placeholder(string: String) -> String {
     let mut result = "".to_owned();
