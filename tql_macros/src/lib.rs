@@ -23,11 +23,13 @@
 #![plugin(clippy)]
 #![allow(ptr_arg)]
 
+// TODO: replace README.md by README.adoc and complete it.
 // TODO: use a mutex in each test to drop the tables even when the test fails.
 // TODO: add support for Syntex.
 // TODO: to benchmarks.
 
 // TODO: span error when an SQL keyword is used in a table or field name (or renamed it?).
+// TODO: add a feature for the chrono dependency.
 // TODO: do not use unwrap() in the generated code (unless this indicates a bug).
 // TODO: add a warning for an update() without filters.
 // TODO: support String methods in the update() method (for instance push(), push_str(), truncate(), pop(), remove()).
