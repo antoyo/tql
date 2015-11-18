@@ -205,14 +205,23 @@ impl<'tcx> PartialEq<TyS<'tcx>> for Type {
                 ref typ => typ,
             };
         match expected_type.sty {
-            TypeVariants::TyInt(IntTy::TyI32) => {
-                match *typ {
-                    Type::I32 | Type::Serial => true,
-                    _ => false,
+            TypeVariants::TyBool => {
+                *typ == Type::Bool
+            },
+            TypeVariants::TyFloat(float_type) => {
+                match float_type {
+                    FloatTy::TyF32 => *typ == Type::F32,
+                    FloatTy::TyF64 => *typ == Type::F64,
                 }
             },
-            TypeVariants::TyInt(IntTy::TyI64) => {
-                *typ == Type::I64
+            TypeVariants::TyInt(int_type) => {
+                match int_type {
+                    IntTy::TyIs => false, // NOTE: system integer does not make sense for DBMS.
+                    IntTy::TyI8 => *typ == Type::I8,
+                    IntTy::TyI16 => *typ == Type::I16,
+                    IntTy::TyI32 => *typ == Type::I32 || *typ == Type::Serial,
+                    IntTy::TyI64 => *typ == Type::I64,
+                }
             },
             TypeVariants::TyRef(_, TypeAndMut { ty, .. }) => {
                 // TODO: support reference's reference.
@@ -244,9 +253,11 @@ impl<'tcx> PartialEq<TyS<'tcx>> for Type {
                     "NaiveDate" => *typ == Type::NaiveDate,
                     "NaiveDateTime" => *typ == Type::NaiveDateTime,
                     "NaiveTime" => *typ == Type::NaiveTime,
+                    "String" => *typ == Type::String,
                     struct_type => *typ == Type::Custom(struct_type.to_owned()),
                 }
             },
+            // TODO: check for missing types.
             _ => false,
         }
     }

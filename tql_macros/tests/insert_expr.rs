@@ -37,6 +37,13 @@ struct TableInsertExpr {
     field2: i32,
     related_field: ForeignKey<RelatedTableInsertExpr>,
     optional_field: Option<i32>,
+    boolean: Option<bool>,
+    //character: Option<char>, // TODO: does not work.
+    float32: Option<f32>,
+    float64: Option<f64>,
+    //int8: Option<i8>, // TODO: does not work.
+    int16: Option<i16>,
+    int64: Option<i64>,
 }
 
 #[SqlTable]
@@ -100,8 +107,9 @@ fn test_insert() {
     assert!(table.related_field.is_none());
     assert!(table.optional_field.is_none());
 
+    let new_field1 = "value3".to_owned();
     let new_field2 = 24;
-    let id = sql!(TableInsertExpr.insert(field1 = "value3", field2 = new_field2, related_field = related_field, optional_field = 12)).unwrap();
+    let id = sql!(TableInsertExpr.insert(field1 = new_field1, field2 = new_field2, related_field = related_field, optional_field = 12)).unwrap();
     assert_eq!(3, id);
 
     let table = sql!(TableInsertExpr.get(id)).unwrap();
@@ -109,4 +117,14 @@ fn test_insert() {
     assert_eq!(24, table.field2);
     assert!(table.related_field.is_none());
     assert_eq!(Some(12), table.optional_field);
+
+    let boolean_value = true;
+    //let character = 'a';
+    let float32 = 3.14f32;
+    let float64 = 3.14f64;
+    //let int8 = 42i8;
+    let int16 = 42i16;
+    let int64 = 42i64;
+    let id = sql!(TableInsertExpr.insert(field1 = new_field1, field2 = new_field2, related_field = related_field, optional_field = 12, boolean = boolean_value, /*character = character,*/ float32 = float32, float64 = float64, /*int8 = int8,*/ int16 = int16, int64 = int64)).unwrap();
+    assert_eq!(4, id);
 }

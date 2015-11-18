@@ -28,7 +28,11 @@
 // TODO: replace README.md by README.adoc and complete it.
 // TODO: add support for Syntex.
 
+// TODO: support the character and i8 field type.
 // TODO: use named parameters in the format!() macro when needed.
+// TODO: support field index (in table create).
+// TODO: support field with unique key.
+// TODO: support more operators in the optimizer.
 // TODO: use more the Default trait.
 // TODO: allow setting a field to None in an update().
 // TODO: span error when an SQL keyword is used in a table or field name (or renamed it?).
