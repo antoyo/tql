@@ -90,7 +90,7 @@ fn add_limit_arguments(cx: &mut ExtCtxt, limit: Limit, arguments: &mut Args) {
     match limit {
         Limit::EndRange(expression) => add(arguments, None, Type::I64, expression),
         Limit::Index(expression) => add(arguments, None, Type::I64, expression),
-        Limit::LimitOffset(_, _) => (),
+        Limit::LimitOffset(_, _) => (), // NOTE: there are no arguments to add for a `LimitOffset` because it is always using literals.
         Limit::NoLimit => (),
         Limit::Range(expression1, expression2) => {
             let offset = expression1.clone();

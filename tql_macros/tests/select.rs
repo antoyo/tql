@@ -273,6 +273,14 @@ fn test_limit() {
         to_sql!(Table.all()[2 - 1..])
     );
     assert_eq!(
+        format!("{} FROM Table OFFSET 3", SELECT),
+        to_sql!(Table.all()[2 + 1..])
+    );
+    assert_eq!(
+        format!("{} FROM Table OFFSET 2", SELECT),
+        to_sql!(Table.all()[2 + 1 - 3 + 2..])
+    );
+    assert_eq!(
         format!("{} FROM Table OFFSET $1 LIMIT 1", SELECT),
         to_sql!(Table.all()[index])
     );

@@ -24,13 +24,13 @@ use syntax::codemap::{Span, Spanned};
 use syntax::ptr::P;
 
 use ast::{self, Expression, Filter, FilterExpression, Filters, FilterValue, LogicalOperator, RelationalOperator};
-use error::{SqlResult, Error, res};
+use error::{SqlError, SqlResult, res};
 use state::{SqlMethod, SqlMethodTypes, SqlTable, methods_singleton};
 use super::{check_field, check_field_type, check_type, check_type_filter_value, propose_similar_name};
 use types::Type;
 
 /// Analyze the types of the `FilterExpression`.
-pub fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors: &mut Vec<Error>) {
+pub fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors: &mut Vec<SqlError>) {
     // TODO: check that operators are used with the good types (perhaps not necessary because all
     // types may support all operators)?
     match *filter {
@@ -137,9 +137,9 @@ pub fn binop_to_relational_operator(binop: BinOp_) -> RelationalOperator {
 }
 
 /// Check the type of the arguments of the method.
-fn check_method_arguments(arguments: &[Expression], argument_types: &[Type], errors: &mut Vec<Error>) {
-    for (i, argument) in arguments.iter().enumerate() {
-        check_type(&argument_types[i], argument, errors);
+fn check_method_arguments(arguments: &[Expression], argument_types: &[Type], errors: &mut Vec<SqlError>) {
+    for (argument, argument_type) in arguments.iter().zip(argument_types) {
+        check_type(argument_type, argument, errors)
     }
 }
 
@@ -175,8 +175,8 @@ pub fn expression_to_filter_expression(arg: &P<Expr>, table: &SqlTable) -> SqlRe
                 FilterExpression::NegFilter(box filter)
             },
             _ => {
-                errors.push(Error::new(
-                    "Expected binary operation".to_owned(), // TODO: improve this message.
+                errors.push(SqlError::new(
+                    "Expected binary operation", // TODO: improve this message.
                     arg.span,
                 ));
                 FilterExpression::NoFilters
@@ -187,7 +187,7 @@ pub fn expression_to_filter_expression(arg: &P<Expr>, table: &SqlTable) -> SqlRe
 }
 
 /// Get an SQL method and arguments by type and name.
-fn get_method<'a>(object_type: &'a Spanned<Type>, exprs: &[Expression], method_name: &str, identifier: SpannedIdent, errors: &mut Vec<Error>) -> Option<(&'a SqlMethodTypes, Vec<Expression>)> {
+fn get_method<'a>(object_type: &'a Spanned<Type>, exprs: &[Expression], method_name: &str, identifier: SpannedIdent, errors: &mut Vec<SqlError>) -> Option<(&'a SqlMethodTypes, Vec<Expression>)> {
     let methods = methods_singleton();
     let type_methods =
         if let Type::Nullable(_) = object_type.node {
@@ -234,7 +234,7 @@ pub fn is_relational_operator(binop: BinOp_) -> bool {
 }
 
 /// Convert a method call expression to a filter expression.
-fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: &[Expression], table: &SqlTable, errors: &mut Vec<Error>) -> FilterValue {
+fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: &[Expression], table: &SqlTable, errors: &mut Vec<SqlError>) -> FilterValue {
     let method_name = identifier.node.name.to_string();
     let dummy = FilterValue::Identifier("".to_owned());
     match exprs[0].node {
@@ -242,8 +242,8 @@ fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: 
             path_method_call_to_filter(path, identifier, &method_name, exprs, table, errors)
         },
         _ => {
-            errors.push(Error::new(
-                "expected identifier".to_owned(), // TODO: improve this message.
+            errors.push(SqlError::new(
+                "expected identifier", // TODO: improve this message.
                 exprs[0].span,
             ));
             dummy
@@ -252,7 +252,7 @@ fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: 
 }
 
 /// Convert a method call where the object is an identifier to a filter expression.
-fn path_method_call_to_filter(path: &Path, identifier: SpannedIdent, method_name: &str, exprs: &[Expression], table: &SqlTable, errors: &mut Vec<Error>) -> FilterValue {
+fn path_method_call_to_filter(path: &Path, identifier: SpannedIdent, method_name: &str, exprs: &[Expression], table: &SqlTable, errors: &mut Vec<SqlError>) -> FilterValue {
     // TODO: return errors instead of dummy.
     let dummy = FilterValue::Identifier("".to_owned());
     let object_name = path.segments[0].identifier.name.to_string();
@@ -281,10 +281,10 @@ fn path_method_call_to_filter(path: &Path, identifier: SpannedIdent, method_name
 }
 
 /// Add an error to the vector `errors` about an unknown SQL method.
-/// It suggests a similar name if there exist one.
-fn unknown_method(position: Span, object_type: &Type, method_name: &str, type_methods: Option<&SqlMethod>, errors: &mut Vec<Error>) {
-    errors.push(Error::new(
-        format!("no method named `{}` found for type `{}`", method_name, object_type),
+/// It suggests a similar name if there is one.
+fn unknown_method(position: Span, object_type: &Type, method_name: &str, type_methods: Option<&SqlMethod>, errors: &mut Vec<SqlError>) {
+    errors.push(SqlError::new(
+        &format!("no method named `{}` found for type `{}`", method_name, object_type),
         position,
     ));
     if let Some(type_methods) = type_methods {

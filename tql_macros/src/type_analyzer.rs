@@ -27,17 +27,17 @@ use syntax::ast::Attribute;
 use syntax::codemap::{NO_EXPANSION, BytePos, Span};
 
 use analyzer::unknown_table_error;
-use error::{Error, ErrorType, SqlResult, res};
-use state::{SqlTable, SqlTables, lint_singleton, singleton};
+use error::{SqlError, ErrorType, SqlResult, res};
+use state::{SqlTable, SqlTables, lint_singleton, tables_singleton};
 use types::Type;
 
 declare_lint!(SQL_LINT, Forbid, "Err about SQL type errors");
 declare_lint!(SQL_ATTR_LINT, Forbid, "Err about SQL table errors");
 
-pub struct SqlError;
+pub struct SqlErrorLint;
 pub struct SqlAttrError;
 
-impl LintPass for SqlError {
+impl LintPass for SqlErrorLint {
     fn get_lints(&self) -> LintArray {
         lint_array!(SQL_LINT)
     }
@@ -66,9 +66,9 @@ fn analyze_table_types(table: &SqlTable, sql_tables: &SqlTables) -> SqlResult<()
         }
     }
     match primary_key_count {
-        0 => errors.insert(0, Error::new_warning("No primary key found".to_owned(), table.position)),
+        0 => errors.insert(0, SqlError::new_warning("No primary key found", table.position)),
         1 => (), // One primary key is OK.
-        _ => errors.insert(0, Error::new_warning("More than one primary key is currently not supported".to_owned(), table.position)),
+        _ => errors.insert(0, SqlError::new_warning("More than one primary key is currently not supported", table.position)),
     }
     res((), errors)
 }
@@ -104,7 +104,7 @@ impl EarlyLintPass for SqlAttrError {
         static mut analyze_done: bool = false;
         let done = unsafe { analyze_done };
         if !done {
-            let sql_tables = singleton();
+            let sql_tables = tables_singleton();
             for table in sql_tables.values() {
                 if let Err(errors) = analyze_table_types(&table, &sql_tables) {
                     span_errors(errors, cx);
@@ -117,8 +117,8 @@ impl EarlyLintPass for SqlAttrError {
     }
 }
 
-impl LateLintPass for SqlError {
-    /// Check the types of the `Vec` argument of the `postgres::stmt::Statement::query` method.
+impl LateLintPass for SqlErrorLint {
+    /// Check the types of the `Vec` argument of the `postgres::stmt::Statement::query` and `postgres::stmt::Statement::execute` methods.
     fn check_expr(&mut self, cx: &LateContext, expr: &Expr) {
         if let ExprMethodCall(name, _, ref arguments) = expr.node {
             let method_name = name.node.to_string();
@@ -145,18 +145,23 @@ impl LateLintPass for SqlError {
     }
 }
 
-/// Check that the `field_type` is the same as the `expected_type`.
+/// Check that the `field_type` is the same as the `actual_type`.
 /// If not, show an error message.
-fn check_type(field_type: &Type, expected_type: &TyS, position: Span, note_position: Span, cx: &LateContext) {
-    if field_type != expected_type {
-        cx.sess().span_err_with_code(position, &format!("mismatched types:\n expected `{}`,    found `{:?}`", field_type, expected_type), "E0308");
+fn check_type(field_type: &Type, actual_type: &TyS, position: Span, note_position: Span, cx: &LateContext) {
+    if field_type != actual_type {
+        cx.sess().span_err_with_code(position,
+            &format!("mismatched types:\n expected `{expected_type}`,    found `{actual_type:?}`",
+                expected_type = field_type,
+                actual_type = actual_type
+            ), "E0308"
+        );
         cx.sess().fileline_note(note_position, "in this expansion of sql! (defined in tql)");
     }
 }
 
 /// Show the compilation errors.
-fn span_errors(errors: Vec<Error>, cx: &EarlyContext) {
-    for &Error {ref code, ref message, position, ref kind} in &errors {
+fn span_errors(errors: Vec<SqlError>, cx: &EarlyContext) {
+    for &SqlError {ref code, ref message, position, ref kind} in &errors {
         match *kind {
             ErrorType::Error => {
                 match *code {

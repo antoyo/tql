@@ -23,7 +23,7 @@ use syntax::ast::UnOp;
 use syntax::codemap::{Span, Spanned};
 
 use ast::{Aggregate, AggregateFilter, AggregateFilterExpression, AggregateFilters, AggregateFilterValue, Expression, Identifier};
-use error::{Error, SqlResult, res};
+use error::{SqlError, SqlResult, res};
 use gen::ToSql;
 use state::{SqlTable, aggregates_singleton};
 use super::{check_argument_count, check_field, path_expr_to_identifier, propose_similar_name};
@@ -32,23 +32,10 @@ use super::filter::{binop_to_logical_operator, binop_to_relational_operator, is_
 /// Convert an `Expression` to an `Aggregate`.
 pub fn argument_to_aggregate(arg: &Expression, _table: &SqlTable) -> SqlResult<Aggregate> {
     let mut errors = vec![];
-    let mut aggregate = Aggregate {
-        field: "".to_owned(),
-        function: "".to_owned(),
-        result_name: "".to_owned(),
-    };
+    let mut aggregate = Aggregate::default();
     let aggregates = aggregates_singleton();
 
-    let call =
-        if let ExprAssign(ref left_value, ref right_value) = arg.node {
-            if let Some(identifier) = path_expr_to_identifier(left_value, &mut errors) {
-                aggregate.result_name = identifier;
-            }
-            right_value
-        }
-        else {
-            arg
-        };
+    let call = get_call_from_aggregate(arg, &mut aggregate, &mut errors);
 
     if let ExprCall(ref function, ref arguments) = call.node {
         if let Some(identifier) = path_expr_to_identifier(function, &mut errors) {
@@ -56,8 +43,8 @@ pub fn argument_to_aggregate(arg: &Expression, _table: &SqlTable) -> SqlResult<A
                 aggregate.function = sql_function.clone();
             }
             else {
-                errors.push(Error::new_with_code(
-                    format!("unresolved name `{}`", identifier),
+                errors.push(SqlError::new_with_code(
+                    &format!("unresolved name `{}`", identifier),
                     arg.span,
                     "E0425",
                 ));
@@ -79,8 +66,8 @@ pub fn argument_to_aggregate(arg: &Expression, _table: &SqlTable) -> SqlResult<A
         }
     }
     else {
-        errors.push(Error::new(
-            "Expected function call".to_owned(), // TODO: improve this message.
+        errors.push(SqlError::new(
+            "Expected function call", // TODO: improve this message.
             arg.span,
         ));
     }
@@ -101,7 +88,7 @@ pub fn argument_to_group(arg: &Expression, table: &SqlTable) -> SqlResult<Identi
     res(group, errors)
 }
 
-/// Convert a Rust binary expression to a `AggregateFilterExpression` for an aggregate filter.
+/// Convert a Rust binary expression to an `AggregateFilterExpression` for an aggregate filter.
 fn binary_expression_to_aggregate_filter_expression(expr1: &Expression, op: BinOp_, expr2: &Expression, aggregates: &[Aggregate], table: &SqlTable) -> SqlResult<AggregateFilterExpression> {
     // TODO: accumulate the errors instead of stopping at the first one.
     let filter1 = try!(expression_to_aggregate_filter_expression(expr1, aggregates, table));
@@ -136,11 +123,11 @@ fn binary_expression_to_aggregate_filter_expression(expr1: &Expression, op: BinO
 }
 
 /// Check that an aggregate field exists.
-fn check_aggregate_field<'a>(identifier: &str, aggregates: &'a [Aggregate], position: Span, errors: &mut Vec<Error>) -> Option<&'a Aggregate> {
+fn check_aggregate_field<'a>(identifier: &str, aggregates: &'a [Aggregate], position: Span, errors: &mut Vec<SqlError>) -> Option<&'a Aggregate> {
     let result = aggregates.iter().find(|aggr| aggr.result_name == identifier);
     if let None = result {
-        errors.push(Error::new(
-            format!("no aggregate field named `{}` found", identifier), // TODO: improve this message.
+        errors.push(SqlError::new(
+            &format!("no aggregate field named `{}` found", identifier), // TODO: improve this message.
             position
         ));
         // TODO: propose similar names.
@@ -148,7 +135,7 @@ fn check_aggregate_field<'a>(identifier: &str, aggregates: &'a [Aggregate], posi
     result
 }
 
-/// Convert a Rust expression to a `AggregateFilterExpression` for an aggregate filter.
+/// Convert a Rust expression to an `AggregateFilterExpression` for an aggregate filter.
 pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &[Aggregate], table: &SqlTable) -> SqlResult<AggregateFilterExpression> {
     let mut errors = vec![];
 
@@ -180,8 +167,8 @@ pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &
                 AggregateFilterExpression::NegFilter(box filter)
             },
             _ => {
-                errors.push(Error::new(
-                    "Expected binary operation".to_owned(), // TODO: improve this message.
+                errors.push(SqlError::new(
+                    "Expected binary operation", // TODO: improve this message.
                     arg.span,
                 ));
                 AggregateFilterExpression::NoFilters
@@ -189,4 +176,18 @@ pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &
         };
 
     res(filter, errors)
+}
+
+/// Get the call expression from an `arg` expression.
+fn get_call_from_aggregate<'a>(arg: &'a Expression, aggregate: &mut Aggregate, errors: &mut Vec<SqlError>) -> &'a Expression {
+    // If the `arg` expression is an assignment, the call is on the right side.
+    if let ExprAssign(ref left_value, ref right_value) = arg.node {
+        if let Some(identifier) = path_expr_to_identifier(left_value, errors) {
+            aggregate.result_name = identifier; // TODO
+        }
+        right_value
+    }
+    else {
+        arg
+    }
 }

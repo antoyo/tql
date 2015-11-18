@@ -31,8 +31,29 @@ struct Table<'a> {
     //~| run `rustc --explain E0412` to see a detailed explanation
     connection: Connection,
     //~^ ERROR use of unsupported type name `Connection` [E0412]
+    //~| run `rustc --explain E0412` to see a detailed explanation
     connection2: Option<Connection>,
     //~^ ERROR use of unsupported type name `Connection` [E0412]
+    //~| run `rustc --explain E0412` to see a detailed explanation
     nested_options: Option<Option<String>>,
     //~^ ERROR use of unsupported type name `Option<String>` [E0412]
+    //~| run `rustc --explain E0412` to see a detailed explanation
+    datetime: DateTime,
+    //~^ ERROR use of unsupported type name `DateTime` [E0412]
+    //~| run `rustc --explain E0412` to see a detailed explanation
+    datetime_i32: DateTime<i32>,
+    //~^ ERROR use of unsupported type name `DateTime<i32>` [E0412]
+    //~| run `rustc --explain E0412` to see a detailed explanation
+    foreign_value: ForeignKey,
+    //~^ ERROR use of unsupported type name `ForeignKey` [E0412]
+    //~| run `rustc --explain E0412` to see a detailed explanation
+    optional_value: Option,
+    //~^ ERROR use of unsupported type name `Option` [E0412]
+    //~| run `rustc --explain E0412` to see a detailed explanation
+    vector: Vec,
+    //~^ ERROR use of unsupported type name `Vec` [E0412]
+    //~| run `rustc --explain E0412` to see a detailed explanation
+    vector_i32: Vec<i32>,
+    //~^ ERROR use of unsupported type name `Vec<i32>` [E0412]
+    //~| run `rustc --explain E0412` to see a detailed explanation
 }

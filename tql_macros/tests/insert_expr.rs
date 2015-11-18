@@ -24,18 +24,25 @@ extern crate tql;
 use postgres::{Connection, SslMode};
 use postgres::error::Error::DbError;
 use postgres::error::SqlState::UndefinedTable;
-use tql::PrimaryKey;
+use tql::{ForeignKey, PrimaryKey};
 
 mod teardown;
 
 use teardown::TearDown;
 
 #[SqlTable]
-#[allow(dead_code)]
 struct TableInsertExpr {
     primary_key: PrimaryKey,
     field1: String,
     field2: i32,
+    related_field: ForeignKey<RelatedTableInsertExpr>,
+    optional_field: Option<i32>,
+}
+
+#[SqlTable]
+struct RelatedTableInsertExpr {
+    id: PrimaryKey,
+    field1: i32,
 }
 
 fn get_connection() -> Connection {
@@ -48,11 +55,16 @@ fn test_insert() {
 
     let _teardown = TearDown::new(|| {
         let _ = sql!(TableInsertExpr.drop());
+        let _ = sql!(RelatedTableInsertExpr.drop());
     });
 
+    let _ = sql!(RelatedTableInsertExpr.create());
     let _ = sql!(TableInsertExpr.drop());
 
-    let result = sql!(TableInsertExpr.insert(field1 = "value1", field2 = 55));
+    let related_id = sql!(RelatedTableInsertExpr.insert(field1 = 42)).unwrap();
+    let related_field = sql!(RelatedTableInsertExpr.get(related_id)).unwrap();
+
+    let result = sql!(TableInsertExpr.insert(field1 = "value1", field2 = 55, related_field = related_field));
     match result {
         Err(DbError(box db_error)) => assert_eq!(UndefinedTable, *db_error.code()),
         Ok(_) => assert!(false),
@@ -61,18 +73,40 @@ fn test_insert() {
 
     let _ = sql!(TableInsertExpr.create());
 
-    let id = sql!(TableInsertExpr.insert(field1 = "value1", field2 = 55)).unwrap();
+    let id = sql!(TableInsertExpr.insert(field1 = "value1", field2 = 55, related_field = related_field)).unwrap();
     assert_eq!(1, id);
 
     let table = sql!(TableInsertExpr.get(id)).unwrap();
     assert_eq!("value1", table.field1);
     assert_eq!(55, table.field2);
+    assert!(table.related_field.is_none());
+    assert!(table.optional_field.is_none());
+
+    let table = sql!(TableInsertExpr.get(id).join(related_field)).unwrap();
+    assert_eq!("value1", table.field1);
+    assert_eq!(55, table.field2);
+    let related_table = table.related_field.unwrap();
+    assert_eq!(related_id, related_table.id);
+    assert_eq!(42, related_table.field1);
+    assert!(table.optional_field.is_none());
 
     let new_field2 = 42;
-    let id = sql!(TableInsertExpr.insert(field1 = "value2", field2 = new_field2)).unwrap();
+    let id = sql!(TableInsertExpr.insert(field1 = "value2", field2 = new_field2, related_field = related_field)).unwrap();
     assert_eq!(2, id);
 
     let table = sql!(TableInsertExpr.get(id)).unwrap();
     assert_eq!("value2", table.field1);
     assert_eq!(42, table.field2);
+    assert!(table.related_field.is_none());
+    assert!(table.optional_field.is_none());
+
+    let new_field2 = 24;
+    let id = sql!(TableInsertExpr.insert(field1 = "value3", field2 = new_field2, related_field = related_field, optional_field = 12)).unwrap();
+    assert_eq!(3, id);
+
+    let table = sql!(TableInsertExpr.get(id)).unwrap();
+    assert_eq!("value3", table.field1);
+    assert_eq!(24, table.field2);
+    assert!(table.related_field.is_none());
+    assert_eq!(Some(12), table.optional_field);
 }

@@ -29,7 +29,7 @@ use syntax::ptr::P;
 
 pub static NODE_ID: u32 = 4294967295;
 
-/// Create the `ExprField` expression `expr`.`field_name`.
+/// Create the `ExprField` expression `expr`.`field_name` (struct field access).
 pub fn field_access(expr: P<Expr>, path: &Path, position: Span, field_name: String) -> P<Expr> {
     let syntax_context = path.segments[0].identifier.ctxt;
     let ident = Ident::new(intern(&field_name), syntax_context);

@@ -15,9 +15,18 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-//! Global mutable state handling.
+//! Global mutable states handling.
 //!
-//! The global state contains the SQL tables gathered by the `sql_table` attribute with their
+//! There are four global states:
+//!
+//! The aggregates global state contains the existing aggregate functions.
+//!
+//! The lint global state contains the arguments at every sql!() macro call site to be able to
+//! analyze their types in the lint plugin.
+//!
+//! The methods global state contains the existing aggregate functions.
+//!
+//! The tables global state contains the SQL tables gathered by the `SqlTable` attribute with their
 //! fields.
 //! A field is an identifier and a type.
 
@@ -33,15 +42,16 @@ use types::Type;
 /// A collection of tql aggregate functions.
 pub type SqlAggregates = HashMap<String, String>;
 
-/// An SQL query argument.
+/// An SQL query argument type.
 #[derive(Debug)]
+// TODO: use a Span instead of high and low.
 pub struct SqlArg {
     pub high: u32,
     pub low: u32,
     pub typ: Type,
 }
 
-/// A collection of SQL query arguments.
+/// A collection of SQL query argument types.
 #[derive(Debug)]
 pub struct SqlArgs {
     pub arguments: Vec<SqlArg>,
@@ -49,24 +59,27 @@ pub struct SqlArgs {
 }
 
 /// A collection of query calls (with their arguments).
+/// A map from the call position to its arguments.
+/// The position is used to get the right call from the position in the lint plugin.
 pub type SqlCalls = HashMap<u32, SqlArgs>;
 
-/// A collection of fields.
+/// A collection of fields from an `SqlTable`.
 pub type SqlFields = BTreeMap<String, Spanned<Type>>;
 
-/// A tql method.
+/// A tql method that can be used in filters.
 pub type SqlMethod = HashMap<String, SqlMethodTypes>;
 
-/// A collection mapping tql methods to SQL functions.
+/// A collection mapping types to the methods that can be used on them.
 pub type SqlMethods = HashMap<Type, SqlMethod>;
 
-/// Tql method types.
+/// Tql method return type, argument types and template.
 pub struct SqlMethodTypes {
     pub argument_types: Vec<Type>,
     pub return_type: Type,
     pub template: String,
 }
 
+/// An `SqlTable` has a name, a position and some `SqlFields`.
 pub struct SqlTable {
     pub fields: SqlFields,
     pub name: String,
@@ -74,11 +87,12 @@ pub struct SqlTable {
 }
 
 /// A collection of SQL tables.
+/// A map from table name to `SqlTable`.
 pub type SqlTables = HashMap<String, SqlTable>;
 
 /// Get the type of the field if it exists.
 pub fn get_field_type<'a, 'b>(table_name: &'a str, identifier: &'b str) -> Option<&'a Type> {
-    let tables = singleton();
+    let tables = tables_singleton();
     tables.get(table_name)
         .and_then(|table| table.fields.get(identifier))
         .map(|field_type| &field_type.node)
@@ -86,7 +100,7 @@ pub fn get_field_type<'a, 'b>(table_name: &'a str, identifier: &'b str) -> Optio
 
 /// Get method types by field name.
 pub fn get_method_types<'a>(table_name: &str, field_name: &str, method_name: &str) -> Option<&'a SqlMethodTypes> {
-    let tables = singleton();
+    let tables = tables_singleton();
     let methods = methods_singleton();
     tables.get(table_name)
         .and_then(|table| table.fields.get(field_name))
@@ -98,17 +112,14 @@ pub fn get_method_types<'a>(table_name: &str, field_name: &str, method_name: &st
 
 /// Get the name of the primary key field.
 pub fn get_primary_key_field(table: &SqlTable) -> Option<String> {
-    for (field, typ) in &table.fields {
-        if let Type::Serial = typ.node {
-            return Some(field.clone());
-        }
-    }
-    None
+    table.fields.iter()
+        .find(|&(_, typ)| typ.node == Type::Serial)
+        .map(|(field, _)| field.clone())
 }
 
 /// Get the name of the primary key field by table name.
 pub fn get_primary_key_field_by_table_name(table_name: &str) -> Option<String> {
-    let tables = singleton();
+    let tables = tables_singleton();
     tables.get(table_name).and_then(|table| get_primary_key_field(table))
 }
 
@@ -157,7 +168,7 @@ pub fn methods_singleton() -> &'static mut SqlMethods {
 }
 
 /// Returns the global state.
-pub fn singleton() -> &'static mut SqlTables {
+pub fn tables_singleton() -> &'static mut SqlTables {
     // FIXME: make this thread safe.
     static mut hash_map: *mut SqlTables = 0 as *mut SqlTables;
 

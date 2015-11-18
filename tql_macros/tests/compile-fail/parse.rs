@@ -15,15 +15,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-//! Tests of the type analyzer lint for the `#[SqlTable]` attribute.
+//! Tests of the methods related to `Query::Select`.
 
 #![feature(plugin)]
 #![plugin(tql_macros)]
 
-extern crate postgres;
 extern crate tql;
 
-use tql::{ForeignKey, PrimaryKey};
+use tql::PrimaryKey;
 
 struct Connection {
     value: String,
@@ -31,16 +30,13 @@ struct Connection {
 
 #[SqlTable]
 struct Table {
-    //~^ WARNING No primary key found
+    id: PrimaryKey,
     field1: String,
-    related_field1: ForeignKey<Connection>,
-    //~^ ERROR `Connection` does not name an SQL table [E0422]
-    //~| HELP run `rustc --explain E0422` to see a detailed explanation
-    //~| HELP did you forget to add the #[SqlTable] attribute on the Connection struct?
-    related_field2: ForeignKey<RelatedTable>,
+    i32_field: i32,
 }
 
-#[SqlTable]
-struct RelatedTable {
-    id: PrimaryKey,
+fn main() {
+    sql!(Table.filter(field1 in "value1"));
+    //~^ ERROR expected one of `!`, `,`, `.`, `::`, `{`, or an operator, found `in`
+    //~| ERROR The parser has encountered a fatal error
 }

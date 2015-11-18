@@ -174,7 +174,7 @@ fn main() {
     sql!(TestTable.flter(field1 == "value"));
     //~^ ERROR `TestTable` does not name an SQL table [E0422]
     //~| HELP run `rustc --explain E0422` to see a detailed explanation
-    //~| HELP did you forget to add the #[sql_table] attribute on the TestTable struct?
+    //~| HELP did you forget to add the #[SqlTable] attribute on the TestTable struct?
     //~| ERROR no method named `flter` found in tql
     //~| HELP did you mean filter?
 

@@ -22,26 +22,28 @@ use std::collections::HashSet;
 use syntax::codemap::{Span, Spanned};
 
 use ast::{Assignment, AssignementOperator};
-use error::Error;
+use error::SqlError;
 use state::{SqlTable, get_primary_key_field};
 use types::Type;
 
 /// Check that the method call contains all the fields from the `table` and that all assignments
 /// does not use an operation (e.g. +=).
-pub fn check_insert_arguments(assignments: &[Assignment], position: Span, table: &SqlTable, errors: &mut Vec<Error>) {
-    let mut names = HashSet::new();
+pub fn check_insert_arguments(assignments: &[Assignment], position: Span, table: &SqlTable, errors: &mut Vec<SqlError>) {
+    let mut fields = HashSet::new();
     let mut missing_fields: Vec<&str> = vec![];
+
+    // Check the assignment operators.
     for assignment in assignments {
-        names.insert(assignment.identifier.clone());
+        fields.insert(assignment.identifier.clone());
         let operator = &assignment.operator.node;
         if *operator != AssignementOperator::Equal {
-            errors.push(Error::new(format!("expected = but got {}", *operator), assignment.operator.span));
+            errors.push(SqlError::new(&format!("expected = but got {}", *operator), assignment.operator.span));
         }
     }
     let primary_key = get_primary_key_field(&table);
 
     for field in table.fields.keys() {
-        if !names.contains(field) && Some(field) != primary_key.as_ref() {
+        if !fields.contains(field) && Some(field) != primary_key.as_ref() {
             if let Some(&Spanned { node: Type::Nullable(_), .. }) = table.fields.get(field) {
                 // Do not err about missing nullable field.
             }
@@ -53,7 +55,7 @@ pub fn check_insert_arguments(assignments: &[Assignment], position: Span, table:
 
     if !missing_fields.is_empty() {
         let fields = "`".to_owned() + &missing_fields.join("`, `") + "`";
-        errors.push(Error::new_with_code(format!("missing fields: {}", fields), position, "E0063"));
+        errors.push(SqlError::new_with_code(&format!("missing fields: {}", fields), position, "E0063"));
     }
 
     // TODO: check if the primary key is not in the inserted field?

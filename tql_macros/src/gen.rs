@@ -25,18 +25,22 @@ use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloa
 use ast::{Aggregate, AggregateFilter, AggregateFilterExpression, AggregateFilters, AggregateFilterValue, Assignment, AssignementOperator, Expression, FieldList, Filter, Filters, FilterExpression, FilterValue, Identifier, Join, Limit, LogicalOperator, MethodCall, Order, RelationalOperator, Query, TypedField};
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use sql::escape;
-use state::{get_primary_key_field, singleton};
+use state::get_primary_key_field_by_table_name;
 
+/// Macro used to generate a ToSql implementation for a filter (for use in WHERE or HAVING).
 macro_rules! filter_to_sql {
     ( $name:ident ) => {
         impl ToSql for $name {
             fn to_sql(&self) -> String {
-                self.operand1.to_sql() + " " + &self.operator.to_sql() + " " + &self.operand2.to_sql()
+                self.operand1.to_sql() + " " +
+                    &self.operator.to_sql() + " " +
+                    &self.operand2.to_sql()
             }
         }
     };
 }
 
+/// Macro used to generate a ToSql implementation for a filter expression.
 macro_rules! filter_expression_to_sql {
     ( $name:ident ) => {
         impl ToSql for $name {
@@ -44,9 +48,14 @@ macro_rules! filter_expression_to_sql {
                 match *self {
                     $name::Filter(ref filter) => filter.to_sql(),
                     $name::Filters(ref filters) => filters.to_sql(),
-                    $name::NegFilter(ref filter) => "NOT ".to_owned() + &filter.to_sql(),
+                    $name::NegFilter(ref filter) =>
+                        "NOT ".to_owned() +
+                        &filter.to_sql(),
                     $name::NoFilters => "".to_owned(),
-                    $name::ParenFilter(ref filter) => "(".to_owned() + &filter.to_sql() + ")",
+                    $name::ParenFilter(ref filter) =>
+                        "(".to_owned() +
+                        &filter.to_sql() +
+                        ")",
                     $name::FilterValue(ref filter_value) => filter_value.node.to_sql(),
                 }
             }
@@ -54,16 +63,7 @@ macro_rules! filter_expression_to_sql {
     };
 }
 
-macro_rules! filters_to_sql {
-    ( $name:ident ) => {
-        impl ToSql for $name {
-            fn to_sql(&self) -> String {
-                self.operand1.to_sql() + " " + &self.operator.to_sql() + " " + &self.operand2.to_sql()
-            }
-        }
-    };
-}
-
+/// Macro used to generate a ToSql implementation for a slice.
 macro_rules! slice_to_sql {
     ( $name:ty, $sep:expr ) => {
         impl ToSql for [$name] {
@@ -82,7 +82,8 @@ pub trait ToSql {
 impl ToSql for Aggregate {
     fn to_sql(&self) -> String {
         // TODO: do not use CAST when this is in a HAVING clause.
-        "CAST(".to_owned() + &self.function.to_sql() + "(" + &self.field.to_sql() + ") AS INT)" // TODO: do not hard-code the type.
+        // TODO: do not hard-code the type.
+        "CAST(".to_owned() + &self.function.to_sql() + "(" + &self.field.to_sql() + ") AS INT)"
     }
 }
 
@@ -92,7 +93,7 @@ filter_to_sql!(AggregateFilter);
 
 filter_expression_to_sql!(AggregateFilterExpression);
 
-filters_to_sql!(AggregateFilters);
+filter_to_sql!(AggregateFilters);
 
 impl ToSql for AggregateFilterValue {
     fn to_sql(&self) -> String {
@@ -105,11 +106,15 @@ impl ToSql for AggregateFilterValue {
 impl ToSql for Assignment {
     fn to_sql(&self) -> String {
         if let AssignementOperator::Equal = self.operator.node {
-            self.identifier.to_sql() + &self.operator.node.to_sql() + &self.value.to_sql()
+            self.identifier.to_sql() +
+                &self.operator.node.to_sql() +
+                &self.value.to_sql()
         }
         else {
             let identifier = self.identifier.to_sql();
-            identifier.clone() + &self.operator.node.to_sql().replace("{}", &identifier) + &self.value.to_sql()
+            identifier.clone() +
+                &self.operator.node.to_sql().replace("{}", &identifier) +
+                &self.value.to_sql()
         }
     }
 }
@@ -118,33 +123,45 @@ slice_to_sql!(Assignment, ", ");
 
 impl ToSql for AssignementOperator {
     fn to_sql(&self) -> String {
-        let string =
-            match *self {
-                AssignementOperator::Add => " = {} + ",
-                AssignementOperator::Divide => " = {} / ",
-                AssignementOperator::Equal => " = ",
-                AssignementOperator::Modulo => " = {} % ",
-                AssignementOperator::Mul => " = {} * ",
-                AssignementOperator::Sub => " = {} - ",
-            };
-        string.to_owned()
+        match *self {
+            AssignementOperator::Add => " = {} + ",
+            AssignementOperator::Divide => " = {} / ",
+            AssignementOperator::Equal => " = ",
+            AssignementOperator::Modulo => " = {} % ",
+            AssignementOperator::Mul => " = {} * ",
+            AssignementOperator::Sub => " = {} - ",
+        }.to_owned()
     }
 }
 
+/// Convert a literal expression to its SQL representation.
+/// A non-literal is converted to ? for use with query parameters.
 impl ToSql for Expression {
     fn to_sql(&self) -> String {
         match self.node {
             ExprLit(ref literal) => {
                 match literal.node {
                     LitBool(boolean) => boolean.to_string().to_uppercase(),
-                    LitByte(byte) => "'".to_owned() + &escape((byte as char).to_string()) + "'",
+                    LitByte(byte) =>
+                        "'".to_owned() +
+                        &escape((byte as char).to_string()) +
+                        "'",
                     // TODO: check if using unwrap() is secure here.
-                    LitByteStr(ref bytestring) => "'".to_owned() + &escape(from_utf8(&bytestring[..]).unwrap().to_owned()) + "'",
-                    LitChar(character) => "'".to_owned() + &escape(character.to_string()) + "'",
+                    LitByteStr(ref bytestring) =>
+                        "'".to_owned() +
+                        &escape(from_utf8(&bytestring[..]).unwrap().to_owned()) +
+                        "'",
+                    LitChar(character) =>
+                        "'".to_owned() +
+                        &escape(character.to_string()) +
+                        "'",
                     LitFloat(ref float, _) => float.to_string(),
                     LitFloatUnsuffixed(ref float) => float.to_string(),
                     LitInt(number, _) => number.to_string(),
-                    LitStr(ref string, _) => "'".to_owned() + &escape(string.to_string()) + "'",
+                    LitStr(ref string, _) =>
+                        "'".to_owned() +
+                        &escape(string.to_string()) +
+                        "'",
                 }
             },
             _ => "?".to_owned(),
@@ -164,13 +181,15 @@ filter_to_sql!(Filter);
 
 filter_expression_to_sql!(FilterExpression);
 
-filters_to_sql!(Filters);
+filter_to_sql!(Filters);
 
 impl ToSql for FilterValue {
     fn to_sql(&self) -> String {
         match *self {
             FilterValue::Identifier(ref identifier) => identifier.to_sql(),
             FilterValue::MethodCall(MethodCall { ref arguments, ref object_name, ref template, ..  }) => {
+                // In the template, $0 represents the object identifier and $1, $2, ... the
+                // arguments.
                 let mut sql = template.replace("$0", object_name);
                 let mut index = 1;
                 for argument in arguments {
@@ -185,7 +204,9 @@ impl ToSql for FilterValue {
 
 impl ToSql for Join {
     fn to_sql(&self) -> String {
-        " INNER JOIN ".to_owned() + &self.right_table + " ON " + &self.left_table + "." + &self.left_field + " = " + &self.right_table + "." + &self.right_field
+        " INNER JOIN ".to_owned() + &self.joined_table +
+            " ON " + &self.base_table + "." + &self.base_field + " = "
+            + &self.joined_table + "." + &self.joined_field
     }
 }
 
@@ -201,10 +222,16 @@ impl ToSql for Limit {
     fn to_sql(&self) -> String {
         match *self {
             EndRange(ref expression) => " LIMIT ".to_owned() + &expression.to_sql(),
-            Index(ref expression) => " OFFSET ".to_owned() + &expression.to_sql() + " LIMIT 1",
-            LimitOffset(ref expression1, ref expression2) => " OFFSET ".to_owned() + &expression2.to_sql() + " LIMIT " + &expression1.to_sql(),
+            Index(ref expression) =>
+                " OFFSET ".to_owned() + &expression.to_sql() +
+                " LIMIT 1",
+            LimitOffset(ref expression1, ref expression2) =>
+                " OFFSET ".to_owned() + &expression2.to_sql() +
+                " LIMIT " + &expression1.to_sql(),
             NoLimit => "".to_owned(),
-            Range(ref expression1, ref expression2) => " OFFSET ".to_owned() + &expression1.to_sql() + " LIMIT " + &expression2.to_sql(),
+            Range(ref expression1, ref expression2) =>
+                " OFFSET ".to_owned() + &expression1.to_sql() +
+                " LIMIT " + &expression2.to_sql(),
             StartRange(ref expression) => " OFFSET ".to_owned() + &expression.to_sql(),
         }
     }
@@ -213,10 +240,10 @@ impl ToSql for Limit {
 impl ToSql for LogicalOperator {
     fn to_sql(&self) -> String {
         match *self {
-            LogicalOperator::And => "AND".to_owned(),
-            LogicalOperator::Not => "NOT".to_owned(),
-            LogicalOperator::Or => "OR".to_owned(),
-        }
+            LogicalOperator::And => "AND",
+            LogicalOperator::Not => "NOT",
+            LogicalOperator::Or => "OR",
+        }.to_owned()
     }
 }
 
@@ -231,6 +258,7 @@ impl ToSql for Order {
 
 slice_to_sql!(Order, ", ");
 
+/// Convert a whole `Query` to SQL.
 impl ToSql for Query {
     fn to_sql(&self) -> String {
         match *self {
@@ -250,28 +278,49 @@ impl ToSql for Query {
                     else {
                         " HAVING "
                     };
-                replace_placeholder(format!("SELECT {} FROM {}{}{}{}{}{}{}{}", aggregates.to_sql(), table, joins.to_sql(), where_clause, filter.to_sql(), group_clause, groups.to_sql(), having_clause, aggregate_filter.to_sql()))
+                replace_placeholder(format!("SELECT {aggregates} FROM {table_name}{joins}{where_clause}{filter}{group_clause}{groups}{having_clause}{aggregate_filter}",
+                                            aggregates = aggregates.to_sql(),
+                                            table_name = table,
+                                            joins = joins.to_sql(),
+                                            where_clause = where_clause,
+                                            filter = filter.to_sql(),
+                                            group_clause = group_clause,
+                                            groups = groups.to_sql(),
+                                            having_clause = having_clause,
+                                            aggregate_filter = aggregate_filter.to_sql())
+                                    )
             },
             Query::CreateTable { ref fields, ref table } => {
-                format!("CREATE TABLE {} ({})", table, fields.to_sql())
+                format!("CREATE TABLE {table} ({fields})",
+                    table = table,
+                    fields = fields.to_sql()
+                )
             },
             Query::Delete { ref filter, ref table } => {
                 let where_clause = filter_to_where_clause(filter);
-                replace_placeholder(format!("DELETE FROM {}{}{}", table, where_clause, filter.to_sql()))
+                replace_placeholder(format!("DELETE FROM {table}{where_clause}{filter}",
+                                            table = table,
+                                            where_clause = where_clause,
+                                            filter = filter.to_sql()
+                                           )
+                                   )
             },
             Query::Drop { ref table } => {
-                format!("DROP TABLE {}", table)
+                format!("DROP TABLE {table}", table = table)
             },
             Query::Insert { ref assignments, ref table } => {
                 let fields: Vec<_> = assignments.iter().map(|assign| assign.identifier.to_sql()).collect();
                 let values: Vec<_> = assignments.iter().map(|assign| assign.value.to_sql()).collect();
-                let tables = singleton();
-                let return_value =
-                    match get_primary_key_field(tables.get(table).unwrap()) {
-                        Some(ref primary_key) => " RETURNING ".to_owned() + primary_key,
-                        None => "".to_owned(), // TODO: what to do whene there is no primary key?
-                    };
-                replace_placeholder(format!("INSERT INTO {}({}) VALUES({}){}", table, fields.to_sql(), values.to_sql(), return_value))
+                // Add the SQL code to get the inserted primary key.
+                let return_value = get_primary_key_field_by_table_name(table)
+                    .map(|primary_key| " RETURNING ".to_owned() + &primary_key)
+                    .unwrap_or("".to_owned()); // TODO: what to do whene there is no primary key?
+                replace_placeholder(format!("INSERT INTO {table}({fields}) VALUES({values}){return_value}",
+                        table = table,
+                        fields = fields.to_sql(),
+                        values = values.to_sql(),
+                        return_value = return_value
+                    ))
             },
             Query::Select{ref fields, ref filter, ref joins, ref limit, ref order, ref table} => {
                 let where_clause = filter_to_where_clause(filter);
@@ -282,11 +331,27 @@ impl ToSql for Query {
                     else {
                         ""
                     };
-                replace_placeholder(format!("SELECT {} FROM {}{}{}{}{}{}{}", fields.to_sql(), table, joins.to_sql(), where_clause, filter.to_sql(), order_clause, order.to_sql(), limit.to_sql()))
+                replace_placeholder(format!("SELECT {fields} FROM {table}{joins}{where_clause}{filter}{order_clause}{order}{limit}",
+                                            fields = fields.to_sql(),
+                                            table = table,
+                                            joins = joins.to_sql(),
+                                            where_clause = where_clause,
+                                            filter = filter.to_sql(),
+                                            order_clause = order_clause,
+                                            order = order.to_sql(),
+                                            limit = limit.to_sql()
+                                           )
+                                   )
             },
             Query::Update { ref assignments, ref filter, ref table } => {
                 let where_clause = filter_to_where_clause(filter);
-                replace_placeholder(format!("UPDATE {} SET {}{}{}", table, assignments.to_sql(), where_clause, filter.to_sql()))
+                replace_placeholder(format!("UPDATE {table} SET {assignments}{where_clause}{filter}",
+                                            table = table,
+                                            assignments = assignments.to_sql(),
+                                            where_clause = where_clause,
+                                            filter = filter.to_sql()
+                                           )
+                                   )
             },
         }
     }
@@ -295,13 +360,13 @@ impl ToSql for Query {
 impl ToSql for RelationalOperator {
     fn to_sql(&self) -> String {
         match *self {
-            RelationalOperator::Equal => "=".to_owned(),
-            RelationalOperator::LesserThan => "<".to_owned(),
-            RelationalOperator::LesserThanEqual => "<=".to_owned(),
-            RelationalOperator::NotEqual => "<>".to_owned(),
-            RelationalOperator::GreaterThan => ">=".to_owned(),
-            RelationalOperator::GreaterThanEqual => ">".to_owned(),
-        }
+            RelationalOperator::Equal => "=",
+            RelationalOperator::LesserThan => "<",
+            RelationalOperator::LesserThanEqual => "<=",
+            RelationalOperator::NotEqual => "<>",
+            RelationalOperator::GreaterThan => ">=",
+            RelationalOperator::GreaterThanEqual => ">",
+        }.to_owned()
     }
 }
 

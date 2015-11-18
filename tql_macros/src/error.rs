@@ -15,23 +15,23 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-//! Error handling with the `Result` and `Error` types.
+//! Error handling with the `Result` and `SqlError` types.
 //!
-//! `SqlResult<T>` is a `Result<T, Vec<Error>>` synonym and is used for returning and propagating
+//! `SqlResult<T>` is a `Result<T, Vec<SqlError>>` synonym and is used for returning and propagating
 //! multiple compile errors.
 
 use syntax::codemap::Span;
 
-/// `Error` is a type that represents an error with its position.
+/// `SqlError` is a type that represents an error with its position.
 #[derive(Debug)]
-pub struct Error {
+pub struct SqlError {
     pub code: Option<String>,
     pub kind: ErrorType, // TODO: use an enum.
     pub message: String,
     pub position: Span,
 }
 
-/// `ErrorType` is an `Error` type.
+/// `ErrorType` is an `SqlError` type.
 #[derive(Debug)]
 pub enum ErrorType {
     Error,
@@ -41,108 +41,108 @@ pub enum ErrorType {
 }
 
 /// `SqlResult<T>` is a type that represents either a success (`Ok`) or failure (`Err`).
-/// The failure may be represented by multiple `Error`s.
-pub type SqlResult<T> = Result<T, Vec<Error>>;
+/// The failure may be represented by multiple `SqlError`s.
+pub type SqlResult<T> = Result<T, Vec<SqlError>>;
 
-impl Error {
-    /// Returns a new `Error`.
+impl SqlError {
+    /// Returns a new `SqlError`.
     ///
     /// This is a shortcut for:
     ///
     /// ```
-    /// Error {
+    /// SqlError {
     ///     code: None,
     ///     kind: ErrorType::Error,
     ///     message: message,
     ///     position: position,
     /// }
     /// ```
-    pub fn new(message: String, position: Span) -> Error {
-        Error {
+    pub fn new(message: &str, position: Span) -> SqlError {
+        SqlError {
             code: None,
             kind: ErrorType::Error,
-            message: message,
+            message: message.to_owned(),
             position: position,
         }
     }
 
-    /// Returns a new `Error` of type help.
+    /// Returns a new `SqlError` of type help.
     ///
     /// This is a shortcut for:
     ///
     /// ```
-    /// Error {
+    /// SqlError {
     ///     code: None,
     ///     kind: ErrorType::Note,
     ///     message: message,
     ///     position: position,
     /// }
-    pub fn new_help(message: String, position: Span) -> Error {
-        Error {
+    pub fn new_help(message: &str, position: Span) -> SqlError {
+        SqlError {
             code: None,
             kind: ErrorType::Help,
-            message: message,
+            message: message.to_owned(),
             position: position,
         }
     }
 
-    /// Returns a new `Error` of type note.
+    /// Returns a new `SqlError` of type note.
     ///
     /// This is a shortcut for:
     ///
     /// ```
-    /// Error {
+    /// SqlError {
     ///     code: None,
     ///     kind: ErrorType::Note,
     ///     message: message,
     ///     position: position,
     /// }
-    pub fn new_note(message: String, position: Span) -> Error {
-        Error {
+    pub fn new_note(message: &str, position: Span) -> SqlError {
+        SqlError {
             code: None,
             kind: ErrorType::Note,
-            message: message,
+            message: message.to_owned(),
             position: position,
         }
     }
 
-    /// Returns a new `Error` of type warning.
+    /// Returns a new `SqlError` of type warning.
     ///
     /// This is a shortcut for:
     ///
     /// ```
-    /// Error {
+    /// SqlError {
     ///     code: None,
     ///     kind: ErrorType::Warning,
     ///     message: message,
     ///     position: position,
     /// }
-    pub fn new_warning(message: String, position: Span) -> Error {
-        Error {
+    pub fn new_warning(message: &str, position: Span) -> SqlError {
+        SqlError {
             code: None,
             kind: ErrorType::Warning,
-            message: message,
+            message: message.to_owned(),
             position: position,
         }
     }
 
-    /// Returns a new `Error` with a code.
+    /// Returns a new `SqlError` with a code.
     ///
     /// This is a shortcut for:
     ///
     /// ```
-    /// Error {
+    /// SqlError {
     ///     code: Some(code.to_owned()),
     ///     kind: ErrorType::Error,
     ///     message: message,
     ///     position: position,
     /// }
     /// ```
-    pub fn new_with_code(message: String, position: Span, code: &str) -> Error {
-        Error {
+    pub fn new_with_code(message: &str, position: Span, code: &str) -> SqlError {
+        SqlError {
             code: Some(code.to_owned()),
             kind: ErrorType::Error,
-            message: message,
+            message: message.to_owned(),
             position: position,
         }
     }
@@ -151,7 +151,7 @@ impl Error {
 /// Returns an `SqlResult<T>` from potential result and errors.
 /// Returns `Err` if there are at least one error.
 /// Otherwise, returns `Ok`.
-pub fn res<T>(result: T, errors: Vec<Error>) -> SqlResult<T> {
+pub fn res<T>(result: T, errors: Vec<SqlError>) -> SqlResult<T> {
     if !errors.is_empty() {
         Err(errors)
     }

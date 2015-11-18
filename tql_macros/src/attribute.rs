@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-//! A conversion function for the attribute.
+//! A conversion function for the #[SqlTable] attribute.
 
 use std::collections::BTreeMap;
 use std::fmt::Write;
@@ -36,6 +36,7 @@ fn field_ty_to_type(ty: &Ty) -> Spanned<Type> {
         }
         else {
             let mut type_string = String::new();
+            // TODO: find a better way to get a string representation of a type.
             let _ = write!(type_string, "{:?}", ty);
             Type::UnsupportedType(type_string[5..type_string.len() - 1].to_owned())
         };
@@ -64,7 +65,8 @@ pub fn fields_vec_to_hashmap(fields: &[StructField]) -> SqlFields {
             if !sql_fields.contains_key(&ident.to_string()) {
                 sql_fields.insert(ident.to_string(), field_ty_to_type(&*field.node.ty));
             }
-            // NOTE: do not override the field type. Rust will show an error.
+            // NOTE: do not override the field type. Rust will show an error if the same field name
+            // is used twice.
         }
     }
     sql_fields

@@ -21,28 +21,17 @@ use syntax::ast::Expr_::{ExprPath, ExprUnary};
 use syntax::ast::UnOp;
 
 use ast::{Expression, Order};
-use error::{Error, SqlResult, res};
+use error::{SqlError, SqlResult, res};
 use state::SqlTable;
 use super::{check_field, path_expr_to_identifier};
 
 /// Convert an `Expression` to an `Order`.
 pub fn argument_to_order(arg: &Expression, table: &SqlTable) -> SqlResult<Order> {
-    fn identifier(identifier_expr: &Expression, table: &SqlTable) -> SqlResult<String> {
-        let mut errors = vec![];
-        if let Some(identifier) = path_expr_to_identifier(identifier_expr, &mut errors) {
-            check_field(&identifier, identifier_expr.span, table, &mut errors);
-            res(identifier, errors)
-        }
-        else {
-            Err(errors)
-        }
-    }
-
     let mut errors = vec![];
     let order =
         match arg.node {
             ExprUnary(UnOp::UnNeg, ref expr) => {
-                let ident = try!(identifier(expr, table));
+                let ident = try!(get_identifier(expr, table));
                 Order::Descending(ident)
             }
             ExprPath(None, ref path) => {
@@ -51,12 +40,24 @@ pub fn argument_to_order(arg: &Expression, table: &SqlTable) -> SqlResult<Order>
                 Order::Ascending(identifier)
             }
             _ => {
-                errors.push(Error::new(
-                    "Expected - or identifier".to_owned(),
+                errors.push(SqlError::new(
+                    "Expected - or identifier",
                     arg.span,
                 ));
                 Order::Ascending("".to_owned())
             }
         };
     res(order, errors)
+}
+
+/// Get the `String` indentifying the identifier from an `Expression`.
+fn get_identifier(identifier_expr: &Expression, table: &SqlTable) -> SqlResult<String> {
+    let mut errors = vec![];
+    if let Some(identifier) = path_expr_to_identifier(identifier_expr, &mut errors) {
+        check_field(&identifier, identifier_expr.span, table, &mut errors);
+        res(identifier, errors)
+    }
+    else {
+        Err(errors)
+    }
 }

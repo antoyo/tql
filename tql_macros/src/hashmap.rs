@@ -16,7 +16,15 @@
  */
 
 /// An hashmap macro.
-
+/// 
+/// # Examples
+///
+/// ```
+/// let hashmap = hashmap! {
+///     "one" => 1,
+///     "two" => 2,
+/// };
+/// ```
 macro_rules! hashmap {
     { $($k:expr => $v:expr),* $(,)* } => {{
         let mut hashmap = ::std::collections::HashMap::new();

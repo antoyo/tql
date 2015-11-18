@@ -23,7 +23,7 @@ use syntax::ast::Expr;
 use syntax::codemap::Spanned;
 use syntax::ptr::P;
 
-use state::singleton;
+use state::tables_singleton;
 use types::Type;
 
 pub type Expression = P<Expr>;
@@ -31,6 +31,7 @@ pub type FieldList = Vec<Identifier>;
 pub type Groups = Vec<Identifier>;
 pub type Identifier = String;
 
+/// Macro generating a struct for a filter type.
 macro_rules! filter {
     ( $name:ident, $ty:ty ) => {
         #[derive(Debug)]
@@ -45,6 +46,7 @@ macro_rules! filter {
     };
 }
 
+/// Macro generating an enum for a filter expression type.
 macro_rules! filter_expression {
     ( $name:ident, $filter_name:ty, $filters_name:ty, $filter_expression_name:ty, $filter_value_name:ty ) => {
         #[derive(Debug)]
@@ -56,9 +58,16 @@ macro_rules! filter_expression {
             ParenFilter(Box<$filter_expression_name>),
             FilterValue(Spanned<$filter_value_name>),
         }
+
+        impl Default for $name {
+            fn default() -> $name {
+                $name::NoFilters
+            }
+        }
     };
 }
 
+/// Macro generating a struct for a filters type.
 macro_rules! filters {
     ( $name:ident, $ty:ty ) => {
         #[derive(Debug)]
@@ -74,7 +83,7 @@ macro_rules! filters {
 }
 
 /// `Aggregate` for une in SQL Aggregate `Query`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Aggregate {
     pub field: Identifier,
     pub function: Identifier,
@@ -147,24 +156,36 @@ pub enum FilterValue {
     MethodCall(MethodCall),
 }
 
-/// A `Join` with another `table` via a specific `field`.
-#[derive(Clone, Debug)]
+/// A `Join` with another `joined_table` via a specific `joined_field`.
+#[derive(Clone, Debug, Default)]
 pub struct Join {
-    pub left_field: Identifier,
-    pub left_table: Identifier,
-    pub right_field: Identifier,
-    pub right_table: Identifier,
+    pub base_field: Identifier,
+    pub base_table: Identifier,
+    pub joined_field: Identifier,
+    pub joined_table: Identifier,
 }
 
 /// An SQL LIMIT clause.
 #[derive(Clone, Debug)]
 pub enum Limit {
+    /// [..end]
     EndRange(Expression),
+    /// [index]
     Index(Expression),
+    /// Not created from a query. It is converted from a `Range`.
     LimitOffset(Expression, Expression),
+    /// No limit was specified.
     NoLimit,
+    /// [start..end]
     Range(Expression, Expression),
+    /// [start..]
     StartRange(Expression),
+}
+
+impl Default for Limit {
+    fn default() -> Limit {
+        Limit::NoLimit
+    }
 }
 
 /// `LogicalOperator` to combine `Filter`s.
@@ -187,7 +208,9 @@ pub struct MethodCall {
 /// An SQL ORDER BY clause.
 #[derive(Debug)]
 pub enum Order {
+    /// Comes from `sort(field)`.
     Ascending(Identifier),
+    /// Comes from `sort(-field)`.
     Descending(Identifier),
 }
 
@@ -290,7 +313,7 @@ pub fn query_type(query: &Query) -> QueryType {
         Query::Select { ref filter, ref limit, ref table, .. } => {
             let mut typ = QueryType::SelectMulti;
             if let FilterExpression::Filter(ref filter) = *filter {
-                let tables = singleton();
+                let tables = tables_singleton();
                 // NOTE: At this stage (code generation), the table and the field exist, hence unwrap().
                 let table = tables.get(table).unwrap();
                 if let FilterValue::Identifier(ref identifier) = filter.operand1 {

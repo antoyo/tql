@@ -23,10 +23,14 @@
 #![plugin(clippy)]
 #![allow(ptr_arg)]
 
-// TODO: replace README.md by README.adoc and complete it.
-// TODO: add support for Syntex.
 // TODO: do benchmarks.
 
+// TODO: replace README.md by README.adoc and complete it.
+// TODO: add support for Syntex.
+
+// TODO: use named parameters in the format!() macro when needed.
+// TODO: use more the Default trait.
+// TODO: allow setting a field to None in an update().
 // TODO: span error when an SQL keyword is used in a table or field name (or renamed it?).
 // TODO: add a feature for the chrono dependency.
 // TODO: do not use unwrap() in the generated code (unless this indicates a bug).
@@ -70,6 +74,8 @@
 extern crate rustc;
 extern crate syntax;
 
+use std::error::Error;
+
 use rustc::lint::{EarlyLintPassObject, LateLintPassObject};
 use rustc::plugin::Registry;
 use syntax::ast::{AngleBracketedParameters, AngleBracketedParameterData, Block, Field, Ident, MetaItem, Path, PathSegment, StructField_, StructFieldKind, TokenTree, Ty, Ty_, VariantData, Visibility};
@@ -110,16 +116,36 @@ use analyzer::{analyze, analyze_types, has_joins};
 use arguments::{Args, arguments};
 use ast::{Aggregate, Expression, Join, Query, QueryType, query_type};
 use attribute::fields_vec_to_hashmap;
-use error::{Error, ErrorType, SqlResult};
+use error::{ErrorType, SqlError, SqlResult};
 use gen::ToSql;
 use optimizer::optimize;
 use parser::parse;
 use plugin::NODE_ID;
-use state::{SqlArg, SqlArgs, SqlFields, SqlTable, SqlTables, get_primary_key_field_by_table_name, lint_singleton, singleton};
-use type_analyzer::{SqlAttrError, SqlError};
+use state::{SqlArg, SqlArgs, SqlFields, SqlTable, SqlTables, get_primary_key_field_by_table_name, lint_singleton, tables_singleton};
+use type_analyzer::{SqlAttrError, SqlErrorLint};
 use types::Type;
 
-/// Add a `Field` made with the `expr`, identified by `name` at `position`.
+/// Add the #[derive(Debug)] attribute to the `annotatable` item if needed.
+/// It won't be added if it is already present.
+#[allow(cmp_owned)]
+fn add_derive_debug(cx: &mut ExtCtxt, sp: Span, meta_item: &MetaItem, annotatable: &Annotatable, push: &mut FnMut(Annotatable)) {
+    let attrs = annotatable.attrs();
+    if let &Item(_) = annotatable {
+        let has_derive_debug_attribute = attrs.iter().all(|item| {
+            if let MetaWord(ref word) = item.node.value.node {
+                return word.to_string() != "derive_Debug"
+            }
+            true
+        });
+        if has_derive_debug_attribute {
+            // Add the #[derive(Debug)] attribute.
+            expand_deriving_debug(cx, sp, meta_item, annotatable, push);
+        }
+    }
+}
+
+/// Add a `Field` to `fields` made with the `expr`, identified by `name` at `position`.
+/// This is used to generate a struct expression.
 fn add_field(fields: &mut Vec<Field>, expr: Expression, name: &str, position: Span) {
     fields.push(Field {
         expr: expr,
@@ -129,6 +155,68 @@ fn add_field(fields: &mut Vec<Field>, expr: Expression, name: &str, position: Sp
         },
         span: position,
     });
+}
+
+/// Add the postgres::types::ToSql implementation on the struct.
+/// Its SQL representation is the same as the primary key SQL representation.
+fn add_tosql_impl(cx: &mut ExtCtxt, push: &mut FnMut(Annotatable), table_name: &str) {
+    match get_primary_key_field_by_table_name(table_name) {
+        Some(primary_key_field) => {
+            let table_ident = str_to_ident(table_name);
+            let primary_key_ident = str_to_ident(&primary_key_field);
+            let implementation = quote_item!(cx,
+                impl postgres::types::ToSql for $table_ident {
+                    fn to_sql<W: std::io::Write + ?Sized>(&self, ty: &postgres::types::Type, out: &mut W, ctx: &postgres::types::SessionInfo) -> postgres::Result<postgres::types::IsNull> {
+                        self.$primary_key_ident.to_sql(ty, out, ctx)
+                    }
+
+                    fn accepts(ty: &postgres::types::Type) -> bool {
+                        match *ty {
+                            postgres::types::Type::Int4 => true,
+                            _ => false,
+                        }
+                    }
+
+                    fn to_sql_checked(&self, ty: &postgres::types::Type, out: &mut ::std::io::Write, ctx: &postgres::types::SessionInfo) -> postgres::Result<postgres::types::IsNull> {
+                        if !<Self as postgres::types::ToSql>::accepts(ty) {
+                            return Err(postgres::error::Error::WrongType(ty.clone()));
+                        }
+                        self.to_sql(ty, out, ctx)
+                    }
+                }
+            );
+            push(Annotatable::Item(implementation.unwrap()));
+        },
+        None => (), // NOTE: Do not add the implementation when there is no primary key.
+    }
+}
+
+/// Create an aggregate field definition to be added to a struct definition.
+fn create_aggregate_field_def(field_name: &str, sp: Span) -> Spanned<StructField_> {
+    Spanned {
+        node: StructField_ {
+            kind: StructFieldKind::NamedField(str_to_ident(field_name), Visibility::Inherited),
+            id: NODE_ID,
+            ty: P(Ty {
+                id: NODE_ID,
+                node: Ty_::TyPath(None, Path {
+                    span: sp,
+                    global: false,
+                    segments: vec![PathSegment {
+                        identifier: str_to_ident("i32"), // TODO: choose the type from the field?
+                        parameters: AngleBracketedParameters(AngleBracketedParameterData {
+                            bindings: OwnedSlice::empty(),
+                            lifetimes: vec![],
+                            types: OwnedSlice::empty(),
+                        }),
+                    }],
+                }),
+                span: sp,
+            }),
+            attrs: vec![],
+        },
+        span: sp,
+    }
 }
 
 /// Expand the `sql!()` macro.
@@ -156,37 +244,17 @@ fn expand_sql(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree]) -> Box<MacResult +
 
 /// Expand the `#[SqlTable]` attribute.
 /// This attribute must be used on structs to tell tql that it represents an SQL table.
-// TODO: divide this function in many functions.
-#[allow(cmp_owned)]
 fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, meta_item: &MetaItem, annotatable: &Annotatable, push: &mut FnMut(Annotatable)) {
     // Add to sql_tables.
-    let mut sql_tables = singleton();
+    let mut sql_tables = tables_singleton();
 
-    // Add the #[derive(Debug)] attribute if needed.
-    let attrs = annotatable.attrs();
-    if let &Item(_) = annotatable {
-        if attrs.iter().all(|item| {
-                if let MetaWord(ref word) = item.node.value.node {
-                    return word.to_string() != "derive_Debug"
-                }
-                true
-            }) {
-            expand_deriving_debug(cx, sp, meta_item, annotatable, push);
-        }
-    }
+    add_derive_debug(cx, sp, meta_item, annotatable, push);
 
     if let &Annotatable::Item(ref item) = annotatable {
         if let ItemStruct(ref struct_def, _) = item.node {
             let table_name = item.ident.to_string();
             if !sql_tables.contains_key(&table_name) {
-                let fields = fields_vec_to_hashmap(struct_def.fields());
-                for field in fields.values() {
-                    match field.node {
-                        Type::UnsupportedType(ref typ) | Type::Nullable(box Type::UnsupportedType(ref typ)) =>
-                            cx.parse_sess.span_diagnostic.span_err_with_code(field.span, &format!("use of unsupported type name `{}`", typ), "E0412"),
-                        _ => (), // NOTE: Other types are supported.
-                    }
-                }
+                let fields = get_struct_fields(cx, struct_def);
 
                 sql_tables.insert(table_name.clone(), SqlTable {
                     fields: fields,
@@ -194,39 +262,11 @@ fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, meta_item: &MetaItem, annotatabl
                     position: item.span,
                 });
 
-                // Add the postgres::types::ToSql implementation for the struct.
-                // Its SQL representation is the same as the primary key SQL representation.
-                match get_primary_key_field_by_table_name(&table_name) {
-                    Some(primary_key_field) => {
-                        let table_ident = str_to_ident(&table_name);
-                        let primary_key_ident = str_to_ident(&primary_key_field);
-                        let implementation = quote_item!(cx,
-                            impl postgres::types::ToSql for $table_ident {
-                                fn to_sql<W: std::io::Write + ?Sized>(&self, ty: &postgres::types::Type, out: &mut W, ctx: &postgres::types::SessionInfo) -> postgres::Result<postgres::types::IsNull> {
-                                    self.$primary_key_ident.to_sql(ty, out, ctx)
-                                }
-
-                                fn accepts(ty: &postgres::types::Type) -> bool {
-                                    match *ty {
-                                        postgres::types::Type::Int4 => true,
-                                        _ => false,
-                                    }
-                                }
-
-                                fn to_sql_checked(&self, ty: &postgres::types::Type, out: &mut ::std::io::Write, ctx: &postgres::types::SessionInfo) -> postgres::Result<postgres::types::IsNull> {
-                                    if !<Self as postgres::types::ToSql>::accepts(ty) {
-                                        return Err(postgres::error::Error::WrongType(ty.clone()));
-                                    }
-                                    self.to_sql(ty, out, ctx)
-                                }
-                            }
-                        );
-                        push(Annotatable::Item(implementation.unwrap()));
-                    },
-                    None => (), // NOTE: Do not add the implementation when there is no primary key.
-                }
+                add_tosql_impl(cx, push, &table_name);
             }
             else {
+                // NOTE: This error is needed because the code could have two table structs in
+                // different modules.
                 cx.parse_sess.span_diagnostic.span_err_with_code(item.span, &format!("duplicate definition of table `{}`", table_name), "E0428");
             }
         }
@@ -263,30 +303,7 @@ fn gen_aggregate_struct(cx: &mut ExtCtxt, sp: Span, aggregates: &[Aggregate]) ->
     for (index, aggregate) in aggregates.iter().enumerate() {
         let field_name = aggregate.result_name.clone();
         add_field(&mut aggregate_fields, quote_expr!(cx, row.get($index)), &field_name, sp);
-        fields.push(Spanned {
-            node: StructField_ {
-                kind: StructFieldKind::NamedField(str_to_ident(&field_name), Visibility::Inherited),
-                id: NODE_ID,
-                ty: P(Ty {
-                    id: NODE_ID,
-                    node: Ty_::TyPath(None, Path {
-                        span: sp,
-                        global: false,
-                        segments: vec![PathSegment {
-                            identifier: str_to_ident("i32"), // TODO: choose the type from the field?
-                            parameters: AngleBracketedParameters(AngleBracketedParameterData {
-                                bindings: OwnedSlice::empty(),
-                                lifetimes: vec![],
-                                types: OwnedSlice::empty(),
-                            }),
-                        }],
-                    }),
-                    span: sp,
-                }),
-                attrs: vec![],
-            },
-            span: sp,
-        });
+        fields.push(create_aggregate_field_def(&field_name, sp));
     }
     let struct_ident = str_to_ident("Aggregate");
     let aggregate_struct = cx.item_struct(sp, struct_ident, VariantData::Struct(fields, NODE_ID));
@@ -301,7 +318,7 @@ fn gen_query(cx: &mut ExtCtxt, sp: Span, table_ident: Ident, sql_query_with_args
     let string_literal = intern(&sql);
     let sql_query = cx.expr_str(sp, InternedString::new_from_name(string_literal));
     let ident = Ident::new(intern("connection"), table_ident.ctxt);
-    let sql_tables = singleton();
+    let sql_tables = tables_singleton();
     let table_name = table_ident.to_string();
     match sql_tables.get(&table_name) {
         Some(table) => {
@@ -404,6 +421,7 @@ fn get_query_arguments(cx: &mut ExtCtxt, sp: Span, table_name: String, arguments
         }
     }
 
+    // Add the arguments to the lint state so that they can be type-checked by the lint.
     let BytePos(low) = sp.lo;
     calls.insert(low, SqlArgs {
         arguments: sql_args,
@@ -423,6 +441,7 @@ fn get_query_fields(cx: &mut ExtCtxt, sp: Span, table: &SqlFields, sql_tables: &
                 let table_name = foreign_table;
                 if let Some(foreign_table) = sql_tables.get(foreign_table) {
                     if has_joins(&joins, name) {
+                        // If there is a join, fetch the joined fields.
                         let mut foreign_fields = vec![];
                         for (field, typ) in &foreign_table.fields {
                             match typ.node {
@@ -444,7 +463,7 @@ fn get_query_fields(cx: &mut ExtCtxt, sp: Span, table: &SqlFields, sql_tables: &
                 }
                 // NOTE: if the field type is not an SQL table, an error is thrown by the linter.
             },
-            Type::UnsupportedType(_) => (),
+            Type::UnsupportedType(_) => (), // TODO: should panic.
             _ => {
                 add_field(&mut fields, quote_expr!(cx, row.get($index)), name, sp);
                 index += 1;
@@ -454,9 +473,23 @@ fn get_query_fields(cx: &mut ExtCtxt, sp: Span, table: &SqlFields, sql_tables: &
     fields
 }
 
+/// Get the fields from the struct.
+/// Also check if the field types from the struct are supported types.
+fn get_struct_fields(cx: &mut ExtCtxt, struct_def: &VariantData) -> SqlFields {
+    let fields = fields_vec_to_hashmap(struct_def.fields());
+    for field in fields.values() {
+        match field.node {
+            Type::UnsupportedType(ref typ) | Type::Nullable(box Type::UnsupportedType(ref typ)) =>
+                cx.parse_sess.span_diagnostic.span_err_with_code(field.span, &format!("use of unsupported type name `{}`", typ), "E0412"),
+            _ => (), // NOTE: Other types are supported.
+        }
+    }
+    fields
+}
+
 /// Show the compilation errors.
-fn span_errors(errors: Vec<Error>, cx: &mut ExtCtxt) {
-    for &Error {ref code, ref message, position, ref kind} in &errors {
+fn span_errors(errors: Vec<SqlError>, cx: &mut ExtCtxt) {
+    for &SqlError {ref code, ref message, position, ref kind} in &errors {
         match *kind {
             ErrorType::Error => {
                 match *code {
@@ -477,15 +510,16 @@ fn span_errors(errors: Vec<Error>, cx: &mut ExtCtxt) {
     }
 }
 
-/// Convert the Rust code to an SQL string with its type, arguments and joins.
+/// Convert the Rust code to an SQL string with its type, arguments, joins, and aggregate fields.
 fn to_sql(cx: &mut ExtCtxt, args: &[TokenTree]) -> SqlResult<SqlQueryWithArgs> {
     if args.is_empty() {
-        return Err(vec![Error::new_with_code("this macro takes 1 parameter but 0 parameters were supplied".to_owned(), cx.call_site(), "E0061")]);
+        return Err(vec![SqlError::new_with_code("this macro takes 1 parameter but 0 parameters were supplied", cx.call_site(), "E0061")]);
     }
 
     let mut parser = cx.new_parser_from_tts(args);
-    let expression = parser.parse_expr_panic();
-    let sql_tables = singleton();
+    let expression = try!(parser.parse_expr()
+        .map_err(|error| vec![SqlError::new(error.description(), cx.call_site())]));
+    let sql_tables = tables_singleton();
     let method_calls = try!(parse(expression));
     let mut query = try!(analyze(method_calls, sql_tables));
     optimize(&mut query);
@@ -510,5 +544,5 @@ pub fn plugin_registrar(reg: &mut Registry) {
     reg.register_macro("sql", expand_sql);
     reg.register_syntax_extension(intern("SqlTable"), MultiDecorator(box expand_sql_table));
     reg.register_early_lint_pass(box SqlAttrError as EarlyLintPassObject);
-    reg.register_late_lint_pass(box SqlError as LateLintPassObject);
+    reg.register_late_lint_pass(box SqlErrorLint as LateLintPassObject);
 }

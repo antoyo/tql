@@ -50,8 +50,12 @@ fn evaluate(expression: &Expression) -> u64 {
                 _ => 0,
             }
         },
-        ExprBinary(op, ref expr1, ref expr2) if op.node == BiAdd => evaluate(expr1) + evaluate(expr2),
-        ExprBinary(op, ref expr1, ref expr2) if op.node == BiSub => evaluate(expr1) - evaluate(expr2),
+        ExprBinary(op, ref expr1, ref expr2) =>
+            match op.node {
+                BiAdd => evaluate(expr1) + evaluate(expr2),
+                BiSub => evaluate(expr1) - evaluate(expr2),
+                _ => 0,
+            },
         _ => 0,
     }
 }

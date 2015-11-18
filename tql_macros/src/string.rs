@@ -31,7 +31,9 @@ macro_rules! min {
 
 /// Finds a near match of `str_to_check` in `strings`.
 #[allow(needless_lifetimes)]
-pub fn find_near<'a, T: Iterator<Item = &'a String>>(str_to_check: &str, strings: T) -> Option<&'a String> {
+pub fn find_near<'a, T>(str_to_check: &str, strings: T) -> Option<&'a String>
+    where T: Iterator<Item = &'a String>
+{
     let mut result = None;
     let mut best_distance = str_to_check.len();
     for string in strings {

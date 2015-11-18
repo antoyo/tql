@@ -22,13 +22,13 @@ use syntax::ast::Expr_::{ExprAssign, ExprAssignOp};
 use syntax::codemap::Spanned;
 
 use ast::{Assignment, AssignementOperator, Expression, FilterValue};
-use error::{Error, SqlResult, res};
+use error::{SqlError, SqlResult, res};
 use plugin::number_literal;
 use state::SqlTable;
 use super::{check_field, check_field_type, path_expr_to_identifier};
 
 /// Analyze the types of the `Assignment`s.
-pub fn analyze_assignments_types(assignments: &[Assignment], table_name: &str, errors: &mut Vec<Error>) {
+pub fn analyze_assignments_types(assignments: &[Assignment], table_name: &str, errors: &mut Vec<SqlError>) {
     for assignment in assignments {
         check_field_type(table_name, &FilterValue::Identifier(assignment.identifier.clone()), &assignment.value, errors);
     }
@@ -36,7 +36,7 @@ pub fn analyze_assignments_types(assignments: &[Assignment], table_name: &str, e
 
 /// Convert an `Expression` to an `Assignment`.
 pub fn argument_to_assignment(arg: &Expression, table: &SqlTable) -> SqlResult<Assignment> {
-    fn assign_values(assignment: &mut Assignment, expr1: &Expression, expr2: &Expression, table: &SqlTable, errors: &mut Vec<Error>) {
+    fn assign_values(assignment: &mut Assignment, expr1: &Expression, expr2: &Expression, table: &SqlTable, errors: &mut Vec<SqlError>) {
         assignment.value = expr2.clone();
         if let Some(identifier) = path_expr_to_identifier(expr1, errors) {
             assignment.identifier = identifier;
@@ -65,8 +65,8 @@ pub fn argument_to_assignment(arg: &Expression, table: &SqlTable) -> SqlResult<A
             assign_values(&mut assignment, expr1, expr2, table, &mut errors);
         },
         _ => {
-            errors.push(Error::new(
-                "Expected assignment".to_owned(), // TODO: improve this message.
+            errors.push(SqlError::new(
+                "Expected assignment", // TODO: improve this message.
                 arg.span,
             ));
         },

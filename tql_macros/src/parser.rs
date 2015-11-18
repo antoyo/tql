@@ -23,7 +23,7 @@ use syntax::codemap::{Span, Spanned};
 use syntax::ptr::P;
 
 use ast::Expression;
-use error::{Error, SqlResult, res};
+use error::{SqlError, SqlResult, res};
 
 /// A method call.
 #[derive(Debug)]
@@ -59,7 +59,7 @@ pub fn parse(expression: Expression) -> SqlResult<MethodCalls> {
     };
 
     /// Add the calls from the `expression` into the `calls` `Vec`.
-    fn add_calls<'a>(expression: &Expression, calls: &mut MethodCalls, errors: &mut Vec<Error>) {
+    fn add_calls(expression: &Expression, calls: &mut MethodCalls, errors: &mut Vec<SqlError>) {
         match expression.node {
             ExprMethodCall(Spanned { node: object, span: method_span}, _, ref arguments) => {
                 add_calls(&arguments[0], calls, errors);
@@ -87,8 +87,8 @@ pub fn parse(expression: Expression) -> SqlResult<MethodCalls> {
                 });
             }
             _ => {
-                errors.push(Error::new(
-                    "Expected method call".to_owned(),
+                errors.push(SqlError::new(
+                    "Expected method call", // TODO: improve this message.
                     expression.span,
                 ));
             }

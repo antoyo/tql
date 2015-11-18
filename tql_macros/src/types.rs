@@ -29,7 +29,7 @@ use syntax::ast::Ty_::TyPath;
 
 use ast::Expression;
 use gen::ToSql;
-use state::{get_primary_key_field, singleton};
+use state::{get_primary_key_field, tables_singleton};
 
 /// A field type.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -98,9 +98,9 @@ impl<'a> From<&'a Path> for Type {
                     Some(ty) => match ty.as_ref() {
                         "Local" => Type::LocalDateTime,
                         "UTC" => Type::UTCDateTime,
-                        _ => unsupported, // TODO
+                        parameter_type => Type::UnsupportedType("DateTime<".to_owned() + parameter_type + ">"),
                     },
-                    None => unsupported, // TODO
+                    None => Type::UnsupportedType("DateTime".to_owned()),
                 },
                 "f32" => Type::F32,
                 "f64" => Type::F64,
@@ -110,7 +110,7 @@ impl<'a> From<&'a Path> for Type {
                 "i64" => Type::I64,
                 "ForeignKey" => match get_type_parameter(&segments[0].parameters) {
                     Some(ty) => Type::Custom(ty),
-                    None => unsupported, // TODO
+                    None => Type::UnsupportedType("ForeignKey".to_owned()),
                 },
                 "NaiveDate" => Type::NaiveDate,
                 "NaiveDateTime" => Type::NaiveDateTime,
@@ -128,7 +128,7 @@ impl<'a> From<&'a Path> for Type {
                                 };
                             Type::Nullable(box typ)
                         },
-                        None => unsupported, // TODO
+                        None => Type::UnsupportedType("Option".to_owned()),
                     },
                 "PrimaryKey" => {
                     Type::Serial
@@ -139,11 +139,11 @@ impl<'a> From<&'a Path> for Type {
                 "Vec" => match get_type_parameter(&segments[0].parameters) {
                     Some(ty) => match ty.as_ref() {
                         "u8" => Type::ByteString,
-                        _ => unsupported, // TODO
+                        parameter_type => Type::UnsupportedType("Vec<".to_owned() + parameter_type + ">"),
                     },
-                    None => unsupported, // TODO
+                    None => Type::UnsupportedType("Vec".to_owned()),
                 },
-                typ => Type::UnsupportedType(typ.to_owned()),
+                typ => Type::UnsupportedType(typ.to_owned()), // TODO: show the generic types as well.
             }
         }
         else {
@@ -228,15 +228,14 @@ impl<'tcx> PartialEq<TyS<'tcx>> for Type {
                     "DateTime" => {
                         match sub.types.iter().next() {
                             Some(inner_type) => {
-                                if let TypeVariants::TyStruct(def, _) = inner_type.sty {
-                                    match def.struct_variant().name.to_string().as_str() {
-                                        "UTC" => *typ == Type::UTCDateTime,
-                                        "Local" => *typ == Type::LocalDateTime,
-                                        _ => false,
-                                    }
-                                }
-                                else {
-                                    false
+                                match get_type_parameter_from_type(&inner_type.sty) {
+                                    Some(generic_type) =>
+                                        match generic_type.as_str() {
+                                            "UTC" => *typ == Type::UTCDateTime,
+                                            "Local" => *typ == Type::LocalDateTime,
+                                            _ => false,
+                                        },
+                                    _ => false,
                                 }
                             },
                             None => false,
@@ -259,8 +258,7 @@ fn get_type_parameter(parameters: &PathParameters) -> Option<String> {
 }
 
 /// Get the type between < and > as a Path.
-#[allow(needless_lifetimes)]
-fn get_type_parameter_as_path<'a>(parameters: &'a PathParameters) -> Option<&'a Path> {
+fn get_type_parameter_as_path(parameters: &PathParameters) -> Option<&Path> {
     if let AngleBracketedParameters(AngleBracketedParameterData { ref types, .. }) = *parameters {
         types.first()
             .and_then(|ty| {
@@ -277,6 +275,16 @@ fn get_type_parameter_as_path<'a>(parameters: &'a PathParameters) -> Option<&'a 
     }
 }
 
+/// Get the type between < and > as a String.
+fn get_type_parameter_from_type(typ: &TypeVariants) -> Option<String> {
+    if let TypeVariants::TyStruct(def, _) = *typ {
+        Some(def.struct_variant().name.to_string())
+    }
+    else {
+        None
+    }
+}
+
 /// Convert a `Type` to its SQL representation.
 fn type_to_sql(typ: &Type, mut nullable: bool) -> String {
     let sql_type =
@@ -285,7 +293,7 @@ fn type_to_sql(typ: &Type, mut nullable: bool) -> String {
             Type::ByteString => "BYTEA".to_owned(),
             Type::I8 | Type::Char => "CHARACTER(1)".to_owned(),
             Type::Custom(ref related_table_name) => {
-                let tables = singleton();
+                let tables = tables_singleton();
                 if let Some(table) = tables.get(related_table_name) {
                     let primary_key_field = get_primary_key_field(table).unwrap();
                     "INTEGER REFERENCES ".to_owned() + &related_table_name + "(" + &primary_key_field + ")"
@@ -311,7 +319,7 @@ fn type_to_sql(typ: &Type, mut nullable: bool) -> String {
             },
             Type::Serial => "SERIAL PRIMARY KEY".to_owned(),
             Type::String => "CHARACTER VARYING".to_owned(),
-            Type::UnsupportedType(_) => "".to_owned(),
+            Type::UnsupportedType(_) => "".to_owned(), // TODO: should panic.
             Type::UTCDateTime => "TIMESTAMP WITH TIME ZONE".to_owned(),
         };
 
