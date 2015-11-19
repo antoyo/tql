@@ -22,7 +22,7 @@ use std::str::from_utf8;
 use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
 
-use ast::{Aggregate, AggregateFilter, AggregateFilterExpression, AggregateFilters, AggregateFilterValue, Assignment, AssignementOperator, Expression, FieldList, Filter, Filters, FilterExpression, FilterValue, Identifier, Join, Limit, LogicalOperator, MethodCall, Order, RelationalOperator, Query, TypedField};
+use ast::{Aggregate, AggregateFilter, AggregateFilterExpression, AggregateFilters, Assignment, AssignementOperator, Expression, FieldList, Filter, Filters, FilterExpression, FilterValue, Identifier, Join, Limit, LogicalOperator, MethodCall, Order, RelationalOperator, Query, TypedField};
 use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
 use sql::escape;
 use state::get_primary_key_field_by_table_name;
@@ -94,14 +94,6 @@ filter_to_sql!(AggregateFilter);
 filter_expression_to_sql!(AggregateFilterExpression);
 
 filter_to_sql!(AggregateFilters);
-
-impl ToSql for AggregateFilterValue {
-    fn to_sql(&self) -> String {
-        match *self {
-            AggregateFilterValue::Sql(ref sql) => sql.clone(),
-        }
-    }
-}
 
 impl ToSql for Assignment {
     fn to_sql(&self) -> String {

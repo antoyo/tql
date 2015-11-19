@@ -81,4 +81,14 @@ fn test_aggregate() {
     let aggregates = sql!(TableAggregateExpr.filter(field2 > 10).values(field1).aggregate(average = avg(field2)).filter(average < 20));
     assert_eq!(1, aggregates.len());
     assert_eq!(12, aggregates[0].average); // NOTE: round(12 / 1) = 12.
+
+    let value1 = 10;
+    let aggregates = sql!(TableAggregateExpr.filter(field2 > value1).values(field1).aggregate(average = avg(field2)).filter(average < 20));
+    assert_eq!(1, aggregates.len());
+    assert_eq!(12, aggregates[0].average); // NOTE: round(12 / 1) = 12.
+
+    let value2 = 20;
+    let aggregates = sql!(TableAggregateExpr.filter(field2 > value1).values(field1).aggregate(average = avg(field2)).filter(average < value2));
+    assert_eq!(1, aggregates.len());
+    assert_eq!(12, aggregates[0].average); // NOTE: round(12 / 1) = 12.
 }

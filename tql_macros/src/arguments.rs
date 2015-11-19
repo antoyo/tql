@@ -20,9 +20,36 @@
 use syntax::ast::Expr_::ExprLit;
 use syntax::ext::base::ExtCtxt;
 
-use ast::{Assignment, Expression, FilterExpression, FilterValue, Identifier, Limit, MethodCall, Query, query_table};
+use ast::{Aggregate, AggregateFilterExpression, Assignment, Expression, FilterExpression, FilterValue, Identifier, Limit, MethodCall, Query, query_table};
 use state::{get_field_type, get_method_types};
 use types::Type;
+
+macro_rules! add_filter_arguments {
+    ( $name:ident, $typ:ident, $func:ident ) => {
+        /// Create arguments from the `filter` and add them to `arguments`.
+        fn $name(filter: $typ, args: &mut Args, table_name: &str) {
+            match filter {
+                $typ::Filter(filter) => {
+                    $func(&filter.operand1, args, table_name, Some(filter.operand2));
+                },
+                $typ::Filters(filters) => {
+                    $name(*filters.operand1, args, table_name);
+                    $name(*filters.operand2, args, table_name);
+                },
+                $typ::NegFilter(box filter) => {
+                    $name(filter, args, table_name);
+                },
+                $typ::NoFilters => (),
+                $typ::ParenFilter(box filter) => {
+                    $name(filter, args, table_name);
+                },
+                $typ::FilterValue(filter_value) => {
+                    $func(&filter_value.node, args, table_name, None);
+                },
+            }
+        }
+    };
+}
 
 /// A Rust expression to be send as a parameter to the SQL query function.
 #[derive(Clone, Debug)]
@@ -62,28 +89,9 @@ fn add_expr(arguments: &mut Args, arg: Arg) {
     arguments.push(arg);
 }
 
-/// Create arguments from the `filter` and add them to `arguments`.
-fn add_filter_arguments(filter: FilterExpression, args: &mut Args, table_name: &str) {
-    match filter {
-        FilterExpression::Filter(filter) => {
-            add_filter_value_arguments(&filter.operand1, args, table_name, Some(filter.operand2));
-        },
-        FilterExpression::Filters(filters) => {
-            add_filter_arguments(*filters.operand1, args, table_name);
-            add_filter_arguments(*filters.operand2, args, table_name);
-        },
-        FilterExpression::NegFilter(box filter) => {
-            add_filter_arguments(filter, args, table_name);
-        },
-        FilterExpression::NoFilters => (),
-        FilterExpression::ParenFilter(box filter) => {
-            add_filter_arguments(filter, args, table_name);
-        },
-        FilterExpression::FilterValue(filter_value) => {
-            add_filter_value_arguments(&filter_value.node, args, table_name, None);
-        },
-    }
-}
+add_filter_arguments!(add_filter_arguments, FilterExpression, add_filter_value_arguments);
+
+add_filter_arguments!(add_aggregate_filter_arguments, AggregateFilterExpression, add_aggregate_filter_value_arguments);
 
 /// Create arguments from the `limit` and add them to `arguments`.
 fn add_limit_arguments(cx: &mut ExtCtxt, limit: Limit, arguments: &mut Args) {
@@ -117,7 +125,12 @@ fn add_with_method(args: &mut Args, method_name: &str, object_name: &str, index:
     });
 }
 
-/// Create arguments from the `filter_value` and add them to `arguments`.
+fn add_aggregate_filter_value_arguments(aggregate: &Aggregate, args: &mut Args, _table_name: &str, expression: Option<Expression>) {
+    if let Some(expr) = expression {
+        add(args, Some(aggregate.field.clone()), Type::I32, expr); // TODO: use the right type.
+    }
+}
+
 fn add_filter_value_arguments(filter_value: &FilterValue, args: &mut Args, table_name: &str, expression: Option<Expression>) {
     match *filter_value {
         FilterValue::Identifier(ref identifier) => {
@@ -143,7 +156,10 @@ pub fn arguments(cx: &mut ExtCtxt, query: Query) -> Args {
     let table_name = query_table(&query);
 
     match query {
-        Query::Aggregate { .. } => (), // No arguments.
+        Query::Aggregate { aggregate_filter, filter, .. } => {
+            add_filter_arguments(filter, &mut arguments, &table_name);
+            add_aggregate_filter_arguments(aggregate_filter, &mut arguments, &table_name);
+        },
         Query::CreateTable { .. } => (), // No arguments.
         Query::Delete { filter, .. } => {
             add_filter_arguments(filter, &mut arguments, &table_name);

@@ -91,19 +91,13 @@ pub struct Aggregate {
 }
 
 /// `AggregateFilter` for SQL `Query` (HAVING clause).
-filter!(AggregateFilter, AggregateFilterValue);
+filter!(AggregateFilter, Aggregate);
 
 /// Aggregate filter expression.
-filter_expression!(AggregateFilterExpression, AggregateFilter, AggregateFilters, AggregateFilterExpression, AggregateFilterValue);
+filter_expression!(AggregateFilterExpression, AggregateFilter, AggregateFilters, AggregateFilterExpression, Aggregate);
 
 /// A `Filters` is used to combine `AggregateFilterExpression`s with a `LogicalOperator`.
 filters!(AggregateFilters, AggregateFilterExpression);
-
-/// Either an identifier or a method call.
-#[derive(Debug)]
-pub enum AggregateFilterValue {
-    Sql(String),
-}
 
 /// `Assignment` for use in SQL Insert and Update `Query`.
 #[derive(Debug)]

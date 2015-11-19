@@ -22,9 +22,8 @@ use syntax::ast::Expr_::ExprBinary;
 use syntax::ast::UnOp;
 use syntax::codemap::{Span, Spanned};
 
-use ast::{Aggregate, AggregateFilter, AggregateFilterExpression, AggregateFilters, AggregateFilterValue, Expression, Identifier};
+use ast::{Aggregate, AggregateFilter, AggregateFilterExpression, AggregateFilters, Expression, Identifier};
 use error::{SqlError, SqlResult, res};
-use gen::ToSql;
 use state::{SqlTable, aggregates_singleton};
 use super::{check_argument_count, check_field, path_expr_to_identifier, propose_similar_name};
 use super::filter::{binop_to_logical_operator, binop_to_relational_operator, is_logical_operator, is_relational_operator};
@@ -150,7 +149,7 @@ pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &
                 if let Some(aggregate) = aggregate {
                     // Transform the aggregate field name to its SQL representation.
                     AggregateFilterExpression::FilterValue(Spanned {
-                        node: AggregateFilterValue::Sql(aggregate.to_sql()),
+                        node: aggregate.clone(),
                         span: arg.span,
                     })
                 }
