@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#![feature(box_patterns, plugin)]
+#![feature(plugin)]
 #![plugin(tql_macros)]
 
 extern crate chrono;

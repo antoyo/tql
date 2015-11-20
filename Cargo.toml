@@ -13,3 +13,12 @@ postgres = { version = "0.10.0", features = ["chrono"] }
 
 [dependencies.tql_macros]
 path = "tql_macros"
+
+[dev-dependencies]
+handlebars-iron = "0.9.0"
+iron = "0.2.4"
+params = "0.0.2"
+persistent = "0.0.8"
+r2d2 = "0.6.1"
+r2d2_postgres = "0.9.3"
+rustc-serialize = "0.3.16"

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Chat</title>
+        <meta charset="utf-8"/>
+    </head>
+    <body>
+        <h1>Chat</h1>
+
+        {{#if error}}
+            <p>{{error}}</p>
+        {{/if}}
+
+        {{#each messages}}
+            <p><strong>{{username}}:</strong> {{message}}</p>
+        {{/each}}
+
+        <form action="" method="post">
+            <p>
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username"/>
+            </p>
+
+            <p>
+                <textarea name="message" cols="40" rows="8"></textarea>
+            </p>
+
+            <input type="submit" value="Send"/>
+        </form>
+    </body>
+</html>
