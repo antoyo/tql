@@ -23,11 +23,20 @@
 #![plugin(clippy)]
 #![allow(ptr_arg)]
 
-// TODO: do benchmarks.
-
 // TODO: replace README.md by README.adoc and complete it.
 // TODO: add support for Syntex.
 
+// TODO: do the table name verification in the lint plugin to allow using the table before it is
+// referenced.
+// TODO: show PrimaryKey instead of i32 in error message.
+// TODO: create a module codegen and put the Rust code generation in this new module.
+// TODO: create a module for the predefined aggregate functions (instead of creating them in the
+// methods module).
+// TODO: check if we can use macros as arguments. If not, use cx.expand_expr() on the result of
+// parse_expr().
+// TODO: check if parse_expr() parse the whole expression. If not, check this with
+// parser.eat(&token::EOF).
+// TODO: use syntax::print::pprust() to print types or expression in error message.
 // TODO: support the character and i8 field type.
 // TODO: use named parameters in the format!() macro when needed.
 // TODO: support field index (in table create).
@@ -68,6 +77,7 @@
 // TODO: add the annotate() method for object aggregates.
 // TODO: in aggregate filters, allow aggregate function calls.
 // TODO: make more similar filters and aggregate filters to avoid code duplicate.
+// TODO: optimize the Rust code generation to avoid having to prepare a query multiple times.
 // TODO: create a macro to choose a DBMS. Give an optional parameter to this macro to choose the
 // name of the macro to create (to allow using many DBMS at the same time).
 // TODO: use a 2-pass compilation to detect used fields and joins (perhaps using a lint plugin).

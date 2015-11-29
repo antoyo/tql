@@ -10,12 +10,12 @@ doc = true
 plugin = true
 
 [dependencies]
-clippy = "0.0.23"
+clippy = "0.0.24"
 
 [dev-dependencies]
 chrono = "0.2"
 compiletest_rs = "0.0.10"
-postgres = { version = "0.10.0", features = ["chrono"] }
+postgres = { version = "0.10.1", features = ["chrono"] }
 
 [dev-dependencies.tql]
 path = ".."

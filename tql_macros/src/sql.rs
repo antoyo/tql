@@ -19,7 +19,7 @@
 
 // TODO: check if special characters (\n, \t, …) should be escaped.
 
-/// Escape the following characters: \ and '.
+/// Escape the character '.
 pub fn escape(string: String) -> String {
     string.replace("'", "''")
 }

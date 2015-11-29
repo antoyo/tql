@@ -200,7 +200,7 @@ fn get_method<'a>(object_type: &'a Spanned<Type>, exprs: &[Expression], method_n
         Some(type_methods) => {
             match type_methods.get(method_name) {
                 Some(sql_method) => {
-                    let arguments: Vec<Expression> = exprs[1..].iter().map(Clone::clone).collect();
+                    let arguments: Vec<Expression> = exprs[1..].iter().cloned().collect();
                     check_method_arguments(&arguments, &sql_method.argument_types, errors);
                     Some((sql_method, arguments))
                 },

@@ -306,7 +306,7 @@ impl ToSql for Query {
                 // Add the SQL code to get the inserted primary key.
                 let return_value = get_primary_key_field_by_table_name(table)
                     .map(|primary_key| " RETURNING ".to_owned() + &primary_key)
-                    .unwrap_or("".to_owned()); // TODO: what to do whene there is no primary key?
+                    .unwrap_or("".to_owned()); // TODO: what to do when there is no primary key?
                 replace_placeholder(format!("INSERT INTO {table}({fields}) VALUES({values}){return_value}",
                         table = table,
                         fields = fields.to_sql(),

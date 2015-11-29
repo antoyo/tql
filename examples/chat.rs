@@ -21,13 +21,13 @@
 extern crate chrono;
 extern crate handlebars_iron as hbs;
 extern crate iron;
-extern crate params;
 extern crate persistent;
 extern crate postgres;
 extern crate r2d2;
 extern crate r2d2_postgres;
 extern crate rustc_serialize;
 extern crate tql;
+extern crate urlencoded;
 
 use std::collections::BTreeMap;
 
@@ -42,12 +42,12 @@ use iron::modifiers::Redirect;
 use iron::request::Request;
 use iron::response::Response;
 use iron::typemap::Key;
-use params::{FromValue, Params};
 use postgres::SslMode;
 use r2d2::Pool;
 use r2d2_postgres::PostgresConnectionManager;
 use rustc_serialize::json::{Json, ToJson};
 use tql::PrimaryKey;
+use urlencoded::UrlEncodedBody;
 
 struct AppDb;
 
@@ -81,10 +81,10 @@ fn chat(req: &mut Request) -> IronResult<Response> {
     let mut data = BTreeMap::new();
     if req.method == Method::Post {
         {
-            let params = req.get_ref::<Params>();
+            let params = req.get_ref::<UrlEncodedBody>();
             if let Ok(params) = params {
-                let username: String = FromValue::from_value(&params["username"]).unwrap();
-                let message: String = FromValue::from_value(&params["message"]).unwrap();
+                let username: String = params["username"][0].clone();
+                let message: String = params["message"][0].clone();
 
                 // Insert a new message.
                 let _ = sql!(Message.insert(
