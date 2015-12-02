@@ -86,12 +86,13 @@
 
 #[macro_use]
 extern crate rustc;
+extern crate rustc_plugin;
 extern crate syntax;
 
 use std::error::Error;
 
 use rustc::lint::{EarlyLintPassObject, LateLintPassObject};
-use rustc::plugin::Registry;
+use rustc_plugin::Registry;
 use syntax::ast::{AngleBracketedParameters, AngleBracketedParameterData, Block, Field, Ident, MetaItem, Path, PathSegment, StructField_, StructFieldKind, TokenTree, Ty, Ty_, VariantData, Visibility};
 use syntax::ast::Expr_::ExprLit;
 use syntax::ast::Item_::ItemStruct;
@@ -144,7 +145,7 @@ use types::Type;
 #[allow(cmp_owned)]
 fn add_derive_debug(cx: &mut ExtCtxt, sp: Span, meta_item: &MetaItem, annotatable: &Annotatable, push: &mut FnMut(Annotatable)) {
     let attrs = annotatable.attrs();
-    if let &Item(_) = annotatable {
+    if let Item(_) = *annotatable {
         let has_derive_debug_attribute = attrs.iter().all(|item| {
             if let MetaWord(ref word) = item.node.value.node {
                 return word.to_string() != "derive_Debug"
@@ -264,7 +265,7 @@ fn expand_sql_table(cx: &mut ExtCtxt, sp: Span, meta_item: &MetaItem, annotatabl
 
     add_derive_debug(cx, sp, meta_item, annotatable, push);
 
-    if let &Annotatable::Item(ref item) = annotatable {
+    if let Annotatable::Item(ref item) = *annotatable {
         if let ItemStruct(ref struct_def, _) = item.node {
             let table_name = item.ident.to_string();
             if !sql_tables.contains_key(&table_name) {

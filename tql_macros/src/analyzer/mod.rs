@@ -230,8 +230,7 @@ fn check_method_calls_validity(method_calls: &MethodCalls, errors: &mut Vec<SqlE
     let main_method = method_calls.calls.iter()
         .filter(|call| method_map.contains_key(&*call.name) )
         .next()
-        .map(|call| call.name.as_str())
-        .unwrap_or("all");
+        .map_or("all", |call| call.name.as_str());
 
     // TODO: check that the insert, update or delete methods are not called more than once.
     let mut valid_methods = vec![main_method];

@@ -10,7 +10,7 @@ doc = true
 plugin = true
 
 [dependencies]
-clippy = "0.0.24"
+clippy = "0.0.27"
 
 [dev-dependencies]
 chrono = "0.2"

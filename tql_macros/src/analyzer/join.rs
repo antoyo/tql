@@ -34,7 +34,7 @@ pub fn argument_to_join(arg: &Expression, table: &SqlTable) -> SqlResult<Join> {
         check_field(&identifier, arg.span, table, &mut errors);
         match table.fields.get(&identifier) {
             Some(&Spanned { node: ref field_type, .. }) => {
-                if let &Type::Custom(ref related_table_name) = field_type {
+                if let Type::Custom(ref related_table_name) = *field_type {
                     let sql_tables = tables_singleton();
                     if let Some(related_table) = sql_tables.get(related_table_name) {
                         match get_primary_key_field(related_table) {
