@@ -34,6 +34,7 @@ pub fn field_access(expr: P<Expr>, path: &Path, position: Span, field_name: Stri
     let syntax_context = path.segments[0].identifier.ctxt;
     let ident = Ident::new(intern(&field_name), syntax_context);
     P(Expr {
+        attrs: None,
         id: NODE_ID,
         node: ExprField(expr, Spanned {
             node: ident,
@@ -46,6 +47,7 @@ pub fn field_access(expr: P<Expr>, path: &Path, position: Span, field_name: Stri
 /// Converts a number to an `P<Expr>`.
 pub fn number_literal(number: u64) -> P<Expr> {
     P(Expr {
+        attrs: None,
         id: NODE_ID,
         node: ExprLit(P(Spanned {
             node: LitInt(number, SignedIntLit(TyI64, Sign::Plus)),
