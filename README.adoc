@@ -1,0 +1,344 @@
+= TQL
+:source-highlighter: pygments
+
+[cols="1a,1a", options="header"]
+|===
+| SQL
+| Rust
+
+|
+[source, sql]
+----
+SELECT * FROM Table
+----
+|
+[source, rust]
+----
+Table.all()
+----
+
+|
+[source, sql]
+----
+SELECT * FROM Table WHERE field1 = 'value1'
+----
+|
+[source, rust]
+----
+Table.filter(field1 == "value1")
+----
+
+|
+[source, sql]
+----
+SELECT * FROM Table WHERE primary_key = 42
+----
+|
+[source, rust]
+----
+Table.get(42)
+
+// Shortcut for:
+
+Table.filter(primary_key == 42)[0..1];
+----
+
+|
+[source, sql]
+----
+SELECT * FROM Table WHERE field1 = 'value1'
+----
+|
+[source, rust]
+----
+Table.get(field1 == "value1")
+
+// Shortcut for:
+
+Table.filter(field1 == "value1")[0..1];
+----
+
+|
+[source, sql]
+----
+SELECT * FROM Table WHERE field1 = 'value1' AND field2 < 100
+----
+|
+[source, rust]
+----
+Table.filter(field1 == "value1" && field2 < 100)
+----
+
+|
+[source, sql]
+----
+SELECT * FROM Table WHERE field1 = 'value1' OR field2 < 100
+----
+|
+[source, rust]
+----
+Table.filter(field1 == "value1" \|\| field2 < 100)
+----
+
+|
+[source, sql]
+----
+SELECT * FROM Table ORDER BY field1
+----
+|
+[source, rust]
+----
+Table.sort(field1)
+----
+
+|
+[source, sql]
+----
+SELECT * FROM Table ORDER BY field1 DESC
+----
+|
+[source, rust]
+----
+Table.sort(-field1)
+----
+
+|
+[source, sql]
+----
+SELECT * FROM Table LIMIT 0, 20
+----
+|
+[source, rust]
+----
+Table[0..20]
+----
+
+|
+[source, sql]
+----
+SELECT * FROM Table
+WHERE field1 = 'value1'
+  AND field2 < 100
+ORDER BY field2 DESC
+LIMIT 10, 20
+----
+|
+[source, rust]
+----
+Table.filter(field1 == "value1" && field2 < 100)
+    .sort(-field2)[10..20]
+----
+
+|
+[source, sql]
+----
+INSERT INTO Table(field1, field2) VALUES('value1', 55)
+----
+|
+[source, rust]
+----
+Table.insert(field1 = "value1", field2 = 55)
+----
+
+|
+[source, sql]
+----
+UPDATE Table SET field1 = 'value1', field2 = 55 WHERE id = 1
+----
+|
+[source, rust]
+----
+Table.get(1).update(field1 = "value1", field2 = 55);
+
+// or
+
+Table.filter(id == 1).update(field1 = "value1", field2 = 55);
+----
+
+|
+[source, sql]
+----
+DELETE FROM Table WHERE id = 1
+----
+|
+[source, rust]
+----
+Table.get(1).delete();
+
+// ou
+
+Table.filter(id == 1).delete()
+----
+
+|
+[source, sql]
+----
+SELECT AVG(field2) FROM Table
+----
+|
+[source, rust]
+----
+Table.aggregate(avg(field2))
+----
+
+|
+[source, sql]
+----
+SELECT AVG(field1) FROM Table1 GROUP BY field2
+----
+|
+[source, rust]
+----
+Table1.values(field2).annotate(avg(field1))
+----
+
+|
+[source, sql]
+----
+SELECT AVG(field1) as average FROM Table1
+GROUP BY field2
+HAVING average > 5
+----
+|
+[source, rust]
+----
+Table1.values(field2).annotate(average = avg(field1))
+    .filter(average > 5)
+----
+
+|
+[source, sql]
+----
+SELECT AVG(field1) as average FROM Table1
+WHERE field1 < 10
+GROUP BY field2
+HAVING average > 5
+----
+|
+[source, rust]
+----
+Table1.filter(field1 < 10).values(field2)
+    .annotate(average = avg(field1)).filter(average > 5)
+----
+
+|
+[source, sql]
+----
+SELECT Table1.field1, Table2.field1 FROM Table1
+INNER JOIN Table2 ON Table1.pk = Table2.fk
+----
+|
+[source, rust]
+----
+#[sql_table]
+struct Table1 {
+    pk: db::PrimaryKey,
+    field1: i32,
+}
+
+#[sql_table]
+struct Table2 {
+    field1: i32,
+    fk: db::ForeignKey<Table1>,
+}
+
+Table1.all().join(Table2)
+----
+
+|
+[source, sql]
+----
+SELECT * FROM Table1 WHERE YEAR(date) = 2015
+----
+|
+[source, rust]
+----
+Table1.filter(date.year() == 2015)
+----
+
+|
+[source, sql]
+----
+SELECT * FROM Table1 WHERE INSTR(field1, 'string') > 0
+----
+|
+[source, rust]
+----
+Table1.filter(field1.contains("string"))
+----
+
+|
+[source, sql]
+----
+SELECT * FROM Table1 WHERE field1 LIKE 'string%'
+----
+|
+[source, rust]
+----
+Table1.filter(field1.starts_with("string"))
+----
+
+|
+[source, sql]
+----
+SELECT * FROM Table1 WHERE field1 LIKE '%string'
+----
+|
+[source, rust]
+----
+Table1.filter(field1.ends_with("string"))
+----
+
+|
+[source, sql]
+----
+SELECT * FROM Table1 WHERE field1 IS NULL
+----
+|
+[source, rust]
+----
+Table1.filter(field1.is_none())
+----
+
+|
+[source, sql]
+----
+SELECT * FROM Table1 WHERE field1 REGEXP BINARY '\^[a-d]'
+----
+|
+[source, rust]
+----
+Table1.filter(field1.match(r"\^[a-d]"))
+----
+
+|
+[source, sql]
+----
+SELECT * FROM Table1 WHERE field1 REGEXP '\^[a-d]'
+----
+|
+[source, rust]
+----
+Table1.filter(field1.imatch(r"\^[a-d]"))
+----
+
+|
+[source, sql]
+----
+CREATE TABLE IF NOT EXISTS Table1 (
+    pk INTEGER NOT NULL AUTO_INCREMENT,
+    field1 INTEGER,
+    PRIMARY KEY (pk)
+)
+----
+|
+[source, rust]
+----
+#[sql_table]
+struct Table1 {
+    pk: db::PrimaryKey,
+    field1: i32,
+}
+
+Table1.create()
+----

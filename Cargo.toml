@@ -1,7 +1,11 @@
 [package]
 name = "tql"
-version = "0.1.0"
+version = "0.0.1"
 authors = ["Antoni Boucher <bouanto@zoho.com>"]
+description = "ORM as a compiler plugin (runtime library)"
+homepage = "http://tql.tuxfamily.org/"
+repository = "http://git.tuxfamily.org/tql/tql.git"
+license = "GPL-3.0"
 
 [lib]
 name = "tql"
@@ -11,14 +15,15 @@ doc = true
 chrono = "0.2"
 postgres = { version = "0.10.2", features = ["chrono"] }
 
-[dependencies.tql_macros]
-path = "tql_macros"
-
 [dev-dependencies]
+chrono = "0.2"
+compiletest_rs = "0.0.11"
 handlebars-iron = "0.9.1"
 iron = "0.2.6"
 persistent = "0.0.8"
+postgres = { version = "0.10.2", features = ["chrono"] }
 r2d2 = "0.6.1"
 r2d2_postgres = "0.9.3"
 rustc-serialize = "0.3.16"
+tql_macros = "0.0.1"
 urlencoded = "0.2.0"
