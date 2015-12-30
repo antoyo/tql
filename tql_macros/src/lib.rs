@@ -21,7 +21,7 @@
 
 #![feature(box_patterns, box_syntax, convert, plugin, plugin_registrar, quote, rustc_private)]
 #![plugin(clippy)]
-#![allow(ptr_arg)]
+#![allow(ptr_arg, used_underscore_binding)]
 
 // TODO: replace README.md by README.adoc and complete it.
 // TODO: add support for Syntex.
@@ -88,6 +88,7 @@
 extern crate rustc;
 extern crate rustc_plugin;
 extern crate syntax;
+extern crate syntax_ext;
 
 use std::error::Error;
 
@@ -102,8 +103,7 @@ use syntax::ext::base::{Annotatable, DummyResult, ExtCtxt, MacEager, MacResult};
 use syntax::ext::base::Annotatable::Item;
 use syntax::ext::base::SyntaxExtension::MultiDecorator;
 use syntax::ext::build::AstBuilder;
-use syntax::ext::deriving::debug::expand_deriving_debug;
-use syntax::owned_slice::OwnedSlice;
+use syntax_ext::deriving::debug::expand_deriving_debug;
 use syntax::parse::token::{InternedString, Token, intern, str_to_ident};
 use syntax::ptr::P;
 
@@ -220,9 +220,9 @@ fn create_aggregate_field_def(field_name: &str, sp: Span) -> Spanned<StructField
                     segments: vec![PathSegment {
                         identifier: str_to_ident("i32"), // TODO: choose the type from the field?
                         parameters: AngleBracketedParameters(AngleBracketedParameterData {
-                            bindings: OwnedSlice::empty(),
+                            bindings: P::empty(),
                             lifetimes: vec![],
-                            types: OwnedSlice::empty(),
+                            types: P::empty(),
                         }),
                     }],
                 }),
