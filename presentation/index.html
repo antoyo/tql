@@ -1,0 +1,232 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="author" content="Antoni Boucher"><title>TQL</title><meta content="yes" name="apple-mobile-web-app-capable"><meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui" name="viewport"><link href="reveal.js/css/reveal.css" rel="stylesheet"><link rel="stylesheet" href="css/style.css" id="theme"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.3.0/css/font-awesome.min.css"><link href="reveal.js/lib/css/zenburn.css" rel="stylesheet"><script>document.write( '<link rel="stylesheet" href="reveal.js/css/print/' + ( window.location.search.match( /print-pdf/gi ) ? 'pdf' : 'paper' ) + '.css" type="text/css" media="print">' );</script></head><body><div class="reveal"><div class="slides"><section><h1>TQL</h1><p><small>Antoni Boucher</small></p></section><section id="_problèmes_de_l_utilisation_du_sql"><h2>Problèmes de l’utilisation du SQL</h2><div class="ulist"><ul><li><p>Vérification des erreurs à l’exécution</p></li><li><p>Dialectes légèrement différents d’une base de données à l’autre</p></li><li><p>Nécessite d’apprendre ou d’utiliser un langage différent de celui qui est utilisé pour un projet</p></li><li><p>Sécurité (injections SQL)</p></li></ul></div></section>
+<section id="_langage_dédié_embarqué"><h2>Langage dédié embarqué</h2><div class="ulist"><ul><li><p>Langage utilisé pour un besoin spécifique utilisant la syntaxe du langage hôte</p><div class="ulist"><ul><li><p>Permet d’effectuer une analyse sémantique</p></li><li><p>Permet de corriger les problèmes de sécurité</p></li><li><p>Peut générer du SQL pour différentes bases de données</p></li><li><p>Pas besoin d’utiliser le SQL</p></li></ul></div></li><li><p>Problème potentiel : dégradation de la performance</p></li></ul></div></section>
+<section id="_module_d_extension_du_compilateur_rust"><h2>Module d’extension du compilateur Rust</h2><div class="ulist"><ul><li><p>Compile du code Rust en SQL <strong><em>à la compilation</em></strong></p></li><li><p>Permet de régler le problème de performance</p></li><li><p>TQL :</p><div class="ulist"><ul><li><p>Attribut pour la structure des tables</p></li><li><p>Macro procédurale pour générer le SQL</p></li></ul></div></li></ul></div></section>
+<section><section id="_rust" data-background="images/rust.png" data-background-size="288px"><h2>Rust</h2><div class="ulist"><ul><li><p>Conçu par Mozilla, sorti en 2010</p></li><li><p>Multi-paradigme (impératif, fonctionnel, concurrent)</p></li><li><p>Typage fort et statique (avec inférence de types)</p></li><li><p>Sécurisé</p></li><li><p>Orienté bas niveau</p></li><li><p>Gestion automatique de la mémoire (sans ramasse-miettes)</p></li><li><p>Moteur de rendu Servo</p></li></ul></div></section><section id="_points_forts_de_rust"><h2>Points forts de Rust</h2><div class="ulist"><ul><li><p>Abstractions qui ne coûte rien</p></li><li><p>Gestion de la concurrence</p></li><li><p>Sûr :</p><div class="ulist"><ul><li><p>Pas de pointeurs nuls</p></li><li><p>Pas d’utilisation de pointeurs après la désallocation</p></li><li><p>Pas d’utilisation de variables avant leur initialisation</p></li><li><p>Variables immuables par défaut</p></li><li><p>Pas de fuite de mémoire</p></li></ul></div></li></ul></div></section><section id="_exemple_de_code"><h2>Exemple de code</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">fn main() {
+    println!("Hello World!"); <i class="conum" data-value="1"></i><b>(1)</b>
+}</code></pre></div></div>
+<div class="colist arabic"><table><tr><td><i class="conum" data-value="1"></i><b>1</b></td><td><code>println!</code> est une macro.</td></tr></table></div></section><section id="_variable"><h2>Variable</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">let nombre: i32 = 42; <i class="conum" data-value="1"></i><b>(1)</b>
+let nombre = 42;      <i class="conum" data-value="2"></i><b>(2)</b>
+let mut nombre = 24;  <i class="conum" data-value="3"></i><b>(3)</b></code></pre></div></div>
+<div class="colist arabic"><table><tr><td><i class="conum" data-value="1"></i><b>1</b></td><td>Variable de type entier signé de 32 bits</td></tr><tr><td><i class="conum" data-value="2"></i><b>2</b></td><td>Indiquer le type est facultatif grâce à l’inférence de type</td></tr><tr><td><i class="conum" data-value="3"></i><b>3</b></td><td>Variable muable</td></tr></table></div></section><section id="_structure"><h2>Structure</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">struct Personne {
+    prenom: String,
+    nom: String,
+    age: u8,                          <i class="conum" data-value="1"></i><b>(1)</b>
+}
+
+impl Personne {
+    fn nom_complet(&amp;self) -&gt; String { <i class="conum" data-value="2"></i><b>(2)</b> <i class="conum" data-value="3"></i><b>(3)</b>
+        self.prenom + " " + &amp;self.nom
+    }
+}</code></pre></div></div>
+<div class="colist arabic"><table><tr><td><i class="conum" data-value="1"></i><b>1</b></td><td>Entier non signé de 8 bits</td></tr><tr><td><i class="conum" data-value="2"></i><b>2</b></td><td><code>self</code> est l’objet courant</td></tr><tr><td><i class="conum" data-value="3"></i><b>3</b></td><td><code>&amp;</code> indique que l’objet courant est reçu par référence</td></tr></table></div></section><section id="_utilisation_d_une_structure"><h2>Utilisation d’une structure</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">let personne = Personne {
+    nom: "Hoare",
+    prenom: "Graydon",
+};
+
+let nom_complet = personne.nom_complet();</code></pre></div></div></section><section id="_attribut"><h2>Attribut</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">#[derive(Clone)]
+struct Personne {
+    prenom: String,
+    nom: String,
+    age: u8,
+}</code></pre></div></div></section><section id="_filtrage_par_motif"><h2>Filtrage par motif</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">match nombre {
+    1 =&gt; println!("un"),
+    2 =&gt; println!("deux"),
+    3 | 4 =&gt; println!("trois ou quatre"),
+    5 ... 10 =&gt; println!("entre 5 et 10"),
+    _ =&gt; println!("autre"),
+}</code></pre></div></div></section><section id="_filtrage_par_motif_déstructuration"><h2>Filtrage par motif (déstructuration)</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">enum Liste {
+    Vide,
+    Cons(i32, Box&lt;Liste&gt;),
+}
+
+fn somme_liste(liste: &amp;Liste) -&gt; i32 {
+    match *liste {
+        Liste::Vide =&gt; 0,
+        Liste::Cons(element, ref reste) =&gt;
+            element + somme_liste(reste),
+    }
+}</code></pre></div></div></section><section id="_filtrage_par_motif_code_if_code"><h2>Filtrage par motif (<code>if</code>)</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">fn est_vide(liste: &amp;Liste) -&gt; bool {
+    if let Liste::Vide = *liste {
+        true
+    }
+    else {
+        false
+    }
+}</code></pre></div></div></section><section id="_expressions"><h2>Expressions</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">let texte =
+    if nombre &gt; 42 {        <i class="conum" data-value="1"></i><b>(1)</b>
+        "plus grand que 42" <i class="conum" data-value="2"></i><b>(2)</b>
+    }
+    else {
+        "plus petit ou égal à 42"
+    };</code></pre></div></div>
+<div class="colist arabic"><table><tr><td><i class="conum" data-value="1"></i><b>1</b></td><td>if est une expression</td></tr><tr><td><i class="conum" data-value="2"></i><b>2</b></td><td>absence du point-virgule</td></tr></table></div></section><section id="_fonction"><h2>Fonction</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">fn max(nombre1: i32, nombre2: i32) -&gt; i32 {
+    if nombre1 &gt; nombre2 {
+        nombre1
+    }
+    else {
+        nombre2
+    }
+}</code></pre></div></div></section></section>
+<section><section id="_sous_ensemble_du_sql_supporté"><h2>Sous-ensemble du SQL supporté</h2><div class="ulist"><ul><li><p>Création de table</p></li><li><p>Suppression de table</p></li><li><p>Sélection</p></li><li><p>Insertion</p></li><li><p>Mise à jour</p></li><li><p>Suppression</p></li></ul></div></section><section id="_fonctionnalités_non_supportées"><h2>Fonctionnalités non supportées</h2><div class="ulist"><ul><li><p><code>SELECT DISTINCT</code></p></li><li><p>Pour la création de table :</p><div class="ulist"><ul><li><p><code>DEFAULT</code></p></li><li><p><code>UNIQUE</code></p></li><li><p><code>INDEXES</code></p></li></ul></div></li><li><p>Pour la suppression de données : <code>CASCADE</code></p></li></ul></div></section><section id="_nombres"><h2>Nombres</h2><div class="ulist"><ul><li><p>25 % du SQL est implémenté</p></li><li><p>80 % des fonctionnalités les plus courantes</p></li></ul></div></section></section>
+<section><section id="_extension_syntaxique_pour_rust"><h2>Extension syntaxique pour Rust</h2></section><section id="_attribut_2"><h2>Attribut</h2><div class="ulist"><ul><li><p>L’attribut <code>#[SqlTable]</code> indique qu’une structure représente une table SQL</p></li></ul></div>
+<div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">#[SqlTable]
+struct Personne {
+    id: PrimaryKey,
+    nom: String,
+    prenom: String,
+    age: i32,
+}</code></pre></div></div></section><section id="_clé_étrangère"><h2>Clé étrangère</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">#[SqlTable]
+struct Article {
+    id: PrimaryKey,
+    auteur: String,
+    titre: String,
+    revision: i32,
+    date_ajout: DateTime&lt;UTC&gt;,
+}
+#[SqlTable]
+struct Commentaire {
+    id: PrimaryKey,
+    auteur: String,
+    message: String,
+    date_post: DateTime&lt;UTC&gt;,
+    article: ForeignKey&lt;Article&gt;, <i class="conum" data-value="1"></i><b>(1)</b>
+}</code></pre></div></div>
+<div class="colist arabic"><table><tr><td><i class="conum" data-value="1"></i><b>1</b></td><td>Clé étrangère vers la table <code>Article</code></td></tr></table></div></section><section id="_macros_procédurales"><h2>Macros procédurales</h2><div class="ulist"><ul><li><p>La macro <code>to_sql!()</code> converti le code Rust en SQL.</p></li><li><p>La macro <code>sql!()</code> exécute en plus la requête.</p></li></ul></div>
+<div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">sql!(Personne.insert(nom = "Hoare", prenom = "Graydon"));</code></pre></div></div></section><section id="_exemple_d_utilisation"><h2>Exemple d’utilisation</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">let personnes = sql!(
+    Personne.filter(nom == "Hoare" &amp;&amp; age &lt; 30)
+    .sort(-age)[10..20]
+);
+
+for personne in personnes {
+    println!("{} {}", personne.prenom, personne.nom);
+}</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlight"><code class="sql language-sql">SELECT Personne.id, Personne.nom,
+    Personne.prenom, Personne.age,
+    Personne.date_naissance, Personne.poids
+FROM Personne
+WHERE nom = 'Hoare'
+    AND age &lt; 30
+ORDER BY age DESC
+LIMIT 20 OFFSET 10</code></pre></div></div></section><section id="_exemple_d_erreur"><h2>Exemple d’erreur</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">let personne = sql!(Personne.get("personne_id")).unwrap();</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">code.rs:10:34: 10:46 error: mismatched types:
+ expected `i32`,
+    found `String` [E0308]
+code.rs:10 let personne = sql!(Personne.get("personne_id")).unwrap();
+                                            ^~
+code.rs:10:34: 10:46 help: run `rustc --explain E0308` to see a detailed explanation
+code.rs:10:34: 10:46 note: in this expansion of sql! (defined in TQL)</code></pre></div></div></section><section id="_optimisations"><h2>Optimisations</h2><div class="ulist"><ul><li><p>Simplification des expressions composées de littéraux</p></li></ul></div>
+<div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">Personne[0 + 10 - 2 .. 50 - (4 + 2)]</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlight"><code class="sql language-sql">SELECT Personne.id, Personne.nom, Personne.prenom, Personne.age
+FROM Personne
+LIMIT 44
+OFFSET 8</code></pre></div></div></section><section id="_autres_optimisations_envisageables"><h2>Autres optimisations envisageables</h2></section><section id="_sélection_des_champs_utiles"><h2>Sélection des champs utiles</h2><div class="paragraph"><p>Si seul le champ <code>age</code> est utilisé suite à la requête, la requête suivante :</p></div>
+<div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">Personne.all()</code></pre></div></div>
+<div class="paragraph"><p>pourrait être compilée en :</p></div>
+<div class="listingblock"><div class="content"><pre class="highlight"><code class="sql language-sql">SELECT Personne.age
+FROM Personne</code></pre></div></div>
+<div class="paragraph"><p><strong>Avantage :</strong> diminue le transfert d’informations.</p></div></section><section id="_littéraux_dans_un_appel_de_méthode"><h2>Littéraux dans un appel de méthode</h2><div class="paragraph"><p>Cette requête :</p></div>
+<div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">Personne.filter(nom.contains("oar"))</code></pre></div></div>
+<div class="paragraph"><p>compile en :</p></div>
+<div class="listingblock"><div class="content"><pre class="highlight"><code class="sql language-sql">SELECT Personne.id, Personne.nom, Personne.prenom, Personne.age
+FROM Personne
+WHERE nom LIKE '%' || 'oar' || '%'</code></pre></div></div>
+<div class="paragraph"><p>pourrait être compilée en :</p></div>
+<div class="listingblock"><div class="content"><pre class="highlight"><code class="sql language-sql">SELECT Personne.id, Personne.nom, Personne.prenom, Personne.age
+FROM Personne
+WHERE nom LIKE '%oar%'</code></pre></div></div></section><section id="_préparation_de_la_requête"><h2>Préparation de la requête</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">for i in (0..5) {
+    let personnes = sql!(Personne.all());
+}</code></pre></div></div>
+<div class="listingblock"><div class="content"><pre class="highlight"><code class="rust language-rust">let result = connection.prepare("SELECT Personne.id, Personne.nom,
+    Personne.prenom, Personne.age, Personne.date_naissance,
+    Personne.poids FROM Personne").unwrap();
+for i in (0..5) {
+    let personnes = {
+        result.query(&amp;[]).unwrap().iter().map(|row| {
+            Personne {
+                id: row.get(0),
+                nom: row.get(1),
+                prenom: row.get(2),
+                age: row.get(3),
+            }
+        }).collect::&lt;Vec&lt;_&gt;&gt;()
+    };
+}</code></pre></div></div></section></section>
+<section><section id="_conclusion"><h2>Conclusion</h2><div class="ulist"><ul><li><p>Conversion du code Rust en SQL à la compilation.</p></li><li><p>Détection des erreurs de types et d’identifiants à la compilation.</p></li><li><p>Abstraction au SQL.</p></li></ul></div></section><section id="_performance"><h2>Performance</h2><div class="imageblock" style=""><div class="content"><img src="./images/speed.png" alt="speed"></div><div class="title">Figure 1. Vitesse d’exécution en secondes de codes utilisant différentes abstractions de bases de données</div></div></section><section id="_utilisabilité"><h2>Utilisabilité</h2><div class="imageblock" style=""><div class="content"><img src="./images/lines.png" alt="lines"></div><div class="title">Figure 2. Nombre de lignes dans les codes utilisés pour le test de performance</div></div></section><section id="_utilisabilité_2"><h2>Utilisabilité</h2><div class="imageblock" style=""><div class="content"><img src="./images/characters.png" alt="characters"></div><div class="title">Figure 3. Nombre de caractères dans les codes utilisés pour le test de performance</div></div></section></section>
+<section id="_démonstration"><h2>Démonstration</h2></section></div></div><script src="reveal.js/lib/js/head.min.js"></script><script src="reveal.js/js/reveal.js"></script><script>// See https://github.com/hakimel/reveal.js#configuration for a full list of configuration options
+Reveal.initialize({
+  // Display controls in the bottom right corner
+  controls: true,
+  // Display a presentation progress bar
+  progress: true,
+  // Display the page number of the current slide
+  slideNumber: false,
+  // Push each slide change to the browser history
+  history: false,
+  // Enable keyboard shortcuts for navigation
+  keyboard: true,
+  // Enable the slide overview mode
+  overview: true,
+  // Vertical centering of slides
+  center: true,
+  // Enables touch navigation on devices with touch input
+  touch: true,
+  // Loop the presentation
+  loop: false,
+  // Change the presentation direction to be RTL
+  rtl: false,
+  // Turns fragments on and off globally
+  fragments: true,
+  // Flags if the presentation is running in an embedded mode,
+  // i.e. contained within a limited portion of the screen
+  embedded: false,
+  // Number of milliseconds between automatically proceeding to the
+  // next slide, disabled when set to 0, this value can be overwritten
+  // by using a data-autoslide attribute on your slides
+  autoSlide: 0,
+  // Stop auto-sliding after user input
+  autoSlideStoppable: true,
+  // Enable slide navigation via mouse wheel
+  mouseWheel: false,
+  // Hides the address bar on mobile devices
+  hideAddressBar: true,
+  // Opens links in an iframe preview overlay
+  previewLinks: false,
+  // Theme (e.g., beige, black, league, night, serif, simple, sky, solarized, white)
+  // NOTE setting the theme in the config no longer works in reveal.js 3.x
+  //theme: Reveal.getQueryHash().theme || 'black',
+  // Transition style (e.g., none, fade, slide, convex, concave, zoom)
+  transition: Reveal.getQueryHash().transition || 'slide',
+  // Transition speed (e.g., default, fast, slow)
+  transitionSpeed: 'default',
+  // Transition style for full page slide backgrounds (e.g., none, fade, slide, convex, concave, zoom)
+  backgroundTransition: 'fade',
+  // Number of slides away from the current that are visible
+  viewDistance: 3,
+  // Parallax background image (e.g., "'https://s3.amazonaws.com/hakim-static/reveal-js/reveal-parallax-1.jpg'")
+  parallaxBackgroundImage: '',
+  // Parallax background size in CSS syntax (e.g., "2100px 900px")
+  parallaxBackgroundSize: '',
+
+  // The "normal" size of the presentation, aspect ratio will be preserved
+  // when the presentation is scaled to fit different resolutions. Can be
+  // specified using percentage units.
+  width: 960,
+  height: 700,
+
+  // Factor of the display size that should remain empty around the content
+  margin: 0.1,
+
+  // Bounds for smallest/largest possible scale to apply to content
+  minScale: 0.2,
+  maxScale: 1.5,
+
+  // Optional libraries used to extend on reveal.js
+  dependencies: [
+      { src: 'reveal.js/lib/js/classList.js', condition: function() { return !document.body.classList; } },
+      { src: 'reveal.js/plugin/markdown/marked.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+      { src: 'reveal.js/plugin/markdown/markdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+      { src: 'reveal.js/plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } },
+      { src: 'reveal.js/plugin/zoom-js/zoom.js', async: true, condition: function() { return !!document.body.classList; } },
+      { src: 'reveal.js/plugin/notes/notes.js', async: true, condition: function() { return !!document.body.classList; } }
+  ]
+});</script></body></html>
