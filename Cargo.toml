@@ -26,7 +26,7 @@ urlencoded = "^0.6.0"
 features = ["with-chrono"]
 version = "^0.15.1"
 
-[dev-dependencies.tql_macros]
+[dependencies.tql_macros]
 path = "./tql_macros"
 
 [features]

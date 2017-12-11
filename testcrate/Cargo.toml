@@ -6,5 +6,9 @@ authors = ["Antoni Boucher <bouanto@zoho.com>"]
 [dependencies]
 tql = { path = ".." }
 
+[dependencies.postgres]
+features = ["with-chrono"]
+version = "^0.15.1"
+
 [dev-dependencies]
 compiletest_rs = "^0.3.3"

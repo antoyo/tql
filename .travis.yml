@@ -31,3 +31,4 @@ matrix:
           script:
               - cargo build
               - cargo test
+              - cargo test --manifest-path testcrate/Cargo.toml
