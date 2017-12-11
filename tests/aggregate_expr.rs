@@ -65,10 +65,11 @@ fn test_aggregate() {
     let aggregate = sql!(TableAggregateExpr.aggregate(avg(field2))).unwrap();
     assert_eq!(36, aggregate.field2_avg); // NOTE: round((55 + 12 + 42) / 3) = 36.
 
-    let aggregates = sql!(TableAggregateExpr
+    let mut aggregates = sql!(TableAggregateExpr
           .values(field1)
           .aggregate(avg(field2)));
     assert_eq!(2, aggregates.len());
+    aggregates.sort_by_key(|agg| agg.field2_avg);
     assert_eq!(12, aggregates[0].field2_avg); // NOTE: round(12 / 1) = 12.
     assert_eq!(49, aggregates[1].field2_avg); // NOTE: round((55 + 42) / 3) = 49.
 
