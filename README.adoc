@@ -101,8 +101,7 @@ fn main() {
 }
 ----
 
-Look at the following table to see more examples.
-The left side shows the generated SQL and the right side shows the syntax you can use with `tql`.
+Look at the https://github.com/antoyo/tql#syntax-table[following table] to see more examples.
 
 == Using on stable Rust
 
@@ -182,6 +181,10 @@ So, a good workflow is to develop on nightly and then ship on stable.
 This way, you get the best of both worlds:
 you have nice errors and you can deploy with the stable version of the compiler.
 This is not an issue at all because you're not supposed to have compiler errors when you're ready to deploy (and you can see the errors anyway).
+
+== Syntax table
+
+The left side shows the generated SQL and the right side shows the syntax you can use with `tql`.
 
 [cols="1a,1a", options="header"]
 |===
