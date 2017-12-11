@@ -2,13 +2,13 @@ error[E0308]: mismatched types
   --> $DIR/select_expr.rs:58:16
    |
 58 |     sql!(Table[index]);
-   |                ^^^^^ expected i32, found i64
+   |                ^^^^^ expected i64, found i32
 
 error[E0308]: mismatched types
   --> $DIR/select_expr.rs:63:40
    |
 63 |     sql!(Table.filter(i32_field == 42)[index]);
-   |                                        ^^^^^ expected i32, found i64
+   |                                        ^^^^^ expected i64, found i32
 
 error[E0308]: mismatched types
   --> $DIR/select_expr.rs:70:54
@@ -23,16 +23,16 @@ error[E0308]: mismatched types
   --> $DIR/select_expr.rs:77:35
    |
 77 |     sql!(Table.filter(i32_field > value));
-   |                                   ^^^^^ expected i64, found i32
+   |                                   ^^^^^ expected i32, found i64
 
 error[E0308]: mismatched types
   --> $DIR/select_expr.rs:86:32
    |
 86 |     sql!(Table.filter(other == table1));
-   |                                ^^^^^^ expected struct `Table`, found struct `OtherTable`
+   |                                ^^^^^^ expected struct `OtherTable`, found struct `Table`
    |
-   = note: expected type `Table`
-              found type `OtherTable`
+   = note: expected type `OtherTable`
+              found type `Table`
 
 error: aborting due to 5 previous errors
 

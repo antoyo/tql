@@ -1,4 +1,53 @@
 = TQL
+
+Compile-time ORM, inspired by Django ORM, written in Rust.
+Tql is implemented as a procedural macro and even works on the stable version of Rust (https://github.com/antoyo/tql/tree/master/examples/todo-stable[look at this example to see how to use tql on stable]).
+
+*This library is in alpha stage: it has not been thoroughly tested and its API may change at any time.*
+
+image:https://img.shields.io/travis/antoyo/relm/master.svg[link="https://travis-ci.org/antoyo/relm"]
+image:https://img.shields.io/crates/l/relm.svg[link="LICENSE"]
+
+== Requirements
+
+Currently, `tql` only supports the `PostgreSQL` database (more databases will be supported in the future).
+So, you need to install `PostgreSQL` in order to use this crate.
+
+== Usage
+
+First, add this to you `Cargo.toml`:
+
+[source,toml]
+----
+[dependencies]
+chrono = "^0.4.0"
+tql = { git = "https://github.com/antoyo/tql" }
+tql_macros = { git = "https://github.com/antoyo/tql" }
+
+[dependencies.postgres]
+features = ["with-chrono"]
+version = "^0.15.1"
+----
+
+(You can remove the `chrono` stuff if you don't want to use the date and time types in your model.)
+
+Next, add this to your crate:
+
+[source,rust]
+----
+#![feature(proc_macro)]
+
+extern crate chrono;
+extern crate postgres;
+extern crate tql;
+#[macro_use]
+extern crate tql_macros;
+
+use postgres::{Connection, TlsMode};
+use tql::PrimaryKey;
+use tql_macros::sql;
+----
+
 :source-highlighter: pygments
 
 [cols="1a,1a", options="header"]
