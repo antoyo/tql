@@ -13,8 +13,8 @@ services:
 
 before_script:
   - createuser -U postgres test
-  - psql -c "ALTER USER test PASSWORD 'test';"
   - createdb -U postgres -O test database
+  - psql -d database -c "ALTER USER test PASSWORD 'test';"
 
 env:
   - RUST_BACKTRACE=1
