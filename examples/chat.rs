@@ -1,22 +1,25 @@
 /*
- * Copyright (C) 2015  Boucher, Antoni <bouanto@zoho.com>
+ * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
  *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#![feature(plugin)]
-#![plugin(tql_macros)]
+#![feature(proc_macro)]
 
 extern crate chrono;
 extern crate handlebars_iron as hbs;
@@ -25,15 +28,19 @@ extern crate persistent;
 extern crate postgres;
 extern crate r2d2;
 extern crate r2d2_postgres;
-extern crate rustc_serialize;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
 extern crate tql;
+#[macro_use]
+extern crate tql_macros;
 extern crate urlencoded;
 
 use std::collections::BTreeMap;
 
-use chrono::datetime::DateTime;
-use chrono::offset::utc::UTC;
-use hbs::{HandlebarsEngine, Template};
+use chrono::DateTime;
+use chrono::offset::Utc;
+use hbs::{DirectorySource, HandlebarsEngine, Template};
 use iron::{Iron, IronResult, Plugin, status};
 use iron::middleware::Chain;
 use iron::method::Method;
@@ -42,11 +49,10 @@ use iron::modifiers::Redirect;
 use iron::request::Request;
 use iron::response::Response;
 use iron::typemap::Key;
-use postgres::SslMode;
 use r2d2::Pool;
-use r2d2_postgres::PostgresConnectionManager;
-use rustc_serialize::json::{Json, ToJson};
+use r2d2_postgres::{PostgresConnectionManager, TlsMode};
 use tql::PrimaryKey;
+use tql_macros::sql;
 use urlencoded::UrlEncodedBody;
 
 struct AppDb;
@@ -56,21 +62,14 @@ impl Key for AppDb {
 }
 
 // A Message is a table containing a username, a text and an added date.
-#[SqlTable]
+#[derive(Serialize, SqlTable)]
 struct Message {
+    #[serde(skip)]
     id: PrimaryKey,
     username: String,
     message: String,
-    date_added: DateTime<UTC>,
-}
-
-impl ToJson for Message {
-    fn to_json(&self) -> Json {
-        let mut map = BTreeMap::new();
-        map.insert("username".to_owned(), self.username.to_json());
-        map.insert("message".to_owned(), self.message.to_json());
-        map.to_json()
-    }
+    #[serde(skip)]
+    date_added: DateTime<Utc>,
 }
 
 fn chat(req: &mut Request) -> IronResult<Response> {
@@ -88,9 +87,9 @@ fn chat(req: &mut Request) -> IronResult<Response> {
 
                 // Insert a new message.
                 let _ = sql!(Message.insert(
-                            username = username,
-                            message = message,
-                            date_added = UTC::now()
+                            username = &username,
+                            message = &message,
+                            date_added = Utc::now()
                         ));
             }
         }
@@ -101,7 +100,7 @@ fn chat(req: &mut Request) -> IronResult<Response> {
         // Get the last 10 messages by date.
         let messages: Vec<Message> = sql!(Message.sort(-date_added)[..10]);
 
-        data.insert("messages".to_owned(), messages.to_json());
+        data.insert("messages".to_owned(), messages);
 
         resp.set_mut(Template::new("chat", data))
             .set_mut(status::Ok);
@@ -121,13 +120,18 @@ fn main() {
 
     let mut chain = Chain::new(chat);
     chain.link(persistent::Read::<AppDb>::both(pool));
-    chain.link_after(HandlebarsEngine::new("./examples/templates/", ".hbs"));
+    let mut handlebars = HandlebarsEngine::new();
+    handlebars.add(Box::new(DirectorySource::new("./examples/templates/", ".hbs")));
+    // TODO: maybe load?
+    if let Err(error) = handlebars.reload() {
+        panic!("{}", error);
+    }
+    chain.link_after(handlebars);
     println!("Running on http://localhost:3000");
     Iron::new(chain).http("localhost:3000").unwrap();
 }
 
 fn get_connection_pool() -> Pool<PostgresConnectionManager> {
-    let manager = r2d2_postgres::PostgresConnectionManager::new("postgres://test:test@localhost/database", SslMode::None).unwrap();
-    let config = r2d2::Config::builder().pool_size(1).build();
-    r2d2::Pool::new(config, manager).unwrap()
+    let manager = r2d2_postgres::PostgresConnectionManager::new("postgres://test:test@localhost/database", TlsMode::None).unwrap();
+    r2d2::Pool::new(manager).unwrap()
 }

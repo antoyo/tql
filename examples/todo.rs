@@ -1,46 +1,52 @@
 /*
- * Copyright (C) 2015  Boucher, Antoni <bouanto@zoho.com>
+ * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
  *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#![feature(plugin)]
-#![plugin(tql_macros)]
+#![feature(proc_macro)]
 
 extern crate chrono;
 extern crate postgres;
 extern crate tql;
+#[macro_use]
+extern crate tql_macros;
 
 use std::env;
 
-use chrono::datetime::DateTime;
-use chrono::offset::utc::UTC;
-use postgres::{Connection, SslMode};
+use chrono::DateTime;
+use chrono::offset::Utc;
+use postgres::{Connection, TlsMode};
 use tql::PrimaryKey;
+use tql_macros::sql;
 
 // A TodoItem is a table containing a text, an added date and a done boolean.
-#[SqlTable]
+#[derive(SqlTable)]
 struct TodoItem {
     id: PrimaryKey,
     text: String,
-    date_added: DateTime<UTC>,
+    date_added: DateTime<Utc>,
     done: bool,
 }
 
 fn add_todo_item(connection: Connection, text: String) {
     // Insert the new item.
-    let result = sql!(TodoItem.insert(text = text, date_added = UTC::now(), done = false));
+    let result = sql!(TodoItem.insert(text = &text, date_added = Utc::now(), done = false));
     if let Err(err) = result {
         println!("Failed to add the item ({})", err);
     }
@@ -147,5 +153,5 @@ fn main() {
 }
 
 fn get_connection() -> Connection {
-    Connection::connect("postgres://test:test@localhost/database", &SslMode::None).unwrap()
+    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
 }

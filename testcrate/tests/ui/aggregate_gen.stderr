@@ -1,0 +1,8 @@
+error[E0609]: no field `averag` on type `main::Aggregate`
+  --> $DIR/aggregate_gen.rs:49:34
+   |
+49 |         println!("{}", aggregate.averag);
+   |                                  ^^^^^^ did you mean `average`?
+
+error: aborting due to previous error
+

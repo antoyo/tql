@@ -1,18 +1,22 @@
 /*
- * Copyright (C) 2015  Boucher, Antoni <bouanto@zoho.com>
- * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 //! Global mutable states handling.
@@ -34,37 +38,23 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::mem;
 
-use syntax::codemap::{Span, Spanned};
+use syn::{self, Ident, Span};
 
+use ast::WithSpan;
 use methods::{add_initial_aggregates, add_initial_methods};
 use types::Type;
 
 /// A collection of tql aggregate functions.
 pub type SqlAggregates = HashMap<String, String>;
 
-/// An SQL query argument type.
 #[derive(Debug)]
-// TODO: use a Span instead of high and low.
-pub struct SqlArg {
-    pub high: u32,
-    pub low: u32,
-    pub typ: Type,
+pub struct BothTypes {
+    pub syn_type: syn::Type,
+    pub ty: WithSpan<Type>,
 }
-
-/// A collection of SQL query argument types.
-#[derive(Debug)]
-pub struct SqlArgs {
-    pub arguments: Vec<SqlArg>,
-    pub table_name: String,
-}
-
-/// A collection of query calls (with their arguments).
-/// A map from the call position to its arguments.
-/// The position is used to get the right call from the position in the lint plugin.
-pub type SqlCalls = HashMap<u32, SqlArgs>;
 
 /// A collection of fields from an `SqlTable`.
-pub type SqlFields = BTreeMap<String, Spanned<Type>>;
+pub type SqlFields = BTreeMap<Ident, BothTypes>;
 
 /// A tql method that can be used in filters.
 pub type SqlMethod = HashMap<String, SqlMethodTypes>;
@@ -82,7 +72,7 @@ pub struct SqlMethodTypes {
 /// An `SqlTable` has a name, a position and some `SqlFields`.
 pub struct SqlTable {
     pub fields: SqlFields,
-    pub name: String,
+    pub name: Ident,
     pub position: Span,
 }
 
@@ -90,93 +80,88 @@ pub struct SqlTable {
 /// A map from table name to `SqlTable`.
 pub type SqlTables = HashMap<String, SqlTable>;
 
-/// Get the type of the field if it exists.
-pub fn get_field_type<'a, 'b>(table_name: &'a str, identifier: &'b str) -> Option<&'a Type> {
+/// Get the syn type of the field if it exists.
+pub fn get_field_syn_type<'a, 'b>(table_name: &'a str, identifier: &'b Ident) -> Option<&'a syn::Type> {
     let tables = tables_singleton();
     tables.get(table_name)
         .and_then(|table| table.fields.get(identifier))
-        .map(|field_type| &field_type.node)
+        .map(|ref types| &types.syn_type)
+}
+
+/// Get the type of the field if it exists.
+pub fn get_field_type<'a, 'b>(table_name: &'a str, identifier: &'b Ident) -> Option<&'a Type> {
+    let tables = tables_singleton();
+    tables.get(table_name)
+        .and_then(|table| table.fields.get(identifier))
+        .map(|ref types| &types.ty.node)
 }
 
 /// Get method types by field name.
-pub fn get_method_types<'a>(table_name: &str, field_name: &str, method_name: &str) -> Option<&'a SqlMethodTypes> {
+pub fn get_method_types<'a>(table_name: &str, field_name: &Ident, method_name: &str) -> Option<&'a SqlMethodTypes> {
     let tables = tables_singleton();
     let methods = methods_singleton();
     tables.get(table_name)
         .and_then(|table| table.fields.get(field_name))
-        .and_then(move |field_type|
-            methods.get(&field_type.node)
+        .and_then(move |ref types|
+            methods.get(&types.ty.node)
                 .and_then(|type_methods| type_methods.get(method_name))
         )
 }
 
 /// Get the name of the primary key field.
-pub fn get_primary_key_field(table: &SqlTable) -> Option<String> {
+pub fn get_primary_key_field(table: &SqlTable) -> Option<&Ident> {
     table.fields.iter()
-        .find(|&(_, typ)| typ.node == Type::Serial)
-        .map(|(field, _)| field.clone())
+        .find(|&(_, ref types)| types.ty.node == Type::Serial)
+        .map(|(field, _)| field)
 }
 
 /// Get the name of the primary key field by table name.
 pub fn get_primary_key_field_by_table_name(table_name: &str) -> Option<String> {
     let tables = tables_singleton();
-    tables.get(table_name).and_then(|table| get_primary_key_field(table))
+    tables.get(table_name).and_then(|table| get_primary_key_field(table)
+                                    .map(|ident| ident.to_string()))
 }
 
 /// Returns the global aggregate state.
 pub fn aggregates_singleton() -> &'static mut SqlAggregates {
     // FIXME: make this thread safe.
-    static mut hash_map: *mut SqlAggregates = 0 as *mut SqlAggregates;
+    static mut HASH_MAP: *mut SqlAggregates = 0 as *mut SqlAggregates;
 
     let map: SqlAggregates = HashMap::new();
     unsafe {
-        if hash_map == 0 as *mut SqlAggregates {
-            hash_map = mem::transmute(Box::new(map));
+        if HASH_MAP == 0 as *mut SqlAggregates {
+            HASH_MAP = mem::transmute(Box::new(map));
             add_initial_aggregates();
         }
-        &mut *hash_map
-    }
-}
-
-/// Returns the global lint state.
-pub fn lint_singleton() -> &'static mut SqlCalls {
-    // FIXME: make this thread safe.
-    static mut hash_map: *mut SqlCalls = 0 as *mut SqlCalls;
-
-    let map: SqlCalls = HashMap::new();
-    unsafe {
-        if hash_map == 0 as *mut SqlCalls {
-            hash_map = mem::transmute(Box::new(map));
-        }
-        &mut *hash_map
+        &mut *HASH_MAP
     }
 }
 
 /// Returns the global methods state.
 pub fn methods_singleton() -> &'static mut SqlMethods {
     // FIXME: make this thread safe.
-    static mut hash_map: *mut SqlMethods = 0 as *mut SqlMethods;
+    static mut HASH_MAP: *mut SqlMethods = 0 as *mut SqlMethods;
 
     let map: SqlMethods = HashMap::new();
     unsafe {
-        if hash_map == 0 as *mut SqlMethods {
-            hash_map = mem::transmute(Box::new(map));
+        if HASH_MAP == 0 as *mut SqlMethods {
+            HASH_MAP = mem::transmute(Box::new(map));
             add_initial_methods();
         }
-        &mut *hash_map
+        &mut *HASH_MAP
     }
 }
 
 /// Returns the global state.
 pub fn tables_singleton() -> &'static mut SqlTables {
     // FIXME: make this thread safe.
-    static mut hash_map: *mut SqlTables = 0 as *mut SqlTables;
+    static mut HASH_MAP: *mut SqlTables = 0 as *mut SqlTables;
 
     let map: SqlTables = HashMap::new();
     unsafe {
-        if hash_map == 0 as *mut SqlTables {
-            hash_map = mem::transmute(Box::new(map));
+        if HASH_MAP == 0 as *mut SqlTables {
+            HASH_MAP = mem::transmute(Box::new(map));
         }
-        &mut *hash_map
+        &mut *HASH_MAP
     }
 }

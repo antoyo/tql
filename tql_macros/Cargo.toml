@@ -1,17 +1,26 @@
 [package]
-name = "tql_macros"
-version = "0.0.1"
 authors = ["Antoni Boucher <bouanto@zoho.com>"]
-description = "ORM as a compiler plugin (macros)"
-homepage = "http://tql.tuxfamily.org/"
-repository = "http://git.tuxfamily.org/tql/tql.git"
-license = "GPL-3.0"
-
-[lib]
+categories = ["database"]
 name = "tql_macros"
-crate-type = ["dylib"]
-doc = true
-plugin = true
+version = "0.1.0"
 
 [dependencies]
-clippy = "0.0.33"
+literalext = "^0.1.1"
+rand = "^0.3.18"
+
+[dependencies.proc-macro2]
+version = "0.1"
+
+[dependencies.quote]
+git = "https://github.com/dtolnay/quote"
+
+[dependencies.syn]
+features = ["extra-traits", "printing", "full"]
+git = "https://github.com/dtolnay/syn"
+rev = "22afd6d"
+
+[lib]
+proc-macro = true
+
+[features]
+unstable = ["proc-macro2/unstable"]

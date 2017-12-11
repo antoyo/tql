@@ -308,7 +308,7 @@ SELECT * FROM Table1 WHERE field1 REGEXP BINARY '\^[a-d]'
 |
 [source, rust]
 ----
-Table1.filter(field1.match(r"\^[a-d]"))
+Table1.filter(field1.regex(r"\^[a-d]"))
 ----
 
 |
@@ -319,7 +319,7 @@ SELECT * FROM Table1 WHERE field1 REGEXP '\^[a-d]'
 |
 [source, rust]
 ----
-Table1.filter(field1.imatch(r"\^[a-d]"))
+Table1.filter(field1.iregex(r"\^[a-d]"))
 ----
 
 |

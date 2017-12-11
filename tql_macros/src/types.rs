@@ -1,31 +1,39 @@
 /*
- * Copyright (C) 2015  Boucher, Antoni <bouanto@zoho.com>
- * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
-//! SQL types.
 
 use std::fmt::{self, Display, Formatter};
 
-use rustc::middle::ty::{TypeAndMut, TyS, TypeVariants};
-use syntax::ast::{AngleBracketedParameterData, FloatTy, IntTy, Path, PathParameters};
-use syntax::ast::Expr_::ExprLit;
-use syntax::ast::LitIntType::{SignedIntLit, UnsignedIntLit, UnsuffixedIntLit};
-use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
-use syntax::ast::PathParameters::AngleBracketedParameters;
-use syntax::ast::Ty_::TyPath;
+use literalext::LiteralExt;
+use syn::{
+    self,
+    AngleBracketedGenericArguments,
+    ExprKind,
+    GenericArgument,
+    Lit,
+    LitKind,
+    Path,
+    PathArguments,
+    TypePath,
+    parse,
+};
 
 use ast::Expression;
 use gen::ToSql;
@@ -53,246 +61,55 @@ pub enum Type {
     Serial,
     String,
     UnsupportedType(String),
-    UTCDateTime,
+    UtcDateTime,
+}
+
+impl Type {
+    // TODO: not sure it's a good idea. We already lost the Span.
+    pub fn to_syn(&self) -> syn::Type {
+        let code =
+            match *self {
+                Type::I32 => {
+                    quote! { i32 }
+                },
+                Type::I64 => {
+                    quote! { i64 }
+                },
+                Type::String => {
+                    quote! { String }
+                },
+                _ => unimplemented!("Type::to_syn({:?})", self),
+            };
+        parse(code.into()).expect("parse to_syn()")
+    }
 }
 
 impl Display for Type {
     /// Get a string representation of the SQL `Type` for display in error messages.
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let typ = match *self {
-            Type::Bool => "bool".to_owned(),
-            Type::ByteString => "Vec<u8>".to_owned(),
-            Type::Char => "char".to_owned(),
+            Type::Bool => "bool".to_string(),
+            Type::ByteString => "Vec<u8>".to_string(),
+            Type::Char => "char".to_string(),
             Type::Custom(ref typ) => typ.clone(),
-            Type::F32 => "f32".to_owned(),
-            Type::F64 => "f64".to_owned(),
-            Type::Generic => "".to_owned(),
-            Type::I8 => "i8".to_owned(),
-            Type::I16 => "i16".to_owned(),
-            Type::I32 => "i32".to_owned(),
-            Type::I64 => "i64".to_owned(),
-            Type::LocalDateTime => "chrono::datetime::DateTime<chrono::offset::local::Local>".to_owned(),
-            Type::NaiveDate => "chrono::naive::datetime::NaiveDate".to_owned(),
-            Type::NaiveDateTime => "chrono::naive::datetime::NaiveDateTime".to_owned(),
-            Type::NaiveTime => "chrono::naive::datetime::NaiveTime".to_owned(),
-            Type::Nullable(ref typ) => "Option<".to_owned() + &typ.to_string() + ">",
-            Type::Serial => "i32".to_owned(),
-            Type::String => "String".to_owned(),
-            Type::UnsupportedType(_) => "".to_owned(),
-            Type::UTCDateTime => "chrono::datetime::DateTime<chrono::offset::utc::UTC>".to_owned(),
+            Type::F32 => "f32".to_string(),
+            Type::F64 => "f64".to_string(),
+            Type::Generic => "".to_string(),
+            Type::I8 => "i8".to_string(),
+            Type::I16 => "i16".to_string(),
+            Type::I32 => "i32".to_string(),
+            Type::I64 => "i64".to_string(),
+            Type::LocalDateTime => "chrono::datetime::DateTime<chrono::offset::Local>".to_string(),
+            Type::NaiveDate => "chrono::naive::NaiveDate".to_string(),
+            Type::NaiveDateTime => "chrono::naive::NaiveDateTime".to_string(),
+            Type::NaiveTime => "chrono::naive::NaiveTime".to_string(),
+            Type::Nullable(ref typ) => "Option<".to_string() + &typ.to_string() + ">",
+            Type::Serial => "i32".to_string(),
+            Type::String => "String".to_string(),
+            Type::UnsupportedType(_) => "".to_string(),
+            Type::UtcDateTime => "chrono::datetime::DateTime<chrono::offset::Utc>".to_string(),
         };
         write!(f, "{}", typ)
-    }
-}
-
-impl<'a> From<&'a Path> for Type {
-    /// Convert a `Path` to a `Type`.
-    fn from(&Path { ref segments, .. }: &Path) -> Type {
-        let unsupported = Type::UnsupportedType("".to_owned());
-        if segments.len() == 1 {
-            let ident = segments[0].identifier.to_string();
-            match &ident[..] {
-                "bool" => Type::Bool,
-                "char" => Type::Char,
-                "DateTime" => match get_type_parameter(&segments[0].parameters) {
-                    Some(ty) => match ty.as_ref() {
-                        "Local" => Type::LocalDateTime,
-                        "UTC" => Type::UTCDateTime,
-                        parameter_type => Type::UnsupportedType("DateTime<".to_owned() + parameter_type + ">"),
-                    },
-                    None => Type::UnsupportedType("DateTime".to_owned()),
-                },
-                "f32" => Type::F32,
-                "f64" => Type::F64,
-                "i8" => Type::I8,
-                "i16" => Type::I16,
-                "i32" => Type::I32,
-                "i64" => Type::I64,
-                "ForeignKey" => match get_type_parameter(&segments[0].parameters) {
-                    Some(ty) => Type::Custom(ty),
-                    None => Type::UnsupportedType("ForeignKey".to_owned()),
-                },
-                "NaiveDate" => Type::NaiveDate,
-                "NaiveDateTime" => Type::NaiveDateTime,
-                "NaiveTime" => Type::NaiveTime,
-                "Option" =>
-                    match get_type_parameter_as_path(&segments[0].parameters) {
-                        Some(ty) => {
-                            let result = From::from(ty);
-                            let typ =
-                                if let Type::Nullable(_) = result {
-                                    Type::UnsupportedType(result.to_string())
-                                }
-                                else {
-                                    From::from(ty)
-                                };
-                            Type::Nullable(box typ)
-                        },
-                        None => Type::UnsupportedType("Option".to_owned()),
-                    },
-                "PrimaryKey" => {
-                    Type::Serial
-                },
-                "String" => {
-                    Type::String
-                },
-                "Vec" => match get_type_parameter(&segments[0].parameters) {
-                    Some(ty) => match ty.as_ref() {
-                        "u8" => Type::ByteString,
-                        parameter_type => Type::UnsupportedType("Vec<".to_owned() + parameter_type + ">"),
-                    },
-                    None => Type::UnsupportedType("Vec".to_owned()),
-                },
-                typ => Type::UnsupportedType(typ.to_owned()), // TODO: show the generic types as well.
-            }
-        }
-        else {
-            unsupported
-        }
-    }
-}
-
-impl PartialEq<Expression> for Type {
-    /// Check if an literal `expression` is equal to a `Type`.
-    fn eq(&self, expression: &Expression) -> bool {
-        // If the field type is `Nullable`, `expected_type` needs not to be an `Option`.
-        let typ =
-            match *self {
-                Type::Nullable(box ref typ) => typ,
-                ref typ => typ,
-            };
-        match expression.node {
-            ExprLit(ref literal) => {
-                match literal.node {
-                    LitBool(_) => *typ == Type::Bool,
-                    LitByte(_) => false,
-                    LitByteStr(_) => *typ == Type::ByteString,
-                    LitChar(_) => *typ == Type::Char,
-                    LitFloat(_, FloatTy::TyF32) => *typ == Type::F32,
-                    LitFloat(_, FloatTy::TyF64) => *typ == Type::F64,
-                    LitFloatUnsuffixed(_) => *typ == Type::F32 || *typ == Type::F64,
-                    LitInt(_, int_type) =>
-                        match int_type {
-                            SignedIntLit(IntTy::TyIs, _) => false,
-                            SignedIntLit(IntTy::TyI8, _) => *typ == Type::I8,
-                            SignedIntLit(IntTy::TyI16, _) => *typ == Type::I16,
-                            SignedIntLit(IntTy::TyI32, _) => *typ == Type::I32 || *typ == Type::Serial,
-                            SignedIntLit(IntTy::TyI64, _) => *typ == Type::I64,
-                            UnsignedIntLit(_) => false,
-                            UnsuffixedIntLit(_) =>
-                                *typ == Type::I8 ||
-                                *typ == Type::I16 ||
-                                *typ == Type::I32 ||
-                                *typ == Type::I64 ||
-                                *typ == Type::Serial,
-                        }
-                    ,
-                    LitStr(_, _) => *typ == Type::String,
-                }
-            }
-            _ => true, // Returns true, because the type checking for non-literal is done later.
-        }
-    }
-}
-
-impl<'tcx> PartialEq<TyS<'tcx>> for Type {
-    /// Compare the `expected_type` with `Type`.
-    fn eq(&self, expected_type: &TyS<'tcx>) -> bool {
-        // If the field type is `Nullable`, `expected_type` needs not to be an `Option`.
-        let typ =
-            match *self {
-                Type::Nullable(box ref typ) => typ,
-                ref typ => typ,
-            };
-        match expected_type.sty {
-            TypeVariants::TyBool => {
-                *typ == Type::Bool
-            },
-            TypeVariants::TyFloat(float_type) => {
-                match float_type {
-                    FloatTy::TyF32 => *typ == Type::F32,
-                    FloatTy::TyF64 => *typ == Type::F64,
-                }
-            },
-            TypeVariants::TyInt(int_type) => {
-                match int_type {
-                    IntTy::TyIs => false, // NOTE: system integer does not make sense for DBMS.
-                    IntTy::TyI8 => *typ == Type::I8,
-                    IntTy::TyI16 => *typ == Type::I16,
-                    IntTy::TyI32 => *typ == Type::I32 || *typ == Type::Serial,
-                    IntTy::TyI64 => *typ == Type::I64,
-                }
-            },
-            TypeVariants::TyRef(_, TypeAndMut { ty, .. }) => {
-                // TODO: support reference's reference.
-                match ty.sty {
-                    TypeVariants::TyStr => {
-                        *typ == Type::String
-                    },
-                    _ => false,
-                }
-            },
-            TypeVariants::TyStruct(def, sub) => {
-                match def.struct_variant().name.to_string().as_str() {
-                    "DateTime" => {
-                        match sub.types.iter().next() {
-                            Some(inner_type) => {
-                                match get_type_parameter_from_type(&inner_type.sty) {
-                                    Some(generic_type) =>
-                                        match generic_type.as_str() {
-                                            "UTC" => *typ == Type::UTCDateTime,
-                                            "Local" => *typ == Type::LocalDateTime,
-                                            _ => false,
-                                        },
-                                    _ => false,
-                                }
-                            },
-                            None => false,
-                        }
-                    },
-                    "NaiveDate" => *typ == Type::NaiveDate,
-                    "NaiveDateTime" => *typ == Type::NaiveDateTime,
-                    "NaiveTime" => *typ == Type::NaiveTime,
-                    "String" => *typ == Type::String,
-                    struct_type => *typ == Type::Custom(struct_type.to_owned()),
-                }
-            },
-            // TODO: check for missing types.
-            _ => false,
-        }
-    }
-}
-
-/// Get the type between < and > as a String.
-fn get_type_parameter(parameters: &PathParameters) -> Option<String> {
-    get_type_parameter_as_path(parameters).map(|path| path.segments[0].identifier.to_string())
-}
-
-/// Get the type between < and > as a Path.
-fn get_type_parameter_as_path(parameters: &PathParameters) -> Option<&Path> {
-    if let AngleBracketedParameters(AngleBracketedParameterData { ref types, .. }) = *parameters {
-        types.first()
-            .and_then(|ty| {
-                if let TyPath(None, ref path) = ty.node {
-                    Some(path)
-                }
-                else {
-                    None
-                }
-            })
-    }
-    else {
-        None
-    }
-}
-
-/// Get the type between < and > as a String.
-fn get_type_parameter_from_type(typ: &TypeVariants) -> Option<String> {
-    if let TypeVariants::TyStruct(def, _) = *typ {
-        Some(def.struct_variant().name.to_string())
-    }
-    else {
-        None
     }
 }
 
@@ -300,38 +117,38 @@ fn get_type_parameter_from_type(typ: &TypeVariants) -> Option<String> {
 fn type_to_sql(typ: &Type, mut nullable: bool) -> String {
     let sql_type =
         match *typ {
-            Type::Bool => "BOOLEAN".to_owned(),
-            Type::ByteString => "BYTEA".to_owned(),
-            Type::I8 | Type::Char => "CHARACTER(1)".to_owned(),
+            Type::Bool => "BOOLEAN".to_string(),
+            Type::ByteString => "BYTEA".to_string(),
+            Type::I8 | Type::Char => "CHARACTER(1)".to_string(),
             Type::Custom(ref related_table_name) => {
                 let tables = tables_singleton();
                 if let Some(table) = tables.get(related_table_name) {
-                    let primary_key_field = get_primary_key_field(table).unwrap();
-                    "INTEGER REFERENCES ".to_owned() + &related_table_name + "(" + &primary_key_field + ")"
+                    let primary_key_field: String = get_primary_key_field(table).unwrap().to_string();
+                    "INTEGER REFERENCES ".to_string() + &related_table_name + "(" + &primary_key_field + ")"
                 }
                 else {
-                    "".to_owned()
+                    "".to_string()
                 }
                 // NOTE: if the field type is not an SQL table, an error is thrown by the linter.
             },
-            Type::F32 => "REAL".to_owned(),
-            Type::F64 => "DOUBLE PRECISION".to_owned(),
-            Type::Generic => "".to_owned(),
-            Type::I16 => "SMALLINT".to_owned(),
-            Type::I32 => "INTEGER".to_owned(),
-            Type::I64 => "BIGINT".to_owned(),
-            Type::LocalDateTime => "TIMESTAMP WITH TIME ZONE".to_owned(),
-            Type::NaiveDate => "DATE".to_owned(),
-            Type::NaiveDateTime => "TIMESTAMP".to_owned(),
-            Type::NaiveTime => "TIME".to_owned(),
+            Type::F32 => "REAL".to_string(),
+            Type::F64 => "DOUBLE PRECISION".to_string(),
+            Type::Generic => "".to_string(),
+            Type::I16 => "SMALLINT".to_string(),
+            Type::I32 => "INTEGER".to_string(),
+            Type::I64 => "BIGINT".to_string(),
+            Type::LocalDateTime => "TIMESTAMP WITH TIME ZONE".to_string(),
+            Type::NaiveDate => "DATE".to_string(),
+            Type::NaiveDateTime => "TIMESTAMP".to_string(),
+            Type::NaiveTime => "TIME".to_string(),
             Type::Nullable(ref typ) => {
                 nullable = true;
                 type_to_sql(&*typ, true)
             },
-            Type::Serial => "SERIAL PRIMARY KEY".to_owned(),
-            Type::String => "CHARACTER VARYING".to_owned(),
-            Type::UnsupportedType(_) => "".to_owned(), // TODO: should panic.
-            Type::UTCDateTime => "TIMESTAMP WITH TIME ZONE".to_owned(),
+            Type::Serial => "SERIAL PRIMARY KEY".to_string(),
+            Type::String => "CHARACTER VARYING".to_string(),
+            Type::UnsupportedType(_) => "".to_string(), // TODO: should panic.
+            Type::UtcDateTime => "TIMESTAMP WITH TIME ZONE".to_string(),
         };
 
     if nullable {
@@ -345,5 +162,165 @@ fn type_to_sql(typ: &Type, mut nullable: bool) -> String {
 impl ToSql for Type {
     fn to_sql(&self) -> String {
         type_to_sql(self, false)
+    }
+}
+
+impl PartialEq<Expression> for Type {
+    /// Check if an literal `expression` is equal to a `Type`.
+    fn eq(&self, expression: &Expression) -> bool {
+        // If the field type is `Nullable`, `expected_type` needs not to be an `Option`.
+        let typ =
+            match *self {
+                Type::Nullable(ref typ) => typ,
+                ref typ => typ,
+            };
+        match expression.node {
+            ExprKind::Lit(Lit { value: LitKind::Bool(_), .. }) => *typ == Type::Bool,
+            ExprKind::Lit(Lit { value: LitKind::Other(ref literal), .. }) => {
+                if literal.parse_byte().is_some() {
+                    false
+                }
+                else if literal.parse_bytes().is_some() {
+                    *typ == Type::ByteString
+                }
+                else if literal.parse_char().is_some() {
+                    *typ == Type::Char
+                }
+                else if let Some(float) = literal.parse_float() {
+                    match float.suffix() {
+                        // TODO: check if right suffix.
+                        "f32" => *typ == Type::F32,
+                        "f64" => *typ == Type::F64,
+                        suffix if suffix.is_empty() => *typ == Type::F32 || *typ == Type::F64,
+                        _ => panic!("Unexpected float suffix {}", float.suffix()),
+                    }
+                }
+                else if literal.parse_string().is_some() {
+                    *typ == Type::String
+                }
+                else if let Some(int) = literal.parse_int() {
+                    match int.suffix() {
+                        "isize" => false,
+                        "i8" => *typ == Type::I8,
+                        "i16" => *typ == Type::I16,
+                        "i32" => *typ == Type::I32 || *typ == Type::Serial,
+                        "i64" => *typ == Type::I64,
+                        "u8" | "u16" | "u32" | "u64" => false,
+                        suffix if suffix.is_empty() =>
+                            *typ == Type::I8 ||
+                            *typ == Type::I16 ||
+                            *typ == Type::I32 ||
+                            *typ == Type::I64 ||
+                            *typ == Type::Serial,
+                        _ => panic!("Unexpected int suffix {}", int.suffix()),
+                    }
+                }
+                else {
+                    // FIXME: workaround for stable.
+                    #[cfg(not(unstable))]
+                    {
+                        let string = literal.to_string();
+                        if string == "true" || string == "false" {
+                            return *typ == Type::Bool;
+                        }
+                    }
+                    unreachable!("types: unexpected literal type");
+                }
+            }
+            _ => true, // Returns true, because the type checking for non-literal is done later.
+        }
+    }
+}
+
+impl<'a> From<&'a Path> for Type {
+    /// Convert a `Path` to a `Type`.
+    fn from(&Path { ref segments, .. }: &Path) -> Type {
+        let unsupported = Type::UnsupportedType("".to_string());
+        if segments.len() == 1 {
+            let element = segments.first().expect("first segment of path");
+            let first_segment = element.item();
+            let ident = first_segment.ident.to_string();
+            match &ident[..] {
+                "bool" => Type::Bool,
+                "char" => Type::Char,
+                "DateTime" => match get_type_parameter(&first_segment.arguments) {
+                    Some(ty) => match ty.as_ref() {
+                        "Local" => Type::LocalDateTime,
+                        "Utc" => Type::UtcDateTime,
+                        parameter_type => Type::UnsupportedType("DateTime<".to_string() + parameter_type + ">"),
+                    },
+                    None => Type::UnsupportedType("DateTime".to_string()),
+                },
+                "f32" => Type::F32,
+                "f64" => Type::F64,
+                "i8" => Type::I8,
+                "i16" => Type::I16,
+                "i32" => Type::I32,
+                "i64" => Type::I64,
+                "ForeignKey" => match get_type_parameter(&first_segment.arguments) {
+                    Some(ty) => Type::Custom(ty),
+                    None => Type::UnsupportedType("ForeignKey".to_string()),
+                },
+                "NaiveDate" => Type::NaiveDate,
+                "NaiveDateTime" => Type::NaiveDateTime,
+                "NaiveTime" => Type::NaiveTime,
+                "Option" =>
+                    match get_type_parameter_as_path(&first_segment.arguments) {
+                        Some(ty) => {
+                            let result = From::from(ty);
+                            let typ =
+                                if let Type::Nullable(_) = result {
+                                    Type::UnsupportedType(result.to_string())
+                                }
+                                else {
+                                    From::from(ty)
+                                };
+                            Type::Nullable(Box::new(typ))
+                        },
+                        None => Type::UnsupportedType("Option".to_string()),
+                    },
+                "PrimaryKey" => {
+                    Type::Serial
+                },
+                "String" => {
+                    Type::String
+                },
+                "Vec" => match get_type_parameter(&first_segment.arguments) {
+                    Some(ty) => match ty.as_ref() {
+                        "u8" => Type::ByteString,
+                        parameter_type => Type::UnsupportedType("Vec<".to_string() + parameter_type + ">"),
+                    },
+                    None => Type::UnsupportedType("Vec".to_string()),
+                },
+                typ => Type::UnsupportedType(typ.to_string()), // TODO: show the generic types as well.
+            }
+        }
+        else {
+            unsupported
+        }
+    }
+}
+
+/// Get the type between < and > as a String.
+fn get_type_parameter(parameters: &PathArguments) -> Option<String> {
+    get_type_parameter_as_path(parameters).map(|path| path.segments.first()
+        .expect("first segment in path").item().ident.to_string())
+}
+
+/// Get the type between < and > as a Path.
+fn get_type_parameter_as_path(parameters: &PathArguments) -> Option<&Path> {
+    if let PathArguments::AngleBracketed(AngleBracketedGenericArguments { ref args, .. }) = *parameters {
+        args.first()
+            .and_then(|ty| {
+                if let GenericArgument::Type(syn::Type::Path(TypePath { ref path, .. })) = **ty.item() {
+                    Some(path)
+                }
+                else {
+                    None
+                }
+            })
+    }
+    else {
+        None
     }
 }

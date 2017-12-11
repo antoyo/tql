@@ -1,0 +1,34 @@
+error: unresolved name `avh`
+  --> $DIR/aggregate.rs:41:26
+   |
+41 |     sql!(Table.aggregate(avh(i32_field)));
+   |                          ^^^
+   |
+   = help: did you mean avg?
+
+error: attempted access of field `test` on type `Table`, but no field with that name was found
+  --> $DIR/aggregate.rs:45:23
+   |
+45 |     sql!(Table.values(test).aggregate(avg(i32_field)));
+   |                       ^^^^
+
+error: Expected identifier
+  --> $DIR/aggregate.rs:48:23
+   |
+48 |     sql!(Table.values("test").aggregate(avg(i32_field)));
+   |                       ^^^^^^
+
+error: this function takes 1 parameter but 2 parameters were supplied
+  --> $DIR/aggregate.rs:51:26
+   |
+51 |     sql!(Table.aggregate(avg(i32_field, field1)));
+   |                          ^^^
+
+error: no aggregate field named `avg` found
+  --> $DIR/aggregate.rs:54:77
+   |
+54 |     sql!(Table.values(i32_field).aggregate(average = avg(i32_field)).filter(avg < 20));
+   |                                                                             ^^^
+
+error: aborting due to 5 previous errors
+

@@ -1,33 +1,35 @@
 /*
- * Copyright (C) 2015  Boucher, Antoni <bouanto@zoho.com>
- * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 /// Analyzer for the limit() method.
 
-use syntax::ast::Expr;
-use syntax::ast::Expr_::{ExprBinary, ExprCall, ExprCast, ExprLit, ExprMethodCall, ExprPath, ExprRange, ExprUnary};
-use syntax::ptr::P;
+use syn::{ExprKind, ExprRange};
 
-use ast::Limit;
-use error::{SqlError, SqlResult, res};
+use ast::{Expression, Limit, expr_span};
+use error::{Error, Result, res};
 use super::check_type;
 use types::Type;
 
 /// Analyze the types of the `Limit`.
-pub fn analyze_limit_types(limit: &Limit, errors: &mut Vec<SqlError>) {
+pub fn analyze_limit_types(limit: &Limit, errors: &mut Vec<Error>) {
     match *limit {
         Limit::EndRange(ref expression) => check_type(&Type::I64, expression, errors),
         Limit::Index(ref expression) => check_type(&Type::I64, expression, errors),
@@ -45,27 +47,29 @@ pub fn analyze_limit_types(limit: &Limit, errors: &mut Vec<SqlError>) {
 }
 
 /// Convert an `Expression` to a `Limit`.
-pub fn argument_to_limit(expression: &P<Expr>) -> SqlResult<Limit> {
+pub fn argument_to_limit(expression: &Expression) -> Result<Limit> {
     let mut errors = vec![];
     let limit =
         match expression.node {
-            ExprRange(None, Some(ref range_end)) => {
-                Limit::EndRange(range_end.clone())
+            ExprKind::Range(ExprRange { from: None, to: Some(ref range_end), .. }) => {
+                Limit::EndRange(*range_end.clone())
             }
-            ExprRange(Some(ref range_start), None) => {
-                Limit::StartRange(range_start.clone())
+            ExprKind::Range(ExprRange { from: Some(ref range_start), to: None, .. }) => {
+                Limit::StartRange(*range_start.clone())
             }
-            ExprRange(Some(ref range_start), Some(ref range_end)) => {
+            // TODO: check the RangeLimits.
+            ExprKind::Range(ExprRange { from: Some(ref range_start), to: Some(ref range_end), .. }) => {
                 // TODO: check that range_start < range_end.
-                Limit::Range(range_start.clone(), range_end.clone())
+                Limit::Range(*range_start.clone(), *range_end.clone())
             }
-            ExprLit(_) | ExprPath(_, _) | ExprCall(_, _) | ExprMethodCall(_, _, _) | ExprBinary(_, _, _) | ExprUnary(_, _) | ExprCast(_, _)  => {
+            ExprKind::Lit(_) | ExprKind::Path(_) | ExprKind::Call(_) | ExprKind::MethodCall(_) |
+                ExprKind::Binary(_) | ExprKind::Unary(_) | ExprKind::Cast(_)  => {
                 Limit::Index(expression.clone())
             }
             _ => {
-                errors.push(SqlError::new(
+                errors.push(Error::new(
                     "Expected index range or number expression",
-                    expression.span,
+                    expr_span(expression),
                 ));
                 Limit::NoLimit
             }

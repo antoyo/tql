@@ -1,0 +1,14 @@
+error[E0425]: cannot find value `value` in this scope
+  --> $DIR/select_gen.rs:49:35
+   |
+49 |     sql!(Table.filter(i32_field > value && field1 == value2));
+   |                                   ^^^^^ not found in this scope
+
+error[E0425]: cannot find value `value2` in this scope
+  --> $DIR/select_gen.rs:49:54
+   |
+49 |     sql!(Table.filter(i32_field > value && field1 == value2));
+   |                                                      ^^^^^^ not found in this scope
+
+error: aborting due to 4 previous errors
+

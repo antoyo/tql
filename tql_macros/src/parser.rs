@@ -1,34 +1,41 @@
 /*
- * Copyright (C) 2015  Boucher, Antoni <bouanto@zoho.com>
- * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-//! Rust parsing.
+use syn::{
+    Expr,
+    ExprIndex,
+    ExprKind,
+    ExprMethodCall,
+    ExprPath,
+    Ident,
+    Span,
+};
 
-use syntax::ast::Expr;
-use syntax::ast::Expr_::{ExprIndex, ExprMethodCall, ExprPath};
-use syntax::codemap::{Span, Spanned};
-use syntax::ptr::P;
-
-use ast::Expression;
-use error::{SqlError, SqlResult, res};
+use ast::expr_span;
+use error::{Error, Result, res};
 
 /// A method call.
 #[derive(Debug)]
 pub struct MethodCall {
-    pub arguments: Vec<P<Expr>>,
+    pub args: Vec<Expr>,
     pub name: String,
     pub position: Span,
 }
@@ -38,63 +45,79 @@ pub struct MethodCall {
 pub struct MethodCalls {
     pub calls: Vec<MethodCall>,
     /// The identifier at the start of the calls chain.
-    pub name: String,
+    pub name: Option<Ident>,
     pub position: Span,
 }
 
 impl MethodCalls {
+    fn new(expr: &Expr) -> Self {
+        Self {
+            calls: vec![],
+            name:  None,
+            position: expr_span(expr),
+        }
+    }
+
     /// Add a call to the method calls `Vec`.
     fn push(&mut self, call: MethodCall) {
         self.calls.push(call);
     }
 }
 
-/// Convert a method call expression to a simpler vector-based structure.
-pub fn parse(expression: Expression) -> SqlResult<MethodCalls> {
-    let mut errors = vec![];
-    let mut calls = MethodCalls {
-        calls: vec![],
-        name:  "".to_owned(),
-        position: expression.span,
-    };
+pub struct Parser {
+}
 
-    /// Add the calls from the `expression` into the `calls` `Vec`.
-    fn add_calls(expression: &Expression, calls: &mut MethodCalls, errors: &mut Vec<SqlError>) {
-        match expression.node {
-            ExprMethodCall(Spanned { node: object, span: method_span}, _, ref arguments) => {
-                add_calls(&arguments[0], calls, errors);
-
-                let mut arguments = arguments.clone();
-                arguments.remove(0);
-
-                calls.push(MethodCall {
-                    name: object.to_string(),
-                    arguments: arguments,
-                    position: method_span,
-                });
-            }
-            ExprPath(_, ref path) => {
-                if path.segments.len() == 1 {
-                    calls.name = path.segments[0].identifier.to_string();
-                }
-            }
-            ExprIndex(ref expr1, ref expr2) => {
-                add_calls(expr1, calls, errors);
-                calls.push(MethodCall {
-                    name: "limit".to_owned(),
-                    arguments: vec![expr2.clone()],
-                    position: expr2.span,
-                });
-            }
-            _ => {
-                errors.push(SqlError::new(
-                    "Expected method call", // TODO: improve this message.
-                    expression.span,
-                ));
-            }
+impl Parser {
+    pub fn new() -> Self {
+        Parser {
         }
     }
 
-    add_calls(&expression, &mut calls, &mut errors);
-    res(calls, errors)
+    pub fn parse(&self, expr: &Expr) -> Result<MethodCalls> {
+        let mut errors = vec![];
+        let mut calls = MethodCalls::new(expr);
+
+        /// Add the calls from the `expression` into the `calls` `Vec`.
+        fn add_calls(expr: &Expr, calls: &mut MethodCalls, errors: &mut Vec<Error>) {
+            match expr.node {
+                ExprKind::MethodCall(ExprMethodCall { ref args, ref expr, method, .. }) => {
+                    add_calls(expr, calls, errors);
+
+                    let args = args.iter()
+                        .map(|element| element.into_item().clone())
+                        .collect();
+
+                    calls.push(MethodCall {
+                        name: method.to_string(),
+                        args,
+                        position: method.span,
+                    });
+                },
+                ExprKind::Path(ExprPath { ref path, .. }) => {
+                    if path.segments.len() == 1 {
+                        calls.name = Some(path.segments.first()
+                            .expect("first segment in path").into_item()
+                            .ident);
+                    }
+                },
+                ExprKind::Index(ExprIndex { ref expr, ref index, .. }) => {
+                    add_calls(expr, calls, errors);
+                    calls.push(MethodCall {
+                        name: "limit".to_owned(),
+                        args: vec![*index.clone()],
+                        position: expr_span(&index),
+                    });
+                }
+                _ => {
+                    errors.push(Error::new(
+                        "Expected method call", // TODO: improve this message.
+                        expr_span(expr),
+                    ));
+                }
+            }
+        }
+
+        add_calls(&expr, &mut calls, &mut errors);
+        res(calls, errors)
+    }
 }

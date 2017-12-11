@@ -1,0 +1,278 @@
+error: attempted access of field `field2` on type `Table`, but no field with that name was found
+  --> $DIR/select.rs:45:45
+   |
+45 |     sql!(Table.filter(field1 == "value1" && field2 < 100).sort(-field2));
+   |                                             ^^^^^^
+   |
+   = help: did you mean field1?
+
+error: attempted access of field `field2` on type `Table`, but no field with that name was found
+  --> $DIR/select.rs:45:65
+   |
+45 |     sql!(Table.filter(field1 == "value1" && field2 < 100).sort(-field2));
+   |                                                                 ^^^^^^
+   |
+   = help: did you mean field1?
+
+error: mismatched types:
+ expected `i32`,
+    found `u32`
+  --> $DIR/select.rs:51:57
+   |
+51 |     sql!(Table.filter(field1 == "value1" && i32_field < 100u32));
+   |                                                         ^^^^^^
+   |
+   = note: in this expansion of sql! (defined in tql)
+
+error: mismatched types:
+ expected `i32`,
+    found `u32`
+  --> $DIR/select.rs:57:57
+   |
+57 |     sql!(Table.filter(field1 == "value1" && i32_field < 100u32).sort(-i32_field));
+   |                                                         ^^^^^^
+   |
+   = note: in this expansion of sql! (defined in tql)
+
+error: mismatched types:
+ expected `i32`,
+    found `u64`
+  --> $DIR/select.rs:63:57
+   |
+63 |     sql!(Table.filter(field1 == "value1" && i32_field < 100u64));
+   |                                                         ^^^^^^
+   |
+   = note: in this expansion of sql! (defined in tql)
+
+error: mismatched types:
+ expected `i32`,
+    found `i8`
+  --> $DIR/select.rs:69:57
+   |
+69 |     sql!(Table.filter(field1 == "value1" && i32_field < 100i8));
+   |                                                         ^^^^^
+   |
+   = note: in this expansion of sql! (defined in tql)
+
+error: mismatched types:
+ expected `i32`,
+    found `u8`
+  --> $DIR/select.rs:75:36
+   |
+75 |     sql!(Table.filter(i32_field >= b'f' || field1 == 't'));
+   |                                    ^^^^
+   |
+   = note: in this expansion of sql! (defined in tql)
+
+error: mismatched types:
+ expected `String`,
+    found `char`
+  --> $DIR/select.rs:75:54
+   |
+75 |     sql!(Table.filter(i32_field >= b'f' || field1 == 't'));
+   |                                                      ^^^
+   |
+   = note: in this expansion of sql! (defined in tql)
+
+error: mismatched types:
+ expected `i32`,
+    found `Vec<u8>`
+  --> $DIR/select.rs:85:36
+   |
+85 |     sql!(Table.filter(i32_field >= b"test"));
+   |                                    ^^^^^^^
+   |
+   = note: in this expansion of sql! (defined in tql)
+
+error: mismatched types:
+ expected `i32`,
+    found `String`
+  --> $DIR/select.rs:91:36
+   |
+91 |     sql!(Table.filter(i32_field >= r#""test""#));
+   |                                    ^^^^^^^^^^^
+   |
+   = note: in this expansion of sql! (defined in tql)
+
+error: mismatched types:
+ expected `i32`,
+    found `f32`
+  --> $DIR/select.rs:97:36
+   |
+97 |     sql!(Table.filter(i32_field >= 3.141592f32));
+   |                                    ^^^^^^^^^^^
+   |
+   = note: in this expansion of sql! (defined in tql)
+
+error: mismatched types:
+ expected `i32`,
+    found `f64`
+   --> $DIR/select.rs:103:36
+    |
+103 |     sql!(Table.filter(i32_field >= 3.141592f64));
+    |                                    ^^^^^^^^^^^
+    |
+    = note: in this expansion of sql! (defined in tql)
+
+error: mismatched types:
+ expected `i32`,
+    found `floating-point variable`
+   --> $DIR/select.rs:109:36
+    |
+109 |     sql!(Table.filter(i32_field >= 3.141592));
+    |                                    ^^^^^^^^
+    |
+    = note: in this expansion of sql! (defined in tql)
+
+error: attempted access of field `fild1` on type `Table`, but no field with that name was found
+   --> $DIR/select.rs:115:45
+    |
+115 |     sql!(Table.filter(i32_field >= 42).sort(fild1));
+    |                                             ^^^^^
+    |
+    = help: did you mean field1?
+
+error: attempted access of field `fild1` on type `Table`, but no field with that name was found
+   --> $DIR/select.rs:119:46
+    |
+119 |     sql!(Table.filter(i32_field >= 42).sort(-fild1));
+    |                                              ^^^^^
+    |
+    = help: did you mean field1?
+
+error: attempted access of field `i32_fiel` on type `Table`, but no field with that name was found
+   --> $DIR/select.rs:123:23
+    |
+123 |     sql!(Table.filter(i32_fiel >= 42));
+    |                       ^^^^^^^^
+    |
+    = help: did you mean i32_field?
+
+error: mismatched types:
+ expected `i32`,
+    found `bool`
+   --> $DIR/select.rs:127:36
+    |
+127 |     sql!(Table.filter(i32_field == true));
+    |                                    ^^^^
+    |
+    = note: in this expansion of sql! (defined in tql)
+
+error: mismatched types:
+ expected `i32`,
+    found `bool`
+   --> $DIR/select.rs:133:36
+    |
+133 |     sql!(Table.filter(i32_field == false));
+    |                                    ^^^^^
+    |
+    = note: in this expansion of sql! (defined in tql)
+
+error: mismatched types:
+ expected `i64`,
+    found `String`
+   --> $DIR/select.rs:139:24
+    |
+139 |     sql!(Table.all()[.."auinesta"]);
+    |                        ^^^^^^^^^^
+    |
+    = note: in this expansion of sql! (defined in tql)
+
+error: mismatched types:
+ expected `i64`,
+    found `bool`
+   --> $DIR/select.rs:145:22
+    |
+145 |     sql!(Table.all()[true..false]);
+    |                      ^^^^
+    |
+    = note: in this expansion of sql! (defined in tql)
+
+error: mismatched types:
+ expected `i64`,
+    found `bool`
+   --> $DIR/select.rs:145:28
+    |
+145 |     sql!(Table.all()[true..false]);
+    |                            ^^^^^
+    |
+    = note: in this expansion of sql! (defined in tql)
+
+error: Expected - or identifier
+   --> $DIR/select.rs:156:68
+    |
+156 |     sql!(Table.filter(i32_field < 100 && field1 == "value1").sort(*i32_field, *field1));
+    |                                                                    ^^^^^^^^^
+
+error: Expected - or identifier
+   --> $DIR/select.rs:156:80
+    |
+156 |     sql!(Table.filter(i32_field < 100 && field1 == "value1").sort(*i32_field, *field1));
+    |                                                                                ^^^^^^
+
+error: `Tble` does not name an SQL table
+   --> $DIR/select.rs:160:10
+    |
+160 |     sql!(Tble.filter(field1 == "value"));
+    |          ^^^^
+    |
+    = help: did you mean Table?
+
+error: `TestTable` does not name an SQL table
+   --> $DIR/select.rs:164:10
+    |
+164 |     sql!(TestTable.flter(field1 == "value"));
+    |          ^^^^^^^^^
+    |
+    = help: did you forget to add the #[derive(SqlTable)] attribute on the TestTable struct?
+
+error: no method named `flter` found in tql
+   --> $DIR/select.rs:164:20
+    |
+164 |     sql!(TestTable.flter(field1 == "value"));
+    |                    ^^^^^
+    |
+    = help: did you mean filter?
+
+error: this method takes 0 parameters but 1 parameter was supplied
+   --> $DIR/select.rs:170:16
+    |
+170 |     sql!(Table.all(id == 1));
+    |                ^^^
+
+error: attempted access of field `test` on type `Table`, but no field with that name was found
+   --> $DIR/select.rs:173:27
+    |
+173 |     sql!(Table.all().join(test));
+    |                           ^^^^
+
+error: attempted access of field `field` on type `Table`, but no field with that name was found
+   --> $DIR/select.rs:176:27
+    |
+176 |     sql!(Table.all().join(field));
+    |                           ^^^^^
+    |
+    = help: did you mean field1?
+
+error: mismatched types:
+ expected `ForeignKey<_>`,
+    found `String`
+   --> $DIR/select.rs:180:27
+    |
+180 |     sql!(Table.all().join(field1, i32_field));
+    |                           ^^^^^^
+    |
+    = note: in this expansion of sql! (defined in tql)
+
+error: mismatched types:
+ expected `ForeignKey<_>`,
+    found `i32`
+   --> $DIR/select.rs:180:35
+    |
+180 |     sql!(Table.all().join(field1, i32_field));
+    |                                   ^^^^^^^^^
+    |
+    = note: in this expansion of sql! (defined in tql)
+
+error: aborting due to 31 previous errors
+

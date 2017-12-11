@@ -1,58 +1,33 @@
 /*
- * Copyright (C) 2015  Boucher, Antoni <bouanto@zoho.com>
- * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-//! Rust compiler plugin functions.
+use syn::{Expr, ExprKind, Lit, LitKind, Span};
+use proc_macro2::Literal;
 
-use syntax::ast::{Expr, Ident, Path};
-use syntax::ast::Expr_::{ExprField, ExprLit};
-use syntax::ast::Lit_::LitInt;
-use syntax::ast::LitIntType::SignedIntLit;
-use syntax::ast::IntTy::TyI64;
-use syntax::ast::Sign;
-use syntax::codemap::{Span, Spanned, DUMMY_SP};
-use syntax::parse::token::intern;
-use syntax::ptr::P;
-
-pub static NODE_ID: u32 = 4294967295;
-
-/// Create the `ExprField` expression `expr`.`field_name` (struct field access).
-pub fn field_access(expr: P<Expr>, path: &Path, position: Span, field_name: String) -> P<Expr> {
-    let syntax_context = path.segments[0].identifier.ctxt;
-    let ident = Ident::new(intern(&field_name), syntax_context);
-    P(Expr {
-        attrs: None,
-        id: NODE_ID,
-        node: ExprField(expr, Spanned {
-            node: ident,
-            span: position,
+pub fn number_literal(num: i64) -> Expr {
+    Expr {
+        node: ExprKind::Lit(Lit {
+            span: Span::default(),
+            value: LitKind::Other(Literal::integer(num))
         }),
-        span: position,
-    })
-}
-
-/// Converts a number to an `P<Expr>`.
-pub fn number_literal(number: u64) -> P<Expr> {
-    P(Expr {
-        attrs: None,
-        id: NODE_ID,
-        node: ExprLit(P(Spanned {
-            node: LitInt(number, SignedIntLit(TyI64, Sign::Plus)),
-            span: DUMMY_SP,
-        })),
-        span: DUMMY_SP,
-    })
+        attrs: vec![],
+    }
 }

@@ -1,36 +1,41 @@
 /*
- * Copyright (C) 2015  Boucher, Antoni <bouanto@zoho.com>
- * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#![feature(box_patterns, plugin)]
-#![plugin(tql_macros)]
+#![feature(proc_macro)]
 
 extern crate postgres;
 extern crate tql;
+#[macro_use]
+extern crate tql_macros;
 
-use postgres::{Connection, SslMode};
-use postgres::error::Error::DbError;
-use postgres::error::SqlState::UndefinedTable;
+use postgres::{Connection, TlsMode};
+use postgres::error::UNDEFINED_TABLE;
 use tql::{ForeignKey, PrimaryKey};
+use tql_macros::sql;
 
 mod teardown;
 
 use teardown::TearDown;
 
-#[SqlTable]
+#[derive(SqlTable)]
 struct TableInsertExpr {
     primary_key: PrimaryKey,
     field1: String,
@@ -46,14 +51,14 @@ struct TableInsertExpr {
     int64: Option<i64>,
 }
 
-#[SqlTable]
+#[derive(SqlTable)]
 struct RelatedTableInsertExpr {
     id: PrimaryKey,
     field1: i32,
 }
 
 fn get_connection() -> Connection {
-    Connection::connect("postgres://test:test@localhost/database", &SslMode::None).unwrap()
+    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
 }
 
 #[test]
@@ -73,9 +78,8 @@ fn test_insert() {
 
     let result = sql!(TableInsertExpr.insert(field1 = "value1", field2 = 55, related_field = related_field));
     match result {
-        Err(DbError(box db_error)) => assert_eq!(UndefinedTable, *db_error.code()),
+        Err(db_error) => assert_eq!(Some(&UNDEFINED_TABLE), db_error.code()),
         Ok(_) => assert!(false),
-        Err(_) => assert!(false),
     }
 
     let _ = sql!(TableInsertExpr.create());
@@ -107,9 +111,14 @@ fn test_insert() {
     assert!(table.related_field.is_none());
     assert!(table.optional_field.is_none());
 
-    let new_field1 = "value3".to_owned();
+    let new_field1 = "value3".to_string();
     let new_field2 = 24;
-    let id = sql!(TableInsertExpr.insert(field1 = new_field1, field2 = new_field2, related_field = related_field, optional_field = 12)).unwrap();
+    let id = sql!(TableInsertExpr.insert(
+        field1 = &new_field1,
+        field2 = new_field2,
+        related_field = related_field,
+        optional_field = 12,
+    )).unwrap();
     assert_eq!(3, id);
 
     let table = sql!(TableInsertExpr.get(id)).unwrap();
@@ -125,6 +134,18 @@ fn test_insert() {
     //let int8 = 42i8;
     let int16 = 42i16;
     let int64 = 42i64;
-    let id = sql!(TableInsertExpr.insert(field1 = new_field1, field2 = new_field2, related_field = related_field, optional_field = 12, boolean = boolean_value, /*character = character,*/ float32 = float32, float64 = float64, /*int8 = int8,*/ int16 = int16, int64 = int64)).unwrap();
+    let id = sql!(TableInsertExpr.insert(
+        field1 = &new_field1,
+        field2 = new_field2,
+        related_field = related_field,
+        optional_field = 12,
+        boolean = boolean_value,
+        /*character = character,*/
+        float32 = float32,
+        float64 = float64,
+        /*int8 = int8,*/
+        int16 = int16,
+        int64 = int64
+    )).unwrap();
     assert_eq!(4, id);
 }

@@ -1,29 +1,62 @@
 /*
- * Copyright (C) 2015  Boucher, Antoni <bouanto@zoho.com>
- * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 //! The PostgreSQL code generator.
 
 use std::str::from_utf8;
 
-use syntax::ast::Expr_::ExprLit;
-use syntax::ast::Lit_::{LitBool, LitByte, LitByteStr, LitChar, LitFloat, LitFloatUnsuffixed, LitInt, LitStr};
+use literalext::LiteralExt;
+use syn::{ExprKind, Ident, LitKind};
 
-use ast::{Aggregate, AggregateFilter, AggregateFilterExpression, AggregateFilters, Assignment, AssignementOperator, Expression, FieldList, Filter, Filters, FilterExpression, FilterValue, Identifier, Join, Limit, LogicalOperator, MethodCall, Order, RelationalOperator, Query, TypedField};
-use ast::Limit::{EndRange, Index, LimitOffset, NoLimit, Range, StartRange};
+use ast::{
+    Aggregate,
+    AggregateFilter,
+    AggregateFilterExpression,
+    AggregateFilters,
+    Assignment,
+    AssignementOperator,
+    Expression,
+    FieldList,
+    Filter,
+    Filters,
+    FilterExpression,
+    FilterValue,
+    Identifier,
+    Join,
+    Limit,
+    LogicalOperator,
+    MethodCall,
+    Order,
+    RelationalOperator,
+    Query,
+    TypedField,
+};
+use ast::Limit::{
+    EndRange,
+    Index,
+    LimitOffset,
+    NoLimit,
+    Range,
+    StartRange,
+};
 use sql::escape;
 use state::get_primary_key_field_by_table_name;
 
@@ -49,11 +82,11 @@ macro_rules! filter_expression_to_sql {
                     $name::Filter(ref filter) => filter.to_sql(),
                     $name::Filters(ref filters) => filters.to_sql(),
                     $name::NegFilter(ref filter) =>
-                        "NOT ".to_owned() +
+                        "NOT ".to_string() +
                         &filter.to_sql(),
-                    $name::NoFilters => "".to_owned(),
+                    $name::NoFilters => "".to_string(),
                     $name::ParenFilter(ref filter) =>
-                        "(".to_owned() +
+                        "(".to_string() +
                         &filter.to_sql() +
                         ")",
                     $name::FilterValue(ref filter_value) => filter_value.node.to_sql(),
@@ -83,7 +116,8 @@ impl ToSql for Aggregate {
     fn to_sql(&self) -> String {
         // TODO: do not use CAST when this is in a HAVING clause.
         // TODO: do not hard-code the type.
-        "CAST(".to_owned() + &self.function.to_sql() + "(" + &self.field.to_sql() + ") AS INT)"
+        "CAST(".to_string() + &self.function.to_sql() + "(" + &self.field.expect("Aggregate field").to_sql()
+            + ") AS INT)"
     }
 }
 
@@ -97,13 +131,11 @@ filter_to_sql!(AggregateFilters);
 
 impl ToSql for Assignment {
     fn to_sql(&self) -> String {
+        let identifier = self.identifier.expect("Assignment identifier").to_sql();
         if let AssignementOperator::Equal = self.operator.node {
-            self.identifier.to_sql() +
-                &self.operator.node.to_sql() +
-                &self.value.to_sql()
+            identifier + &self.operator.node.to_sql() + &self.value.to_sql()
         }
         else {
-            let identifier = self.identifier.to_sql();
             identifier.clone() +
                 &self.operator.node.to_sql().replace("{}", &identifier) +
                 &self.value.to_sql()
@@ -122,7 +154,7 @@ impl ToSql for AssignementOperator {
             AssignementOperator::Modulo => " = {} % ",
             AssignementOperator::Mul => " = {} * ",
             AssignementOperator::Sub => " = {} - ",
-        }.to_owned()
+        }.to_string()
     }
 }
 
@@ -131,32 +163,67 @@ impl ToSql for AssignementOperator {
 impl ToSql for Expression {
     fn to_sql(&self) -> String {
         match self.node {
-            ExprLit(ref literal) => {
-                match literal.node {
-                    LitBool(boolean) => boolean.to_string().to_uppercase(),
-                    LitByte(byte) =>
-                        "'".to_owned() +
-                        &escape((byte as char).to_string()) +
-                        "'",
-                    // TODO: check if using unwrap() is secure here.
-                    LitByteStr(ref bytestring) =>
-                        "'".to_owned() +
-                        &escape(from_utf8(&bytestring[..]).unwrap().to_owned()) +
-                        "'",
-                    LitChar(character) =>
-                        "'".to_owned() +
-                        &escape(character.to_string()) +
-                        "'",
-                    LitFloat(ref float, _) => float.to_string(),
-                    LitFloatUnsuffixed(ref float) => float.to_string(),
-                    LitInt(number, _) => number.to_string(),
-                    LitStr(ref string, _) =>
-                        "'".to_owned() +
-                        &escape(string.to_string()) +
-                        "'",
+            ExprKind::Lit(ref literal) => {
+                match literal.value {
+                    LitKind::Bool(boolean) => boolean.to_string().to_uppercase(),
+                    LitKind::Other(ref literal) => {
+                        if let Some(byte) = literal.parse_byte() {
+                            "'".to_string() +
+                                &escape((byte as char).to_string()) +
+                                "'"
+                        }
+                        else if let Some(ref bytestring) = literal.parse_bytes() {
+                            "'".to_string() +
+                                // TODO: check if using unwrap() is secure here.
+                                &escape(from_utf8(&bytestring[..]).unwrap().to_string()) +
+                                "'"
+                        }
+                        else if let Some(character) = literal.parse_char() {
+                            "'".to_string() +
+                                &escape(character.to_string()) +
+                                "'"
+                        }
+                        else if let Some(ref float) = literal.parse_float() {
+                            match float.suffix() {
+                                "f32" => float.as_f32().expect("f32").to_string(),
+                                "f64" | "" => float.as_f64().expect("f64").to_string(),
+                                suffix => panic!("Unexpected float suffix {}", suffix),
+                            }
+                        }
+                        else if let Some(ref int) = literal.parse_int() {
+                            match int.suffix() {
+                                "isize" => int.as_i64().expect("isize").to_string(),
+                                "i8" => int.as_i8().expect("i8").to_string(),
+                                "i16" => int.as_i16().expect("i16").to_string(),
+                                "i32" | "" => int.as_i32().expect("i32").to_string(),
+                                "i64" => int.as_i64().expect("i64").to_string(),
+                                "usize" => int.as_u64().expect("usize").to_string(),
+                                "u8" => int.as_u8().expect("u8").to_string(),
+                                "u16" => int.as_u16().expect("u16").to_string(),
+                                "u32" => int.as_u32().expect("u32").to_string(),
+                                "u64" => int.as_u64().expect("u64").to_string(),
+                                suffix => panic!("Unexpected int suffix {}", suffix),
+                            }
+                        }
+                        else if let Some(ref string) = literal.parse_string() {
+                            "'".to_string() +
+                                &escape(string.to_string()) +
+                                "'"
+                        }
+                        else {
+                            #[cfg(not(unstable))]
+                            {
+                                let string = literal.to_string();
+                                if string == "true" || string == "false" {
+                                    return string.to_uppercase();
+                                }
+                            }
+                            unreachable!("no other literal types");
+                        }
+                    }
                 }
             },
-            _ => "?".to_owned(),
+            _ => "?".to_string(),
         }
     }
 }
@@ -175,6 +242,12 @@ filter_expression_to_sql!(FilterExpression);
 
 filter_to_sql!(Filters);
 
+impl ToSql for Ident {
+    fn to_sql(&self) -> String {
+        self.to_string()
+    }
+}
+
 impl ToSql for FilterValue {
     fn to_sql(&self) -> String {
         match *self {
@@ -182,7 +255,7 @@ impl ToSql for FilterValue {
             FilterValue::MethodCall(MethodCall { ref arguments, ref object_name, ref template, ..  }) => {
                 // In the template, $0 represents the object identifier and $1, $2, ... the
                 // arguments.
-                let mut sql = template.replace("$0", object_name);
+                let mut sql = template.replace("$0", &object_name.to_string());
                 let mut index = 1;
                 for argument in arguments {
                     sql = sql.replace(&format!("${}", index), &argument.to_sql());
@@ -190,13 +263,14 @@ impl ToSql for FilterValue {
                 }
                 sql
             },
+            FilterValue::None => unreachable!("FilterValue::None in FilterValue::to_sql()"),
         }
     }
 }
 
 impl ToSql for Join {
     fn to_sql(&self) -> String {
-        " INNER JOIN ".to_owned() + &self.joined_table +
+        " INNER JOIN ".to_string() + &self.joined_table +
             " ON " + &self.base_table + "." + &self.base_field + " = "
             + &self.joined_table + "." + &self.joined_field
     }
@@ -213,18 +287,18 @@ impl ToSql for Identifier {
 impl ToSql for Limit {
     fn to_sql(&self) -> String {
         match *self {
-            EndRange(ref expression) => " LIMIT ".to_owned() + &expression.to_sql(),
+            EndRange(ref expression) => " LIMIT ".to_string() + &expression.to_sql(),
             Index(ref expression) =>
-                " OFFSET ".to_owned() + &expression.to_sql() +
+                " OFFSET ".to_string() + &expression.to_sql() +
                 " LIMIT 1",
             LimitOffset(ref expression1, ref expression2) =>
-                " OFFSET ".to_owned() + &expression2.to_sql() +
+                " OFFSET ".to_string() + &expression2.to_sql() +
                 " LIMIT " + &expression1.to_sql(),
-            NoLimit => "".to_owned(),
+            NoLimit => "".to_string(),
             Range(ref expression1, ref expression2) =>
-                " OFFSET ".to_owned() + &expression1.to_sql() +
+                " OFFSET ".to_string() + &expression1.to_sql() +
                 " LIMIT " + &expression2.to_sql(),
-            StartRange(ref expression) => " OFFSET ".to_owned() + &expression.to_sql(),
+            StartRange(ref expression) => " OFFSET ".to_string() + &expression.to_sql(),
         }
     }
 }
@@ -235,7 +309,7 @@ impl ToSql for LogicalOperator {
             LogicalOperator::And => "AND",
             LogicalOperator::Not => "NOT",
             LogicalOperator::Or => "OR",
-        }.to_owned()
+        }.to_string()
     }
 }
 
@@ -301,12 +375,13 @@ impl ToSql for Query {
                 format!("DROP TABLE {table}", table = table)
             },
             Query::Insert { ref assignments, ref table } => {
-                let fields: Vec<_> = assignments.iter().map(|assign| assign.identifier.to_sql()).collect();
+                let fields: Vec<_> = assignments.iter().map(|assign|
+                    assign.identifier.expect("Assignment identifier").to_sql()).collect();
                 let values: Vec<_> = assignments.iter().map(|assign| assign.value.to_sql()).collect();
                 // Add the SQL code to get the inserted primary key.
                 // TODO: what to do when there is no primary key?
                 let return_value = get_primary_key_field_by_table_name(table)
-                    .map_or("".to_owned(), |primary_key| " RETURNING ".to_owned() + &primary_key);
+                    .map_or("".to_string(), |primary_key| " RETURNING ".to_string() + &primary_key);
                 replace_placeholder(format!("INSERT INTO {table}({fields}) VALUES({values}){return_value}",
                         table = table,
                         fields = fields.to_sql(),
@@ -358,7 +433,7 @@ impl ToSql for RelationalOperator {
             RelationalOperator::NotEqual => "<>",
             RelationalOperator::GreaterThan => ">=",
             RelationalOperator::GreaterThanEqual => ">",
-        }.to_owned()
+        }.to_string()
     }
 }
 
@@ -381,7 +456,7 @@ fn filter_to_where_clause(filter: &FilterExpression) -> &str {
 // TODO: find a better way to write the symbols ($1, $2, …) in the query.
 /// Replace the placeholders `{}` by $# by # where # is the index of the placeholder.
 fn replace_placeholder(string: String) -> String {
-    let mut result = "".to_owned();
+    let mut result = "".to_string();
     let mut in_string = false;
     let mut skip_next = false;
     let mut index = 1;

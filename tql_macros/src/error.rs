@@ -1,37 +1,51 @@
 /*
- * Copyright (C) 2015  Boucher, Antoni <bouanto@zoho.com>
- * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-//! Error handling with the `Result` and `SqlError` types.
+//! Error handling with the `Result` and `Error` types.
 //!
-//! `SqlResult<T>` is a `Result<T, Vec<SqlError>>` synonym and is used for returning and propagating
+//! `Result<T>` is a `Result<T, Vec<Error>>` synonym and is used for returning and propagating
 //! multiple compile errors.
 
-use syntax::codemap::Span;
+use std::result;
 
-/// `SqlError` is a type that represents an error with its position.
+#[cfg(feature = "unstable")]
+use proc_macro::{Diagnostic, Level};
+#[cfg(not(feature = "unstable"))]
+use quote::Tokens;
+use syn::Span;
+
+#[cfg(feature = "unstable")]
+use to_proc_macro_span;
+
+/// `Error` is a type that represents an error with its position.
 #[derive(Debug)]
-pub struct SqlError {
+pub struct Error {
     pub code: Option<String>,
+    pub children: Vec<Error>,
     pub kind: ErrorType, // TODO: use an enum.
     pub message: String,
     pub position: Span,
 }
 
-/// `ErrorType` is an `SqlError` type.
+/// `ErrorType` is an `Error` type.
 #[derive(Debug)]
 pub enum ErrorType {
     Error,
@@ -40,122 +54,163 @@ pub enum ErrorType {
     Warning,
 }
 
-/// `SqlResult<T>` is a type that represents either a success (`Ok`) or failure (`Err`).
-/// The failure may be represented by multiple `SqlError`s.
-pub type SqlResult<T> = Result<T, Vec<SqlError>>;
+/// `Result<T>` is a type that represents either a success (`Ok`) or failure (`Err`).
+/// The failure may be represented by multiple `Error`s.
+pub type Result<T> = result::Result<T, Vec<Error>>;
 
-impl SqlError {
-    /// Returns a new `SqlError`.
+impl Error {
+    /// Returns a new `Error`.
     ///
     /// This is a shortcut for:
     ///
     /// ```
-    /// SqlError {
+    /// Error {
     ///     code: None,
+    ///     children: vec![],
     ///     kind: ErrorType::Error,
     ///     message: message,
-    ///     position: position,
+    ///     position,
     /// }
     /// ```
-    pub fn new(message: &str, position: Span) -> SqlError {
-        SqlError {
+    pub fn new(message: &str, position: Span) -> Self {
+        Self {
             code: None,
+            children: vec![],
             kind: ErrorType::Error,
-            message: message.to_owned(),
-            position: position,
+            message: message.to_string(),
+            position,
         }
     }
 
-    /// Returns a new `SqlError` of type help.
-    ///
-    /// This is a shortcut for:
-    ///
-    /// ```
-    /// SqlError {
-    ///     code: None,
-    ///     kind: ErrorType::Note,
-    ///     message: message,
-    ///     position: position,
-    /// }
-    pub fn new_help(message: &str, position: Span) -> SqlError {
-        SqlError {
+    /// Add a help children message to the current error.
+    pub fn add_help(&mut self, message: &str) {
+        self.children.push(Self {
             code: None,
+            children: vec![],
             kind: ErrorType::Help,
-            message: message.to_owned(),
-            position: position,
-        }
+            message: message.to_string(),
+            position: Span::default(),
+        });
     }
 
-    /// Returns a new `SqlError` of type note.
-    ///
-    /// This is a shortcut for:
-    ///
-    /// ```
-    /// SqlError {
-    ///     code: None,
-    ///     kind: ErrorType::Note,
-    ///     message: message,
-    ///     position: position,
-    /// }
-    pub fn new_note(message: &str, position: Span) -> SqlError {
-        SqlError {
+    /// Add a note children message to the current error.
+    pub fn add_note(&mut self, message: &str) {
+        self.children.push(Self {
             code: None,
+            children: vec![],
             kind: ErrorType::Note,
-            message: message.to_owned(),
-            position: position,
-        }
+            message: message.to_string(),
+            position: Span::default(),
+        });
     }
 
-    /// Returns a new `SqlError` of type warning.
+    /// Returns a new `Error` of type warning.
     ///
     /// This is a shortcut for:
     ///
     /// ```
-    /// SqlError {
+    /// Error {
     ///     code: None,
+    ///     children: vec![],
     ///     kind: ErrorType::Warning,
     ///     message: message,
-    ///     position: position,
+    ///     position,
     /// }
-    pub fn new_warning(message: &str, position: Span) -> SqlError {
-        SqlError {
+    pub fn new_warning(message: &str, position: Span) -> Self {
+        Self {
             code: None,
+            children: vec![],
             kind: ErrorType::Warning,
-            message: message.to_owned(),
-            position: position,
+            message: message.to_string(),
+            position,
         }
     }
 
-    /// Returns a new `SqlError` with a code.
+    /// Returns a new `Error` with a code.
     ///
     /// This is a shortcut for:
     ///
     /// ```
-    /// SqlError {
-    ///     code: Some(code.to_owned()),
+    /// Error {
+    ///     code: Some(code.to_string()),
+    ///     children: vec![],
     ///     kind: ErrorType::Error,
     ///     message: message,
-    ///     position: position,
+    ///     position,
     /// }
     /// ```
-    pub fn new_with_code(message: &str, position: Span, code: &str) -> SqlError {
-        SqlError {
-            code: Some(code.to_owned()),
+    pub fn new_with_code(message: &str, position: Span, code: &str) -> Self {
+        Self {
+            code: Some(code.to_string()),
+            children: vec![],
             kind: ErrorType::Error,
-            message: message.to_owned(),
-            position: position,
+            message: message.to_string(),
+            position,
         }
+    }
+
+    #[cfg(feature = "unstable")]
+    pub fn emit_diagnostic(self) {
+        let span = to_proc_macro_span(self.position);
+        let mut diagnostic = Diagnostic::spanned(span, self.kind.into(), self.message);
+        for child in self.children {
+            let func =
+                match child.kind {
+                    ErrorType::Error => Diagnostic::error,
+                    ErrorType::Help => Diagnostic::help,
+                    ErrorType::Note => Diagnostic::note,
+                    ErrorType::Warning => Diagnostic::warning,
+                };
+            diagnostic = func(diagnostic, child.message);
+        }
+        diagnostic.emit();
+    }
+
+    #[cfg(not(feature = "unstable"))]
+    fn to_string(&self) -> String {
+        let kind =
+            match self.kind {
+                ErrorType::Error => "",
+                ErrorType::Help => "help: ",
+                ErrorType::Note => "note: ",
+                ErrorType::Warning => "warning: ",
+            };
+        let mut messages = format!("{}{}", kind, self.message);
+        for child in &self.children {
+            messages += &format!("\n{}", child.to_string());
+        }
+        messages
     }
 }
 
-/// Returns an `SqlResult<T>` from potential result and errors.
+/// Returns an `Result<T>` from potential result and errors.
 /// Returns `Err` if there are at least one error.
 /// Otherwise, returns `Ok`.
-pub fn res<T>(result: T, errors: Vec<SqlError>) -> SqlResult<T> {
+pub fn res<T>(result: T, errors: Vec<Error>) -> Result<T> {
     if !errors.is_empty() {
         Err(errors)
     }
     else {
         Ok(result)
+    }
+}
+
+#[cfg(not(feature = "unstable"))]
+pub fn compiler_error(msg: &Error) -> Tokens {
+    let msg = msg.to_string();
+    quote! {
+        compile_error!(#msg);
+    }
+}
+
+#[cfg(feature = "unstable")]
+impl From<ErrorType> for Level {
+    fn from(error_type: ErrorType) -> Self {
+        match error_type {
+            ErrorType::Error => Level::Error,
+            ErrorType::Help => Level::Help,
+            ErrorType::Note => Level::Note,
+            ErrorType::Warning => Level::Warning,
+        }
     }
 }

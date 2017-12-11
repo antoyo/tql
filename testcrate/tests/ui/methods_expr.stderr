@@ -1,0 +1,11 @@
+error[E0308]: mismatched types
+  --> $DIR/methods_expr.rs:51:39
+   |
+51 |     sql!(Table.filter(field1.contains(value) == true));
+   |                                       ^^^^^ expected &str, found integral variable
+   |
+   = note: expected type `&str`
+              found type `{integer}`
+
+error: aborting due to previous error
+

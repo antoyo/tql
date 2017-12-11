@@ -1,62 +1,98 @@
 /*
- * Copyright (C) 2015  Boucher, Antoni <bouanto@zoho.com>
- * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 /// Analyzer for the aggregate() method.
 
-use syntax::ast::{BinOp_, ExprAssign, ExprCall, ExprParen, ExprPath, ExprUnary};
-use syntax::ast::Expr_::ExprBinary;
-use syntax::ast::UnOp;
-use syntax::codemap::{Span, Spanned};
+use syn::{
+    BinOp,
+    ExprAssign,
+    ExprBinary,
+    ExprCall,
+    ExprKind,
+    ExprParen,
+    ExprPath,
+    ExprUnary,
+    Span,
+    UnOp,
+};
 
-use ast::{Aggregate, AggregateFilter, AggregateFilterExpression, AggregateFilters, Expression, Identifier};
-use error::{SqlError, SqlResult, res};
+use ast::{
+    Aggregate,
+    AggregateFilter,
+    AggregateFilterExpression,
+    AggregateFilters,
+    Expression,
+    Identifier,
+    WithSpan,
+    expr_span,
+};
+use error::{Error, Result, res};
+use new_ident;
 use state::{SqlTable, aggregates_singleton};
-use super::{check_argument_count, check_field, path_expr_to_identifier, propose_similar_name};
+use super::{
+    check_argument_count,
+    check_field,
+    path_expr_to_identifier,
+    path_expr_to_string,
+    propose_similar_name,
+};
 use super::filter::{binop_to_logical_operator, binop_to_relational_operator, is_logical_operator, is_relational_operator};
 
 /// Convert an `Expression` to an `Aggregate`.
-pub fn argument_to_aggregate(arg: &Expression, _table: &SqlTable) -> SqlResult<Aggregate> {
+pub fn argument_to_aggregate(arg: &Expression, _table: &SqlTable) -> Result<Aggregate> {
     let mut errors = vec![];
     let mut aggregate = Aggregate::default();
     let aggregates = aggregates_singleton();
 
     let call = get_call_from_aggregate(arg, &mut aggregate, &mut errors);
 
-    if let ExprCall(ref function, ref arguments) = call.node {
-        if let Some(identifier) = path_expr_to_identifier(function, &mut errors) {
+    if let ExprKind::Call(ExprCall { ref func, ref args, .. }) = call.node {
+        if let Some(identifier) = path_expr_to_string(func, &mut errors) {
             if let Some(sql_function) = aggregates.get(&identifier) {
                 aggregate.function = sql_function.clone();
             }
             else {
-                errors.push(SqlError::new_with_code(
+                let mut error = Error::new_with_code(
                     &format!("unresolved name `{}`", identifier),
-                    arg.span,
+                    expr_span(arg),
                     "E0425",
-                ));
-                propose_similar_name(&identifier, aggregates.keys(), arg.span, &mut errors);
+                );
+                propose_similar_name(&identifier, aggregates.keys().map(String::as_ref), &mut error);
+                errors.push(error);
             }
         }
 
-        if check_argument_count(arguments, 1, arg.span, &mut errors) {
-            if let ExprPath(_, ref path) = arguments[0].node {
-                aggregate.field = path.segments[0].identifier.to_string();
+        if check_argument_count(args, 1, expr_span(arg), &mut errors) {
+            if let ExprKind::Path(ExprPath { ref path, .. }) = args.first().expect("first argument").item().node {
+                let path_ident = path.segments.first().unwrap().into_item().ident;
+                aggregate.field = Some(path_ident);
 
-                if aggregate.result_name.is_empty() {
-                    aggregate.result_name = aggregate.field.clone() + "_" + &aggregate.function.to_lowercase();
+                if aggregate.result_name.is_none() {
+                    let result_name = aggregate.field.expect("Aggregate identifier").to_string() + "_" +
+                        &aggregate.function.to_lowercase();
+                    let mut ident = new_ident(&result_name);
+                    // NOTE: violate the hygiene by assigning a known context to this new
+                    // identifier.
+                    ident.span = path_ident.span;
+                    aggregate.result_name = Some(ident);
                 }
             }
             else {
@@ -65,9 +101,9 @@ pub fn argument_to_aggregate(arg: &Expression, _table: &SqlTable) -> SqlResult<A
         }
     }
     else {
-        errors.push(SqlError::new(
+        errors.push(Error::new(
             "Expected function call", // TODO: improve this message.
-            arg.span,
+            expr_span(arg),
         ));
     }
 
@@ -75,28 +111,28 @@ pub fn argument_to_aggregate(arg: &Expression, _table: &SqlTable) -> SqlResult<A
 }
 
 /// Convert an `Expression` to a group `Identifier`.
-pub fn argument_to_group(arg: &Expression, table: &SqlTable) -> SqlResult<Identifier> {
+pub fn argument_to_group(arg: &Expression, table: &SqlTable) -> Result<Identifier> {
     let mut errors = vec![];
-    let mut group = "".to_owned();
+    let mut group = "".to_string();
 
     if let Some(identifier) = path_expr_to_identifier(arg, &mut errors) {
-        check_field(&identifier, arg.span, table, &mut errors);
-        group = identifier;
+        check_field(&identifier, expr_span(arg), table, &mut errors);
+        group = identifier.to_string();
     }
 
     res(group, errors)
 }
 
 /// Convert a Rust binary expression to an `AggregateFilterExpression` for an aggregate filter.
-fn binary_expression_to_aggregate_filter_expression(expr1: &Expression, op: BinOp_, expr2: &Expression, aggregates: &[Aggregate], table: &SqlTable) -> SqlResult<AggregateFilterExpression> {
+fn binary_expression_to_aggregate_filter_expression(expr1: &Expression, op: &BinOp, expr2: &Expression, aggregates: &[Aggregate], table: &SqlTable) -> Result<AggregateFilterExpression> {
     // TODO: accumulate the errors instead of stopping at the first one.
-    let filter1 = try!(expression_to_aggregate_filter_expression(expr1, aggregates, table));
+    let filter1 = expression_to_aggregate_filter_expression(expr1, aggregates, table)?;
     // TODO: return errors instead of dummy.
     let dummy = AggregateFilterExpression::NoFilters;
 
     let filter =
         if is_logical_operator(op) {
-            let filter2 = try!(expression_to_aggregate_filter_expression(expr2, aggregates, table));
+            let filter2 = expression_to_aggregate_filter_expression(expr2, aggregates, table)?;
             AggregateFilterExpression::Filters(AggregateFilters {
                 operand1: Box::new(filter1),
                 operator: binop_to_logical_operator(op),
@@ -122,10 +158,10 @@ fn binary_expression_to_aggregate_filter_expression(expr1: &Expression, op: BinO
 }
 
 /// Check that an aggregate field exists.
-fn check_aggregate_field<'a>(identifier: &str, aggregates: &'a [Aggregate], position: Span, errors: &mut Vec<SqlError>) -> Option<&'a Aggregate> {
-    let result = aggregates.iter().find(|aggr| aggr.result_name == identifier);
+fn check_aggregate_field<'a>(identifier: &str, aggregates: &'a [Aggregate], position: Span, errors: &mut Vec<Error>) -> Option<&'a Aggregate> {
+    let result = aggregates.iter().find(|aggr| aggr.result_name.as_ref().map(|name| name.as_ref()) == Some(identifier));
     if let None = result {
-        errors.push(SqlError::new(
+        errors.push(Error::new(
             &format!("no aggregate field named `{}` found", identifier), // TODO: improve this message.
             position
         ));
@@ -135,40 +171,41 @@ fn check_aggregate_field<'a>(identifier: &str, aggregates: &'a [Aggregate], posi
 }
 
 /// Convert a Rust expression to an `AggregateFilterExpression` for an aggregate filter.
-pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &[Aggregate], table: &SqlTable) -> SqlResult<AggregateFilterExpression> {
+pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &[Aggregate], table: &SqlTable) -> Result<AggregateFilterExpression> {
     let mut errors = vec![];
 
     let filter =
         match arg.node {
-            ExprBinary(Spanned { node: op, .. }, ref expr1, ref expr2) => {
-                try!(binary_expression_to_aggregate_filter_expression(expr1, op, expr2, aggregates, table))
+            ExprKind::Binary(ExprBinary { ref op, ref left, ref right }) => {
+                binary_expression_to_aggregate_filter_expression(left, op, right, aggregates, table)?
             },
-            ExprPath(None, ref path) => {
-                let identifier = path.segments[0].identifier.to_string();
-                let aggregate = check_aggregate_field(&identifier, aggregates, path.span, &mut errors);
+            ExprKind::Path(ExprPath { ref path, .. }) => {
+                let segment_ident = path.segments.first().unwrap().into_item().ident;
+                let identifier = segment_ident.to_string();
+                let aggregate = check_aggregate_field(&identifier, aggregates, segment_ident.span, &mut errors);
                 if let Some(aggregate) = aggregate {
                     // Transform the aggregate field name to its SQL representation.
-                    AggregateFilterExpression::FilterValue(Spanned {
+                    AggregateFilterExpression::FilterValue(WithSpan {
                         node: aggregate.clone(),
-                        span: arg.span,
+                        span: expr_span(arg),
                     })
                 }
                 else {
                     AggregateFilterExpression::NoFilters
                 }
             },
-            ExprParen(ref expr) => {
-                let filter = try!(expression_to_aggregate_filter_expression(expr, aggregates, table));
-                AggregateFilterExpression::ParenFilter(box filter)
+            ExprKind::Paren(ExprParen { ref expr, .. }) => {
+                let filter = expression_to_aggregate_filter_expression(expr, aggregates, table)?;
+                AggregateFilterExpression::ParenFilter(Box::new(filter))
             },
-            ExprUnary(UnOp::UnNot, ref expr) => {
-                let filter = try!(expression_to_aggregate_filter_expression(expr, aggregates, table));
-                AggregateFilterExpression::NegFilter(box filter)
+            ExprKind::Unary(ExprUnary { op: UnOp::Not(_), ref expr }) => {
+                let filter = expression_to_aggregate_filter_expression(expr, aggregates, table)?;
+                AggregateFilterExpression::NegFilter(Box::new(filter))
             },
             _ => {
-                errors.push(SqlError::new(
+                errors.push(Error::new(
                     "Expected binary operation", // TODO: improve this message.
-                    arg.span,
+                    expr_span(arg),
                 ));
                 AggregateFilterExpression::NoFilters
             },
@@ -178,13 +215,13 @@ pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &
 }
 
 /// Get the call expression from an `arg` expression.
-fn get_call_from_aggregate<'a>(arg: &'a Expression, aggregate: &mut Aggregate, errors: &mut Vec<SqlError>) -> &'a Expression {
+fn get_call_from_aggregate<'a>(arg: &'a Expression, aggregate: &mut Aggregate, errors: &mut Vec<Error>) -> &'a Expression {
     // If the `arg` expression is an assignment, the call is on the right side.
-    if let ExprAssign(ref left_value, ref right_value) = arg.node {
-        if let Some(identifier) = path_expr_to_identifier(left_value, errors) {
-            aggregate.result_name = identifier; // TODO
+    if let ExprKind::Assign(ExprAssign { ref left, ref right, .. }) = arg.node {
+        if let Some(identifier) = path_expr_to_identifier(left, errors) {
+            aggregate.result_name = Some(identifier); // TODO
         }
-        right_value
+        right
     }
     else {
         arg

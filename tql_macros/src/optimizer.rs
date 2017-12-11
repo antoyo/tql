@@ -1,27 +1,36 @@
 /*
- * Copyright (C) 2015  Boucher, Antoni <bouanto@zoho.com>
- * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 /// A Query optimizer.
 
 // TODO: simplify expression composed of only literals.
 
-use syntax::ast::BinOp_::{BiAdd, BiSub};
-use syntax::ast::Expr_::{ExprBinary, ExprLit};
-use syntax::ast::Lit_::LitInt;
+use literalext::LiteralExt;
+use syn::{
+    BinOp,
+    ExprBinary,
+    ExprKind,
+    Lit,
+    LitKind,
+};
 
 use ast::{Expression, Limit, Query};
 use ast::Limit::{EndRange, Index, LimitOffset, Range, StartRange};
@@ -30,30 +39,30 @@ use plugin::number_literal;
 /// Check that all the expressions in `expression` are literal.
 fn all_integer_literal(expression: &Expression) -> bool {
     match expression.node {
-        ExprLit(ref literal) => {
-            match literal.node {
-                LitInt(_, _) => true,
-                _ => false,
-            }
+        ExprKind::Lit(Lit { value: LitKind::Other(ref literal), .. }) => {
+            literal.parse_int().is_some()
         },
-        ExprBinary(_, ref expr1, ref expr2) => all_integer_literal(expr1) && all_integer_literal(expr2),
+        ExprKind::Binary(ExprBinary { ref left, ref right, .. }) => all_integer_literal(left) && all_integer_literal(right),
         _ => false,
     }
 }
 
 /// Reduce an `expression` containing only literals to a mere literal.
-fn evaluate(expression: &Expression) -> u64 {
+fn evaluate(expression: &Expression) -> i64 {
     match expression.node {
-        ExprLit(ref literal) => {
-            match literal.node {
-                LitInt(number, _) => number,
-                _ => 0,
+        ExprKind::Lit(Lit { value: LitKind::Other(ref literal), .. }) => {
+            if let Some(int_literal) = literal.parse_int() {
+                // TODO: handle other types.
+                int_literal.as_i64().expect("cannot get i64")
+            }
+            else {
+                0
             }
         },
-        ExprBinary(op, ref expr1, ref expr2) =>
-            match op.node {
-                BiAdd => evaluate(expr1) + evaluate(expr2),
-                BiSub => evaluate(expr1) - evaluate(expr2),
+        ExprKind::Binary(ExprBinary { op, ref left, ref right }) =>
+            match op {
+                BinOp::Add(_) => evaluate(left) + evaluate(right),
+                BinOp::Sub(_) => evaluate(left) - evaluate(right),
                 _ => 0,
             },
         _ => 0,

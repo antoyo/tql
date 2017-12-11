@@ -1,36 +1,68 @@
 /*
- * Copyright (C) 2015  Boucher, Antoni <bouanto@zoho.com>
- * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 /// Analyzer for the filter() method.
 
-use syntax::ast::{BinOp_, Expr, Path, SpannedIdent};
-use syntax::ast::Expr_::{ExprBinary, ExprMethodCall, ExprParen, ExprPath, ExprUnary};
-use syntax::ast::UnOp;
-use syntax::codemap::{Span, Spanned};
-use syntax::ptr::P;
+use syn::{
+    BinOp,
+    Expr,
+    ExprBinary,
+    ExprMethodCall,
+    ExprKind,
+    ExprParen,
+    ExprPath,
+    ExprUnary,
+    Ident,
+    Path,
+    Span,
+    UnOp,
+};
+use syn::delimited::Delimited;
+use syn::tokens::Comma;
 
-use ast::{self, Expression, Filter, FilterExpression, Filters, FilterValue, LogicalOperator, RelationalOperator};
-use error::{SqlError, SqlResult, res};
+use ast::{
+    self,
+    Expression,
+    Filter,
+    FilterExpression,
+    Filters,
+    FilterValue,
+    LogicalOperator,
+    RelationalOperator,
+    WithSpan,
+    expr_span,
+};
+use error::{Error, Result, res};
 use state::{SqlMethod, SqlMethodTypes, SqlTable, methods_singleton};
-use super::{check_field, check_field_type, check_type, check_type_filter_value, propose_similar_name};
+use super::{
+    check_field,
+    check_field_type,
+    check_type,
+    check_type_filter_value,
+    propose_similar_name,
+};
 use types::Type;
 
 /// Analyze the types of the `FilterExpression`.
-pub fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors: &mut Vec<SqlError>) {
+pub fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors: &mut Vec<Error>) {
     // TODO: check that operators are used with the good types (perhaps not necessary because all
     // types may support all operators)?
     match *filter {
@@ -55,15 +87,15 @@ pub fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors:
 }
 
 /// Convert a Rust binary expression to a `FilterExpression`.
-fn binary_expression_to_filter_expression(expr1: &Expression, op: BinOp_, expr2: &Expression, table: &SqlTable) -> SqlResult<FilterExpression> {
+fn binary_expression_to_filter_expression(expr1: &Expression, op: &BinOp, expr2: &Expression, table: &SqlTable) -> Result<FilterExpression> {
     // TODO: accumulate the errors instead of stopping when the first one is encountered.
-    let filter1 = try!(expression_to_filter_expression(expr1, table));
+    let filter1 = expression_to_filter_expression(expr1, table)?;
     // TODO: return errors instead of dummy.
     let dummy = FilterExpression::NoFilters;
 
     let filter =
         if is_logical_operator(op) {
-            let filter2 = try!(expression_to_filter_expression(expr2, table));
+            let filter2 = expression_to_filter_expression(expr2, table)?;
             FilterExpression::Filters(Filters {
                 operand1: Box::new(filter1),
                 operator: binop_to_logical_operator(op),
@@ -88,96 +120,79 @@ fn binary_expression_to_filter_expression(expr1: &Expression, op: BinOp_, expr2:
     Ok(filter)
 }
 
-/// Convert a `BinOp_` to an SQL `LogicalOperator`.
-pub fn binop_to_logical_operator(binop: BinOp_) -> LogicalOperator {
-    match binop {
-        BinOp_::BiAdd => unreachable!(),
-        BinOp_::BiSub => unreachable!(),
-        BinOp_::BiMul => unreachable!(),
-        BinOp_::BiDiv => unreachable!(),
-        BinOp_::BiRem => unreachable!(),
-        BinOp_::BiAnd => LogicalOperator::And,
-        BinOp_::BiOr => LogicalOperator::Or,
-        BinOp_::BiBitXor => unreachable!(),
-        BinOp_::BiBitAnd => unreachable!(),
-        BinOp_::BiBitOr => unreachable!(),
-        BinOp_::BiShl => unreachable!(),
-        BinOp_::BiShr => unreachable!(),
-        BinOp_::BiEq => unreachable!(),
-        BinOp_::BiLt => unreachable!(),
-        BinOp_::BiLe => unreachable!(),
-        BinOp_::BiNe => unreachable!(),
-        BinOp_::BiGe => unreachable!(),
-        BinOp_::BiGt => unreachable!(),
+/// Convert a `BinOp` to an SQL `LogicalOperator`.
+pub fn binop_to_logical_operator(binop: &BinOp) -> LogicalOperator {
+    match *binop {
+        BinOp::And(_) => LogicalOperator::And,
+        BinOp::Or(_) => LogicalOperator::Or,
+        BinOp::Add(_) | BinOp::AddEq(_) | BinOp::Sub(_) | BinOp::SubEq(_) | BinOp::Mul(_) | BinOp::MulEq(_) |
+            BinOp::Div(_) | BinOp::DivEq(_) | BinOp::Rem(_) | BinOp::RemEq(_) | BinOp::BitXor(_) |
+            BinOp::BitXorEq(_) | BinOp::BitAnd(_) | BinOp::BitAndEq(_) | BinOp::BitOr(_) | BinOp::BitOrEq(_) |
+            BinOp::Shl(_) | BinOp::ShlEq(_) | BinOp::Shr(_) | BinOp::ShrEq(_) | BinOp::Eq(_) | BinOp::Lt(_) |
+            BinOp::Le(_) | BinOp::Ne(_) | BinOp::Ge(_) | BinOp::Gt(_) =>
+            unreachable!("binop_to_logical_operator"),
     }
 }
 
-/// Convert a `BinOp_` to an SQL `RelationalOperator`.
-pub fn binop_to_relational_operator(binop: BinOp_) -> RelationalOperator {
-    match binop {
-        BinOp_::BiAdd => unreachable!(),
-        BinOp_::BiSub => unreachable!(),
-        BinOp_::BiMul => unreachable!(),
-        BinOp_::BiDiv => unreachable!(),
-        BinOp_::BiRem => unreachable!(),
-        BinOp_::BiAnd => unreachable!(),
-        BinOp_::BiOr => unreachable!(),
-        BinOp_::BiBitXor => unreachable!(),
-        BinOp_::BiBitAnd => unreachable!(),
-        BinOp_::BiBitOr => unreachable!(),
-        BinOp_::BiShl => unreachable!(),
-        BinOp_::BiShr => unreachable!(),
-        BinOp_::BiEq => RelationalOperator::Equal,
-        BinOp_::BiLt => RelationalOperator::LesserThan,
-        BinOp_::BiLe => RelationalOperator::LesserThanEqual,
-        BinOp_::BiNe => RelationalOperator::NotEqual,
-        BinOp_::BiGe => RelationalOperator::GreaterThan,
-        BinOp_::BiGt => RelationalOperator::GreaterThanEqual,
+/// Convert a `BinOp` to an SQL `RelationalOperator`.
+pub fn binop_to_relational_operator(binop: &BinOp) -> RelationalOperator {
+    match *binop {
+        BinOp::Eq(_) => RelationalOperator::Equal,
+        BinOp::Lt(_) => RelationalOperator::LesserThan,
+        BinOp::Le(_) => RelationalOperator::LesserThanEqual,
+        BinOp::Ne(_) => RelationalOperator::NotEqual,
+        BinOp::Ge(_) => RelationalOperator::GreaterThan,
+        BinOp::Gt(_) => RelationalOperator::GreaterThanEqual,
+        BinOp::Add(_) | BinOp::AddEq(_) | BinOp::Sub(_) | BinOp::SubEq(_) | BinOp::Mul(_) | BinOp::MulEq(_) |
+            BinOp::Div(_) | BinOp::DivEq(_) | BinOp::Rem(_) | BinOp::RemEq(_) | BinOp::And(_) | BinOp::Or(_) |
+            BinOp::BitXor(_) | BinOp::BitXorEq(_) | BinOp::BitAnd(_) | BinOp::BitAndEq(_) | BinOp::BitOr(_) |
+            BinOp::BitOrEq(_) | BinOp::Shl(_) | BinOp::ShlEq(_) | BinOp::Shr(_) | BinOp::ShrEq(_) =>
+            unreachable!("binop_to_relational_operator"),
     }
 }
 
 /// Check the type of the arguments of the method.
-fn check_method_arguments(arguments: &[Expression], argument_types: &[Type], errors: &mut Vec<SqlError>) {
+fn check_method_arguments(arguments: &[Expression], argument_types: &[Type], errors: &mut Vec<Error>) {
     for (argument, argument_type) in arguments.iter().zip(argument_types) {
         check_type(argument_type, argument, errors)
     }
 }
 
 /// Convert a Rust expression to a `FilterExpression`.
-pub fn expression_to_filter_expression(arg: &P<Expr>, table: &SqlTable) -> SqlResult<FilterExpression> {
+pub fn expression_to_filter_expression(arg: &Expression, table: &SqlTable) -> Result<FilterExpression> {
     let mut errors = vec![];
 
     let filter =
         match arg.node {
-            ExprBinary(Spanned { node: op, .. }, ref expr1, ref expr2) => {
-                try!(binary_expression_to_filter_expression(expr1, op, expr2, table))
+            ExprKind::Binary(ExprBinary { ref op, ref left, ref right }) => {
+                binary_expression_to_filter_expression(left, op, right, table)?
             },
-            ExprMethodCall(identifier, _, ref exprs) => {
-                FilterExpression::FilterValue(Spanned {
-                    node: method_call_expression_to_filter_expression(identifier, &exprs, table, &mut errors),
-                    span: arg.span,
+            ExprKind::MethodCall(ExprMethodCall { method, ref expr, ref args, .. }) => {
+                FilterExpression::FilterValue(WithSpan {
+                    node: method_call_expression_to_filter_expression(method, expr, args, table, &mut errors),
+                    span: expr_span(&arg),
                 })
             },
-            ExprPath(None, ref path) => {
-                let identifier = path.segments[0].identifier.to_string();
-                check_field(&identifier, path.span, table, &mut errors);
-                FilterExpression::FilterValue(Spanned {
+            ExprKind::Path(ExprPath { ref path, .. }) => {
+                let identifier = path.segments.first().unwrap().into_item().ident;
+                check_field(&identifier, identifier.span, table, &mut errors);
+                FilterExpression::FilterValue(WithSpan {
                     node: FilterValue::Identifier(identifier),
-                    span: arg.span,
+                    span: expr_span(&arg),
                 })
             },
-            ExprParen(ref expr) => {
-                let filter = try!(expression_to_filter_expression(expr, table));
-                FilterExpression::ParenFilter(box filter)
+            ExprKind::Paren(ExprParen { ref expr, .. }) => {
+                let filter = expression_to_filter_expression(expr, table)?;
+                FilterExpression::ParenFilter(Box::new(filter))
             },
-            ExprUnary(UnOp::UnNot, ref expr) => {
-                let filter = try!(expression_to_filter_expression(expr, table));
-                FilterExpression::NegFilter(box filter)
+            ExprKind::Unary(ExprUnary { op: UnOp::Not(_), ref expr }) => {
+                let filter = expression_to_filter_expression(expr, table)?;
+                FilterExpression::NegFilter(Box::new(filter))
             },
             _ => {
-                errors.push(SqlError::new(
+                errors.push(Error::new(
                     "Expected binary operation", // TODO: improve this message.
-                    arg.span,
+                    expr_span(arg),
                 ));
                 FilterExpression::NoFilters
             },
@@ -187,11 +202,11 @@ pub fn expression_to_filter_expression(arg: &P<Expr>, table: &SqlTable) -> SqlRe
 }
 
 /// Get an SQL method and arguments by type and name.
-fn get_method<'a>(object_type: &'a Spanned<Type>, exprs: &[Expression], method_name: &str, identifier: SpannedIdent, errors: &mut Vec<SqlError>) -> Option<(&'a SqlMethodTypes, Vec<Expression>)> {
+fn get_method<'a>(object_type: &'a WithSpan<Type>, args: &Delimited<Expr, Comma>, method_name: &str, identifier: Ident, errors: &mut Vec<Error>) -> Option<(&'a SqlMethodTypes, Vec<Expression>)> {
     let methods = methods_singleton();
     let type_methods =
         if let Type::Nullable(_) = object_type.node {
-            methods.get(&Type::Nullable(box Type::Generic))
+            methods.get(&Type::Nullable(Box::new(Type::Generic)))
         }
         else {
             methods.get(&object_type.node)
@@ -200,7 +215,10 @@ fn get_method<'a>(object_type: &'a Spanned<Type>, exprs: &[Expression], method_n
         Some(type_methods) => {
             match type_methods.get(method_name) {
                 Some(sql_method) => {
-                    let arguments: Vec<Expression> = exprs[1..].iter().cloned().collect();
+                    let arguments: Vec<Expression> = args.iter()
+                        .map(|element| element.item().clone())
+                        .cloned()
+                        .collect();
                     check_method_arguments(&arguments, &sql_method.argument_types, errors);
                     Some((sql_method, arguments))
                 },
@@ -217,34 +235,36 @@ fn get_method<'a>(object_type: &'a Spanned<Type>, exprs: &[Expression], method_n
     }
 }
 
-/// Check if a `BinOp_` is a `LogicalOperator`.
-pub fn is_logical_operator(binop: BinOp_) -> bool {
-    match binop {
-        BinOp_::BiAnd | BinOp_::BiOr => true,
+/// Check if a `BinOp` is a `LogicalOperator`.
+pub fn is_logical_operator(binop: &BinOp) -> bool {
+    match *binop {
+        BinOp::And(_) | BinOp::Or(_) => true,
         _ => false,
     }
 }
 
-/// Check if a `BinOp_` is a `RelationalOperator`.
-pub fn is_relational_operator(binop: BinOp_) -> bool {
-    match binop {
-        BinOp_::BiEq | BinOp_::BiLt | BinOp_::BiLe | BinOp_::BiNe | BinOp_::BiGe | BinOp_::BiGt => true,
+/// Check if a `BinOp` is a `RelationalOperator`.
+pub fn is_relational_operator(binop: &BinOp) -> bool {
+    match *binop {
+        BinOp::Eq(_) | BinOp::Lt(_) | BinOp::Le(_) | BinOp::Ne(_) | BinOp::Ge(_) | BinOp::Gt(_) => true,
         _ => false,
     }
 }
 
 /// Convert a method call expression to a filter expression.
-fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: &[Expression], table: &SqlTable, errors: &mut Vec<SqlError>) -> FilterValue {
-    let method_name = identifier.node.name.to_string();
-    let dummy = FilterValue::Identifier("".to_owned());
-    match exprs[0].node {
-        ExprPath(_, ref path) => {
-            path_method_call_to_filter(path, identifier, &method_name, exprs, table, errors)
+fn method_call_expression_to_filter_expression(identifier: Ident, expr: &Expression, args: &Delimited<Expr, Comma>,
+    table: &SqlTable, errors: &mut Vec<Error>) -> FilterValue
+{
+    let method_name = identifier.to_string();
+    let dummy = FilterValue::None;
+    match expr.node {
+        ExprKind::Path(ExprPath { ref path, .. }) => {
+            path_method_call_to_filter(path, identifier, &method_name, args, table, errors)
         },
         _ => {
-            errors.push(SqlError::new(
+            errors.push(Error::new(
                 "expected identifier", // TODO: improve this message.
-                exprs[0].span,
+                expr_span(expr),
             ));
             dummy
         },
@@ -252,19 +272,21 @@ fn method_call_expression_to_filter_expression(identifier: SpannedIdent, exprs: 
 }
 
 /// Convert a method call where the object is an identifier to a filter expression.
-fn path_method_call_to_filter(path: &Path, identifier: SpannedIdent, method_name: &str, exprs: &[Expression], table: &SqlTable, errors: &mut Vec<SqlError>) -> FilterValue {
+fn path_method_call_to_filter(path: &Path, identifier: Ident, method_name: &str, args: &Delimited<Expr, Comma>,
+                              table: &SqlTable, errors: &mut Vec<Error>) -> FilterValue
+{
     // TODO: return errors instead of dummy.
-    let dummy = FilterValue::Identifier("".to_owned());
-    let object_name = path.segments[0].identifier.name.to_string();
+    let dummy = FilterValue::None;
+    let object_name = path.segments.first().unwrap().into_item().ident;
     match table.fields.get(&object_name) {
         Some(object_type) => {
-            let type_method = get_method(object_type, exprs, method_name, identifier, errors);
+            let type_method = get_method(&object_type.ty, args, method_name, identifier, errors);
 
             if let Some((&SqlMethodTypes { ref template, .. }, ref arguments)) = type_method {
                 FilterValue::MethodCall(ast::MethodCall {
                     arguments: arguments.clone(),
-                    method_name: method_name.to_owned(),
-                    object_name: object_name,
+                    method_name: method_name.to_string(),
+                    object_name,
                     template: template.clone(),
                 })
             }
@@ -274,7 +296,7 @@ fn path_method_call_to_filter(path: &Path, identifier: SpannedIdent, method_name
             }
         },
         None => {
-            check_field(&object_name, path.span, table, errors);
+            check_field(&object_name, object_name.span, table, errors);
             dummy
         },
     }
@@ -282,12 +304,13 @@ fn path_method_call_to_filter(path: &Path, identifier: SpannedIdent, method_name
 
 /// Add an error to the vector `errors` about an unknown SQL method.
 /// It suggests a similar name if there is one.
-fn unknown_method(position: Span, object_type: &Type, method_name: &str, type_methods: Option<&SqlMethod>, errors: &mut Vec<SqlError>) {
-    errors.push(SqlError::new(
+fn unknown_method(position: Span, object_type: &Type, method_name: &str, type_methods: Option<&SqlMethod>, errors: &mut Vec<Error>) {
+    let mut error = Error::new(
         &format!("no method named `{}` found for type `{}`", method_name, object_type),
         position,
-    ));
+    );
     if let Some(type_methods) = type_methods {
-        propose_similar_name(method_name, type_methods.keys(), position, errors);
+        propose_similar_name(method_name, type_methods.keys().map(String::as_ref), &mut error);
     }
+    errors.push(error);
 }

@@ -1,18 +1,22 @@
 /*
- * Copyright (C) 2015  Boucher, Antoni <bouanto@zoho.com>
- * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 //! String proximity lookup function.
@@ -30,9 +34,9 @@ macro_rules! min {
 }
 
 /// Finds a near match of `str_to_check` in `strings`.
-#[allow(needless_lifetimes)]
-pub fn find_near<'a, T>(str_to_check: &str, strings: T) -> Option<&'a String>
-    where T: Iterator<Item = &'a String>
+//#[allow(needless_lifetimes)]
+pub fn find_near<'a, T>(str_to_check: &str, strings: T) -> Option<&'a str>
+    where T: Iterator<Item = &'a str>
 {
     let mut result = None;
     let mut best_distance = str_to_check.len();
@@ -49,7 +53,7 @@ pub fn find_near<'a, T>(str_to_check: &str, strings: T) -> Option<&'a String>
 }
 
 /// Returns the Levensthein distance between `string1` and `string2`.
-#[allow(needless_range_loop)]
+//#[allow(needless_range_loop)]
 fn levenshtein_distance(string1: &str, string2: &str) -> usize {
     fn distance(i: usize, j: usize, d: &[Vec<usize>], string1: &str, string2: &str) -> usize {
         match (i, j) {

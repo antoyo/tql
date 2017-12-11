@@ -1,22 +1,25 @@
 /*
- * Copyright (C) 2015  Boucher, Antoni <bouanto@zoho.com>
- * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#![feature(box_patterns, plugin, slice_patterns)]
-#![plugin(tql_macros)]
+#![feature(proc_macro)]
 
 macro_rules! let_vec {
     ( $($name:ident),* = $vector:ident ) => {
@@ -29,34 +32,37 @@ use std::str::FromStr;
 extern crate chrono;
 extern crate postgres;
 extern crate tql;
+#[macro_use]
+extern crate tql_macros;
 
-use chrono::datetime::DateTime;
-use chrono::offset::utc::UTC;
-use postgres::{Connection, SslMode};
+use chrono::DateTime;
+use chrono::offset::Utc;
+use postgres::{Connection, TlsMode};
 use tql::{ForeignKey, PrimaryKey};
+use tql_macros::sql;
 
 mod teardown;
 
 use teardown::TearDown;
 
-#[SqlTable]
+#[derive(SqlTable)]
 struct TableSelectExpr {
     id: PrimaryKey,
     field1: String,
     field2: i32,
     related_field: ForeignKey<RelatedTableSelectExpr>,
     optional_field: Option<i32>,
-    datetime: DateTime<UTC>,
+    datetime: DateTime<Utc>,
 }
 
-#[SqlTable]
+#[derive(SqlTable)]
 struct RelatedTableSelectExpr {
     id: PrimaryKey,
     field1: i32,
 }
 
 fn get_connection() -> Connection {
-    Connection::connect("postgres://test:test@localhost/database", &SslMode::None).unwrap()
+    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
 }
 
 #[test]
@@ -71,8 +77,8 @@ fn test_select() {
     let _ = sql!(RelatedTableSelectExpr.create());
     let _ = sql!(TableSelectExpr.create());
 
-    let datetime: DateTime<UTC> = FromStr::from_str("2015-11-16T15:51:12-05:00").unwrap();
-    let datetime2: DateTime<UTC> = FromStr::from_str("2013-11-15T15:51:12-05:00").unwrap();
+    let datetime: DateTime<Utc> = FromStr::from_str("2015-11-16T15:51:12-05:00").unwrap();
+    let datetime2: DateTime<Utc> = FromStr::from_str("2013-11-15T15:51:12-05:00").unwrap();
 
     let id = sql!(RelatedTableSelectExpr.insert(field1 = 42)).unwrap();
     let related_field = sql!(RelatedTableSelectExpr.get(id)).unwrap();
@@ -126,7 +132,7 @@ fn test_select() {
     let_vec!(table1 = tables);
     assert_eq!("value2", table1.field1);
     assert_eq!(42, table1.field2);
-    
+
     let mut tables = sql!(TableSelectExpr.filter(field2 > value));
     assert_eq!(2, tables.len());
     let_vec!(table1, table2 = tables);
@@ -276,15 +282,15 @@ fn test_select() {
     assert_eq!(id4, table4.id);
     assert_eq!(id5, table5.id);
 
-    let mut tables = sql!(TableSelectExpr.filter(field1.match("%3")));
+    let mut tables = sql!(TableSelectExpr.filter(field1.regex("%3")));
     assert_eq!(1, tables.len());
     let_vec!(table1 = tables);
     assert_eq!(id3, table1.id);
 
-    let tables = sql!(TableSelectExpr.filter(field1.match("%E3")));
+    let tables = sql!(TableSelectExpr.filter(field1.regex("%E3")));
     assert_eq!(0, tables.len());
 
-    let mut tables = sql!(TableSelectExpr.filter(field1.imatch("%E3")));
+    let mut tables = sql!(TableSelectExpr.filter(field1.iregex("%E3")));
     assert_eq!(1, tables.len());
     let_vec!(table1 = tables);
     assert_eq!(id3, table1.id);

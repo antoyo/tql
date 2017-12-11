@@ -1,0 +1,18 @@
+warning: No primary key found
+  --> $DIR/sql_table_expr.rs:38:8
+   |
+38 | struct Table {
+   |        ^^^^^
+
+error[E0601]: main function not found
+
+error[E0277]: the trait bound `Connection: tql::SqlTable` is not satisfied
+  --> $DIR/sql_table_expr.rs:41:32
+   |
+41 |     related_field1: ForeignKey<Connection>,
+   |                                ^^^^^^^^^^ the trait `tql::SqlTable` is not implemented for `Connection`
+   |
+   = note: required by `tql::SqlTable`
+
+error: aborting due to 2 previous errors
+

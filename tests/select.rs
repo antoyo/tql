@@ -1,32 +1,38 @@
 /*
- * Copyright (C) 2015  Boucher, Antoni <bouanto@zoho.com>
- * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#![feature(plugin)]
-#![plugin(tql_macros)]
+#![feature(proc_macro)]
 
 extern crate chrono;
 extern crate postgres;
 extern crate tql;
+#[macro_use]
+extern crate tql_macros;
 
-use chrono::datetime::DateTime;
-use chrono::offset::utc::UTC;
+use chrono::DateTime;
+use chrono::offset::Utc;
 use tql::{ForeignKey, PrimaryKey};
+use tql_macros::to_sql;
 
-#[SqlTable]
+#[derive(SqlTable)]
 #[allow(dead_code)]
 struct Table {
     id: PrimaryKey,
@@ -34,10 +40,10 @@ struct Table {
     field2: i32,
     field3: Option<i32>,
     related_field: ForeignKey<RelatedTable>,
-    date: DateTime<UTC>,
+    date: DateTime<Utc>,
 }
 
-#[SqlTable]
+#[derive(SqlTable)]
 #[allow(dead_code)]
 struct RelatedTable {
     id: PrimaryKey,
@@ -146,15 +152,15 @@ fn test_filter_method_call() {
     );
     assert_eq!(
         format!("{} FROM Table WHERE field1 LIKE '%3'", SELECT),
-        to_sql!(Table.filter(field1.match(r"%3")))
+        to_sql!(Table.filter(field1.regex(r"%3")))
     );
     assert_eq!(
         format!("{} FROM Table WHERE field1 LIKE '%E3'", SELECT),
-        to_sql!(Table.filter(field1.match(r"%E3")))
+        to_sql!(Table.filter(field1.regex(r"%E3")))
     );
     assert_eq!(
         format!("{} FROM Table WHERE field1 ILIKE '%E3'", SELECT),
-        to_sql!(Table.filter(field1.imatch(r"%E3")))
+        to_sql!(Table.filter(field1.iregex(r"%E3")))
     );
 }
 

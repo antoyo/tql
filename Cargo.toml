@@ -1,29 +1,34 @@
 [package]
-name = "tql"
-version = "0.0.1"
 authors = ["Antoni Boucher <bouanto@zoho.com>"]
-description = "ORM as a compiler plugin (runtime library)"
-homepage = "http://tql.tuxfamily.org/"
-repository = "http://git.tuxfamily.org/tql/tql.git"
-license = "GPL-3.0"
-
-[lib]
+categories = ["database"]
 name = "tql"
-doc = true
+version = "0.1.0"
 
 [dependencies]
-chrono = "0.2"
-postgres = { version = "0.10.2", features = ["chrono"] }
+
+[dependencies.postgres]
+optional = true
+version = "^0.15.1"
 
 [dev-dependencies]
-chrono = "0.2"
-compiletest_rs = "0.0.11"
-handlebars-iron = "0.9.1"
-iron = "0.2.6"
-persistent = "0.0.8"
-postgres = { version = "0.10.2", features = ["chrono"] }
-r2d2 = "0.6.1"
-r2d2_postgres = "0.9.3"
-rustc-serialize = "0.3.16"
-tql_macros = "0.0.1"
-urlencoded = "0.2.0"
+chrono = "^0.4.0"
+handlebars-iron = "^0.26.0"
+iron = "^0.6.0"
+lazy_static = "^1.0.0"
+persistent = "^0.4.0"
+r2d2 = "^0.8.1"
+r2d2_postgres = "^0.14.0"
+serde = "^1.0.24"
+serde_derive = "^1.0.24"
+urlencoded = "^0.6.0"
+
+[dev-dependencies.postgres]
+features = ["with-chrono"]
+version = "^0.15.1"
+
+[dev-dependencies.tql_macros]
+path = "./tql_macros"
+
+[features]
+default = ["unstable"]
+unstable = ["tql_macros/unstable"]

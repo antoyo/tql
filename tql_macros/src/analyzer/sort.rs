@@ -1,61 +1,69 @@
 /*
- * Copyright (C) 2015  Boucher, Antoni <bouanto@zoho.com>
- * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 /// Analyzer for the sort() method.
 
-use syntax::ast::Expr_::{ExprPath, ExprUnary};
-use syntax::ast::UnOp;
+use syn::{
+    ExprKind,
+    ExprPath,
+    ExprUnary,
+    UnOp,
+};
 
-use ast::{Expression, Order};
-use error::{SqlError, SqlResult, res};
+use ast::{Expression, Order, expr_span};
+use error::{Error, Result, res};
 use state::SqlTable;
 use super::{check_field, path_expr_to_identifier};
 
 /// Convert an `Expression` to an `Order`.
-pub fn argument_to_order(arg: &Expression, table: &SqlTable) -> SqlResult<Order> {
+pub fn argument_to_order(arg: &Expression, table: &SqlTable) -> Result<Order> {
     let mut errors = vec![];
     let order =
         match arg.node {
-            ExprUnary(UnOp::UnNeg, ref expr) => {
-                let ident = try!(get_identifier(expr, table));
+            ExprKind::Unary(ExprUnary { op: UnOp::Neg(_), ref expr }) => {
+                let ident = get_identifier(expr, table)?;
                 Order::Descending(ident)
             }
-            ExprPath(None, ref path) => {
-                let identifier = path.segments[0].identifier.to_string();
-                check_field(&identifier, path.span, table, &mut errors);
-                Order::Ascending(identifier)
+            ExprKind::Path(ExprPath { ref path, .. }) => {
+                let identifier = path.segments.first().unwrap().into_item().ident;
+                check_field(&identifier, identifier.span, table, &mut errors);
+                Order::Ascending(identifier.to_string())
             }
             _ => {
-                errors.push(SqlError::new(
+                errors.push(Error::new(
                     "Expected - or identifier",
-                    arg.span,
+                    expr_span(arg),
                 ));
-                Order::Ascending("".to_owned())
+                Order::Ascending("".to_string())
             }
         };
     res(order, errors)
 }
 
 /// Get the `String` indentifying the identifier from an `Expression`.
-fn get_identifier(identifier_expr: &Expression, table: &SqlTable) -> SqlResult<String> {
+fn get_identifier(identifier_expr: &Expression, table: &SqlTable) -> Result<String> {
     let mut errors = vec![];
     if let Some(identifier) = path_expr_to_identifier(identifier_expr, &mut errors) {
-        check_field(&identifier, identifier_expr.span, table, &mut errors);
-        res(identifier, errors)
+        check_field(&identifier, expr_span(identifier_expr), table, &mut errors);
+        res(identifier.to_string(), errors)
     }
     else {
         Err(errors)

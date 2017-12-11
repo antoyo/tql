@@ -1,34 +1,41 @@
 /*
- * Copyright (C) 2015  Boucher, Antoni <bouanto@zoho.com>
- * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#![feature(box_patterns, plugin)]
-#![plugin(tql_macros)]
+#![feature(proc_macro)]
 
 extern crate postgres;
 extern crate tql;
+#[macro_use]
+extern crate tql_macros;
 
-use postgres::{Connection, SslMode};
+use postgres::{Connection, TlsMode};
 use tql::PrimaryKey;
+use tql_macros::sql;
 
 mod teardown;
 
 use teardown::TearDown;
 
-#[SqlTable]
+#[derive(SqlTable)]
+#[allow(dead_code)]
 struct TableAggregateExpr {
     primary_key: PrimaryKey,
     field1: String,
@@ -36,7 +43,7 @@ struct TableAggregateExpr {
 }
 
 fn get_connection() -> Connection {
-    Connection::connect("postgres://test:test@localhost/database", &SslMode::None).unwrap()
+    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
 }
 
 #[test]
@@ -58,10 +65,12 @@ fn test_aggregate() {
     let aggregate = sql!(TableAggregateExpr.aggregate(avg(field2))).unwrap();
     assert_eq!(36, aggregate.field2_avg); // NOTE: round((55 + 12 + 42) / 3) = 36.
 
-    let aggregates = sql!(TableAggregateExpr.values(field1).aggregate(avg(field2)));
+    let aggregates = sql!(TableAggregateExpr
+          .values(field1)
+          .aggregate(avg(field2)));
     assert_eq!(2, aggregates.len());
-    assert_eq!(49, aggregates[0].field2_avg); // NOTE: round((55 + 42) / 3) = 49.
-    assert_eq!(12, aggregates[1].field2_avg); // NOTE: round(12 / 1) = 12.
+    assert_eq!(12, aggregates[0].field2_avg); // NOTE: round(12 / 1) = 12.
+    assert_eq!(49, aggregates[1].field2_avg); // NOTE: round((55 + 42) / 3) = 49.
 
     let aggregate = sql!(TableAggregateExpr.aggregate(average = avg(field2))).unwrap();
     assert_eq!(36, aggregate.average); // NOTE: round((55 + 12 + 42) / 3) = 36.
@@ -74,7 +83,10 @@ fn test_aggregate() {
     assert_eq!(1, aggregates.len());
     assert_eq!(12, aggregates[0].field2_avg); // NOTE: round(12 / 1) = 12.
 
-    let aggregates = sql!(TableAggregateExpr.filter(field2 > 10).values(field1).aggregate(avg(field2)).filter(field2_avg < 20));
+    let aggregates = sql!(TableAggregateExpr
+        .filter(field2 > 10)
+        .values(field1)
+        .aggregate(avg(field2)).filter(field2_avg < 20));
     assert_eq!(1, aggregates.len());
     assert_eq!(12, aggregates[0].field2_avg); // NOTE: round(12 / 1) = 12.
 
@@ -83,12 +95,20 @@ fn test_aggregate() {
     assert_eq!(12, aggregates[0].average); // NOTE: round(12 / 1) = 12.
 
     let value1 = 10;
-    let aggregates = sql!(TableAggregateExpr.filter(field2 > value1).values(field1).aggregate(average = avg(field2)).filter(average < 20));
+    let aggregates = sql!(TableAggregateExpr
+        .filter(field2 > value1)
+        .values(field1)
+        .aggregate(average = avg(field2))
+        .filter(average < 20));
     assert_eq!(1, aggregates.len());
     assert_eq!(12, aggregates[0].average); // NOTE: round(12 / 1) = 12.
 
     let value2 = 20;
-    let aggregates = sql!(TableAggregateExpr.filter(field2 > value1).values(field1).aggregate(average = avg(field2)).filter(average < value2));
+    let aggregates = sql!(TableAggregateExpr
+        .filter(field2 > value1)
+        .values(field1)
+        .aggregate(average = avg(field2))
+        .filter(average < value2));
     assert_eq!(1, aggregates.len());
     assert_eq!(12, aggregates[0].average); // NOTE: round(12 / 1) = 12.
 }

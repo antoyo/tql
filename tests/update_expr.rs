@@ -1,32 +1,44 @@
 /*
- * Copyright (C) 2015  Boucher, Antoni <bouanto@zoho.com>
- * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#![feature(plugin, static_mutex)]
-#![plugin(tql_macros)]
+#![feature(proc_macro)]
 
+#[macro_use]
+extern crate lazy_static;
 extern crate postgres;
 extern crate tql;
+#[macro_use]
+extern crate tql_macros;
 
-use std::sync::{MUTEX_INIT, MutexGuard, StaticMutex};
+mod teardown;
 
-use postgres::{Connection, SslMode};
+use std::sync::Mutex;
+
+use postgres::{Connection, TlsMode};
 use tql::{ForeignKey, PrimaryKey};
+use tql_macros::sql;
 
-#[SqlTable]
+use teardown::TearDown;
+
+#[derive(SqlTable)]
 #[allow(dead_code)]
 struct TableUpdateExpr {
     id: PrimaryKey,
@@ -36,49 +48,32 @@ struct TableUpdateExpr {
     related_field: ForeignKey<RelatedTable>,
 }
 
-#[SqlTable]
+#[derive(SqlTable)]
 #[allow(dead_code)]
 struct RelatedTable {
     id: PrimaryKey,
     field1: String,
 }
 
-static LOCK: StaticMutex = MUTEX_INIT;
-
-struct DatabaseMutex<'a> {
-    connection: Connection,
-    _data: MutexGuard<'a, ()>,
-}
-
-impl<'a> DatabaseMutex<'a> {
-    fn new() -> DatabaseMutex<'a> {
-        let data = LOCK.lock().unwrap();
-        let connection = get_connection();
-        let _ = sql!(RelatedTable.create());
-        let _ = sql!(TableUpdateExpr.create());
-        DatabaseMutex {
-            connection: connection,
-            _data: data,
-        }
-    }
-}
-
-impl<'a> Drop for DatabaseMutex<'a> {
-    fn drop(&mut self) {
-        let connection = &self.connection;
-        let _ = sql!(TableUpdateExpr.drop());
-        let _ = sql!(RelatedTable.drop());
-    }
+lazy_static! {
+    static ref LOCK: Mutex<Connection> = Mutex::new(get_connection());
 }
 
 fn get_connection() -> Connection {
-    Connection::connect("postgres://test:test@localhost/database", &SslMode::None).unwrap()
+    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
 }
 
 #[test]
 fn test_update() {
-    let table_mutex = DatabaseMutex::new();
-    let connection = &table_mutex.connection;
+    let connection = LOCK.lock().unwrap();
+
+    let _teardown = TearDown::new(|| {
+        let _ = sql!(TableUpdateExpr.drop());
+        let _ = sql!(RelatedTable.drop());
+    });
+
+    let _ = sql!(RelatedTable.create());
+    let _ = sql!(TableUpdateExpr.create());
 
     let id = sql!(RelatedTable.insert(field1 = "")).unwrap();
     let related_field = sql!(RelatedTable.get(id)).unwrap();
@@ -102,14 +97,19 @@ fn test_update() {
     assert_eq!("test", table.field1);
     assert_eq!(42, table.field2);
 
-    let new_id = sql!(TableUpdateExpr.insert(field1 = "", field2 = 0, field3 = 0, related_field = related_field)).unwrap();
+    let new_id = sql!(TableUpdateExpr
+        .insert(field1 = "", field2 = 0, field3 = 0, related_field = related_field)).unwrap();
 
-    let num_updated = sql!(TableUpdateExpr.filter(id > new_id).update(field1 = "test", field2 = new_field2)).unwrap();
+    let num_updated = sql!(TableUpdateExpr
+        .filter(id > new_id)
+        .update(field1 = "test", field2 = new_field2)).unwrap();
     assert_eq!(0, num_updated);
 
     let my_string = "my string";
     let new_field2 = 24;
-    let num_updated = sql!(TableUpdateExpr.filter(id >= id && id <= new_id).update(field1 = my_string, field2 = new_field2)).unwrap();
+    let num_updated = sql!(TableUpdateExpr
+           .filter(id >= id && id <= new_id)
+           .update(field1 = my_string, field2 = new_field2)).unwrap();
     assert_eq!(2, num_updated);
 
     let table = sql!(TableUpdateExpr.get(id)).unwrap();
@@ -125,8 +125,15 @@ fn test_update() {
 
 #[test]
 fn test_update_operation() {
-    let table_mutex = DatabaseMutex::new();
-    let connection = &table_mutex.connection;
+    let connection = LOCK.lock().unwrap();
+
+    let _teardown = TearDown::new(|| {
+        let _ = sql!(TableUpdateExpr.drop());
+        let _ = sql!(RelatedTable.drop());
+    });
+
+    let _ = sql!(RelatedTable.create());
+    let _ = sql!(TableUpdateExpr.create());
 
     let id = sql!(RelatedTable.insert(field1 = "")).unwrap();
     let related_field = sql!(RelatedTable.get(id)).unwrap();

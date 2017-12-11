@@ -1,0 +1,18 @@
+error: mismatched types:
+ expected `String`,
+    found `integral variable`
+  --> $DIR/update.rs:42:56
+   |
+42 |     let _ = sql!(Table.filter(id == 1).update(field1 = 42, i32_field = value));
+   |                                                        ^^
+   |
+   = note: in this expansion of sql! (defined in tql)
+
+error: attempted access of field `value` on type `Table`, but no field with that name was found
+  --> $DIR/update.rs:48:30
+   |
+48 |     sql!(Table.get(1).update(value += " test"));
+   |                              ^^^^^
+
+error: aborting due to 2 previous errors
+
