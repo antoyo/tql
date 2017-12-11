@@ -21,9 +21,15 @@ env:
 
 rust:
   - nightly
-  #- beta
-  #- stable
+  - beta
+  - stable
 
 script:
   - cargo build
   - cargo test
+
+matrix:
+    include:
+        - rust: stable
+          script:
+              - cargo build --manifest-path examples/todo-stable/Cargo.toml
