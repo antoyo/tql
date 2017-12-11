@@ -1,0 +1,22 @@
+sudo: required
+dist: trusty
+language: rust
+addons:
+  apt:
+    packages:
+      - libcurl4-openssl-dev
+      - libelf-dev
+      - libdw-dev
+      - binutils-dev
+
+env:
+  - RUST_BACKTRACE=1
+
+rust:
+  - nightly
+  #- beta
+  #- stable
+
+script:
+  - cargo build
+  - cargo test

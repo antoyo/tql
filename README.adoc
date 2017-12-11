@@ -230,16 +230,16 @@ INNER JOIN Table2 ON Table1.pk = Table2.fk
 |
 [source, rust]
 ----
-#[sql_table]
+#[derive(SqlTable)]
 struct Table1 {
-    pk: db::PrimaryKey,
+    pk: PrimaryKey,
     field1: i32,
 }
 
-#[sql_table]
+#[derive(SqlTable)]
 struct Table2 {
     field1: i32,
-    fk: db::ForeignKey<Table1>,
+    fk: ForeignKey<Table1>,
 }
 
 Table1.all().join(Table2)
@@ -334,9 +334,9 @@ CREATE TABLE IF NOT EXISTS Table1 (
 |
 [source, rust]
 ----
-#[sql_table]
+#[derive(SqlTable)]
 struct Table1 {
-    pk: db::PrimaryKey,
+    pk: PrimaryKey,
     field1: i32,
 }
 

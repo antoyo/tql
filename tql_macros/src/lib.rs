@@ -2,6 +2,7 @@
  * TODO: add travis (with special case for stable).
  * TODO: improve the error handling of the generated code.
  * TODO: use as_ref() for Ident instead of &ident.to_string().
+ * TODO: improve formatting of the README.
  * TODO: the error message sometimes show String instead of &str.
  * FIXME: warning should not be errors on stable.
  */
