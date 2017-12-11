@@ -21,8 +21,6 @@ env:
 
 rust:
   - nightly
-  - beta
-  - stable
 
 script:
   - cargo build
@@ -31,5 +29,8 @@ script:
 matrix:
     include:
         - rust: stable
+          script:
+              - cargo build --manifest-path examples/todo-stable/Cargo.toml
+        - rust: beta
           script:
               - cargo build --manifest-path examples/todo-stable/Cargo.toml
