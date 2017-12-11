@@ -19,13 +19,6 @@ before_script:
 env:
   - RUST_BACKTRACE=1
 
-rust:
-  - nightly
-
-script:
-  - cargo build
-  - cargo test
-
 matrix:
     include:
         - rust: stable
@@ -34,3 +27,7 @@ matrix:
         - rust: beta
           script:
               - cargo build --manifest-path examples/todo-stable/Cargo.toml
+        - rust: nightly
+          script:
+              - cargo build
+              - cargo test
