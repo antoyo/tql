@@ -83,7 +83,7 @@ fn main() {
 
     // We first create the table.
     // (You might not want to execute this query every time.)
-    let _ = sql!(TodoItem.create());
+    let _ = sql!(Model.create());
 
     // Insert a row in the table.
     let text = String::new();
@@ -97,7 +97,7 @@ fn main() {
 
     // Query some rows from the table:
     // get the last 10 rows sorted by date_added descending.
-    let items = sql!(TodoItem.sort(-date_added)[..10]);
+    let items = sql!(Model.sort(-date_added)[..10]);
 }
 ----
 
@@ -152,12 +152,12 @@ Procedural macros do not currently support emitting errors at specific positions
 error[E0308]: mismatched types
   --> src/main.rs:47:18
    |
-47 |     let result = sql!(TodoItem.insert(text = text, date_added = Utc::now(), done = false));
-   |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected &str, found struct `std::string::String`
+47 |     let result = sql!(Model.insert(text = text, date_added = Utc::now(), done = false));
+   |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected &str, found struct `std::string::String`
    |
    = note: expected type `&str`
               found type `std::string::String`
-   = help: try with `&sql!(TodoItem.insert(text = text, date_added = Utc::now(), done = false))`
+   = help: try with `&sql!(Model.insert(text = text, date_added = Utc::now(), done = false))`
    = note: this error originates in a macro outside of the current crate
 ----
 
@@ -168,11 +168,11 @@ While you will get this nicer error when using the nightly version of Rust:
 error[E0308]: mismatched types
   --> examples/todo.rs:49:46
    |
-49 |     let result = sql!(TodoItem.insert(text = text, date_added = Utc::now(), done = false));
-   |                                              ^^^^
-   |                                              |
-   |                                              expected &str, found struct `std::string::String`
-   |                                              help: consider borrowing here: `&text`
+49 |     let result = sql!(Model.insert(text = text, date_added = Utc::now(), done = false));
+   |                                           ^^^^
+   |                                           |
+   |                                           expected &str, found struct `std::string::String`
+   |                                           help: consider borrowing here: `&text`
    |
    = note: expected type `&str`
               found type `std::string::String`
