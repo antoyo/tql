@@ -1,4 +1,5 @@
 = TQL
+:source-highlighter: pygments
 
 Compile-time ORM, inspired by Django ORM, written in Rust.
 Tql is implemented as a procedural macro and even works on the stable version of Rust (https://github.com/antoyo/tql/tree/master/examples/todo-stable[look at this example to see how to use tql on stable]).
@@ -48,7 +49,139 @@ use tql::PrimaryKey;
 use tql_macros::sql;
 ----
 
-:source-highlighter: pygments
+Then, create your model:
+
+[source,rust]
+----
+use chrono::DateTime;
+use chrono::offset::Utc;
+
+#[derive(SqlTable)]
+struct Model {
+    id: PrimaryKey,
+    text: String,
+    date_added: DateTime<Utc>,
+    // …
+}
+----
+
+Next, create an accessor for your connection:
+
+[source,rust]
+----
+fn get_connection() -> Connection {
+    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
+}
+----
+
+Finally, we can use the `sql!` macro to execute an SQL query:
+
+[source,rust]
+----
+fn main() {
+    let connection = get_connection();
+
+    // We first create the table.
+    // (You might not want to execute this query every time.)
+    let _ = sql!(TodoItem.create());
+
+    // Insert a row in the table.
+    let text = String::new();
+    let result = sql!(Model.insert(text = &text, date_added = Utc::now()));
+
+    // Update a row.
+    let result = sql!(Model.get(id).update(text = "new-text"));
+
+    // Delete a row.
+    let result = sql!(Model.get(id).delete());
+
+    // Query some rows from the table:
+    // get the last 10 rows sorted by date_added descending.
+    let items = sql!(TodoItem.sort(-date_added)[..10]);
+}
+----
+
+Look at the following table to see more examples.
+The left side shows the generated SQL and the right side shows the syntax you can use with `tql`.
+
+== Using on stable Rust
+
+If you want to use `tql` on stable, there are a few changes that are required in order to work:
+
+First, remove these lines:
+
+[source,rust]
+----
+#![feature(proc_macro)]
+
+// …
+
+use tql_macros::sql;
+----
+
+And add the following line before `extern crate tql`:
+
+[source,rust]
+----
+#[macro_use]
+----
+
+This is how the start of the file now looks:
+
+[source,rust]
+----
+extern crate chrono;
+extern crate postgres;
+#[macro_use]
+extern crate tql;
+#[macro_use]
+extern crate tql_macros;
+
+use postgres::{Connection, TlsMode};
+use tql::PrimaryKey;
+----
+
+With this small change, we can use the `sql!()` macro like before.
+
+=== Why not always using the stable version?
+
+Procedural macros do not currently support emitting errors at specific positions, so with the stable version, you will get errors that are less useful, like in the following output:
+
+[source]
+----
+error[E0308]: mismatched types
+  --> src/main.rs:47:18
+   |
+47 |     let result = sql!(TodoItem.insert(text = text, date_added = Utc::now(), done = false));
+   |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected &str, found struct `std::string::String`
+   |
+   = note: expected type `&str`
+              found type `std::string::String`
+   = help: try with `&sql!(TodoItem.insert(text = text, date_added = Utc::now(), done = false))`
+   = note: this error originates in a macro outside of the current crate
+----
+
+While you will get this nicer error when using the nightly version of Rust:
+
+[source]
+----
+error[E0308]: mismatched types
+  --> examples/todo.rs:49:46
+   |
+49 |     let result = sql!(TodoItem.insert(text = text, date_added = Utc::now(), done = false));
+   |                                              ^^^^
+   |                                              |
+   |                                              expected &str, found struct `std::string::String`
+   |                                              help: consider borrowing here: `&text`
+   |
+   = note: expected type `&str`
+              found type `std::string::String`
+----
+
+So, a good workflow is to develop on nightly and then ship on stable.
+This way, you get the best of both worlds:
+you have nice errors and you can deploy with the stable version of the compiler.
+This is not an issue at all because you're not supposed to have compiler errors when you're ready to deploy (and you can see the errors anyway).
 
 [cols="1a,1a", options="header"]
 |===
