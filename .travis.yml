@@ -8,6 +8,13 @@ addons:
       - libelf-dev
       - libdw-dev
       - binutils-dev
+services:
+  - postgresql
+
+before_script:
+  - createuser -U postgres test
+  - psql -c "ALTER USER test PASSWORD 'test';"
+  - createdb -U postgres -O test database
 
 env:
   - RUST_BACKTRACE=1
