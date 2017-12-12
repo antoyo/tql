@@ -101,6 +101,8 @@ fn main() {
 }
 ----
 
+The sql!() macro uses the identifier `connection` by default.
+
 Look at the https://github.com/antoyo/tql#syntax-table[following table] to see more examples.
 
 == Using on stable Rust

@@ -1,10 +1,15 @@
 /*
- * TODO: add travis (with special case for stable).
+ * TODO: document the management of the connection.
+ * TODO: add table_name attribute to allow changing the table name.
  * TODO: improve the error handling of the generated code.
  * TODO: use as_ref() for Ident instead of &ident.to_string().
  * TODO: improve formatting of the README.
  * TODO: the error message sometimes show String instead of &str.
  * FIXME: warning should not be errors on stable.
+ *
+ * TODO: switch to a binding to a C postgresql library for better performance?
+ * FIXME: postgres crate might be using dynamic dispatch (ToSql), we might get better performance
+ * if we avoid this.
  */
 
 #![cfg_attr(feature = "unstable", feature(proc_macro))]
