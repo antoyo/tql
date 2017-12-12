@@ -87,7 +87,7 @@ fn main() {
 
     // Insert a row in the table.
     let text = String::new();
-    let result = sql!(Model.insert(text = &text, date_added = Utc::now()));
+    let id = sql!(Model.insert(text = &text, date_added = Utc::now())).unwrap();
 
     // Update a row.
     let result = sql!(Model.get(id).update(text = "new-text"));
