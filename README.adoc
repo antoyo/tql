@@ -101,7 +101,7 @@ fn main() {
 }
 ----
 
-The sql!() macro uses the identifier `connection` by default.
+The `sql!()` macro uses the identifier `connection` by default.
 
 Look at the https://github.com/antoyo/tql#syntax-table[following table] to see more examples.
 
@@ -142,11 +142,18 @@ use postgres::{Connection, TlsMode};
 use tql::PrimaryKey;
 ----
 
+Finally, disable the `unstable` feature by updating the `tql` dependency to:
+
+[source,toml]
+----
+tql = { git = "https://github.com/antoyo/tql", default-features = false }
+----
+
 With this small change, we can use the `sql!()` macro like before.
 
 === Why not always using the stable version?
 
-Procedural macros do not currently support emitting errors at specific positions, so with the stable version, you will get errors that are less useful, like in the following output:
+Procedural macros do not currently support emitting errors at specific positions on the stable version, so with this version, you will get errors that are less useful, like in the following output:
 
 [source]
 ----
