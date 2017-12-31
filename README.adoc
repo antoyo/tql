@@ -6,8 +6,9 @@ Tql is implemented as a procedural macro and even works on the stable version of
 
 *This library is in alpha stage: it has not been thoroughly tested and its API may change at any time.*
 
-image:https://img.shields.io/travis/antoyo/relm/master.svg[link="https://travis-ci.org/antoyo/relm"]
-image:https://img.shields.io/crates/l/relm.svg[link="LICENSE"]
+image:https://img.shields.io/travis/antoyo/tql/master.svg[link="https://travis-ci.org/antoyo/tql"]
+image:https://img.shields.io/crates/l/tql.svg[link="LICENSE"]
+image:https://img.shields.io/gitter/room/tql-rs/Lobby.svg[link="https://gitter.im/tql-rs/Lobby"]
 
 == Requirements
 

@@ -1,9 +1,22 @@
 /*
+ * TODO: remove the internal state of the proc-macro and use dummy code generation to check the
+ * identifiers (to make it work with models defined in external crates). Also, use the trait bound
+ * SqlTable trick to check that it is a table.
+ * TODO: allow using other fields in filter(), update(), … like F() expressions in Django
+ ** Table.filter(field1 > Table.field2) may not work.
+ ** Table.filter(field1 > $field2)
+ * TODO: ManyToMany.
+ * TODO: support other types (uuid, string) for the primary key, possibly by making it generic.
+ * TODO: support the missing types
+ * (https://docs.rs/postgres/0.15.1/postgres/types/trait.ToSql.html).
+ * TODO: join on non foreign key.
+ * TODO: unique constraints.
+ * TODO: support primary key with multiple columns.
  * TODO: document the management of the connection.
  * TODO: add table_name attribute to allow changing the table name.
  * TODO: improve the error handling of the generated code.
  * TODO: use as_ref() for Ident instead of &ident.to_string().
- * TODO: improve formatting of the README.
+ * TODO: improve formatting of the README table.
  * TODO: the error message sometimes show String instead of &str.
  * FIXME: warning should not be errors on stable.
  *
@@ -216,6 +229,7 @@ pub fn sql_table(input: TokenStream) -> TokenStream {
 
                     // NOTE: Transform the span by dummy spans to workaround this issue:
                     // https://github.com/rust-lang/rust/issues/42337
+                    // https://github.com/rust-lang/rust/issues/45934#issuecomment-344497531
                     let code = tosql_impl(&item_struct).into();
                     #[cfg(feature = "unstable")]
                     let code = respan(code);
