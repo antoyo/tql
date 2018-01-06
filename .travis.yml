@@ -18,6 +18,7 @@ before_script:
 
 env:
   - RUST_BACKTRACE=1
+  - RUSTFLAGS="--cfg procmacro2_semver_exempt"
 
 matrix:
     include:

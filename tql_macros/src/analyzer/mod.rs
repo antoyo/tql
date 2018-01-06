@@ -197,7 +197,6 @@ fn check_argument_count(arguments: &Punctuated<Expr, Comma>, expected_count: usi
     else {
         let length = arguments.len();
         errors.push(Error::new_with_code(
-            // FIXME: the position should be all the arguments, instead of the function name.
             &format!("this function takes 1 parameter but {} parameter{} supplied", length, plural_verb(length)),
             position,
             "E0061",
