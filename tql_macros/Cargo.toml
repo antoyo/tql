@@ -5,7 +5,7 @@ name = "tql_macros"
 version = "0.1.0"
 
 [dependencies]
-rand = "^0.3.18"
+rand = "^0.4.2"
 
 [dependencies.proc-macro2]
 version = "0.1"

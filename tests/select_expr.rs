@@ -450,6 +450,6 @@ fn test_select() {
     assert_eq!(id4, table.id);
 
     let index = -2;
-    let table = sql!(TableSelectExpr[-index as i64]).unwrap();
+    let table = sql!(TableSelectExpr[i64::from(-index)]).unwrap();
     assert_eq!(id3, table.id);
 }

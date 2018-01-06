@@ -50,7 +50,7 @@ struct RelatedTable {
     field1: String,
 }
 
-const SELECT: &'static str = "SELECT Table.date, Table.field1, Table.field2, Table.field3, Table.id";
+const SELECT: &str = "SELECT Table.date, Table.field1, Table.field2, Table.field3, Table.id";
 
 #[test]
 fn test_all() {

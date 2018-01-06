@@ -44,7 +44,7 @@ struct TodoItem {
     done: bool,
 }
 
-fn add_todo_item(connection: Connection, text: String) {
+fn add_todo_item(connection: &Connection, text: String) {
     // Insert the new item.
     let result = sql!(TodoItem.insert(text = &text, date_added = Utc::now(), done = false));
     if let Err(err) = result {
@@ -55,7 +55,7 @@ fn add_todo_item(connection: Connection, text: String) {
     }
 }
 
-fn delete_todo_item(connection: Connection, id: i32) {
+fn delete_todo_item(connection: &Connection, id: i32) {
     // Delete the item.
     let result = sql!(TodoItem.get(id).delete());
     if let Err(err) = result {
@@ -66,7 +66,7 @@ fn delete_todo_item(connection: Connection, id: i32) {
     }
 }
 
-fn do_todo_item(connection: Connection, id: i32) {
+fn do_todo_item(connection: &Connection, id: i32) {
     // Update the item to make it done.
     let result = sql!(TodoItem.get(id).update(done = true));
     if let Err(err) = result {
@@ -92,7 +92,7 @@ fn get_id(args: &mut env::Args) -> Option<i32> {
     None
 }
 
-fn list_todo_items(connection: Connection, show_done: bool) {
+fn list_todo_items(connection: &Connection, show_done: bool) {
     let items =
         if show_done {
             // Show the last 10 todo items.
@@ -124,11 +124,11 @@ fn main() {
     let mut args = env::args();
     args.next();
 
-    let command = args.next().unwrap_or("list".to_owned());
+    let command = args.next().unwrap_or_else(|| "list".to_string());
     match command.as_ref() {
         "add" => {
             if let Some(item_text) = args.next() {
-                add_todo_item(connection, item_text);
+                add_todo_item(&connection, item_text);
             }
             else {
                 println!("Missing argument: task");
@@ -136,17 +136,17 @@ fn main() {
         },
         "delete" => {
             if let Some(id) = get_id(&mut args) {
-                delete_todo_item(connection, id);
+                delete_todo_item(&connection, id);
             }
         },
         "do" => {
             if let Some(id) = get_id(&mut args) {
-                do_todo_item(connection, id);
+                do_todo_item(&connection, id);
             }
         },
         "list" => {
             let show_done = args.next() == Some("--show-done".to_owned());
-            list_todo_items(connection, show_done);
+            list_todo_items(&connection, show_done);
         },
         command => println!("Unknown command {}", command),
     }
