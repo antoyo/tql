@@ -19,30 +19,35 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use proc_macro2::{Literal, Span};
+use proc_macro2::Span;
 use syn::{
     Expr,
     ExprLit,
+    IntSuffix,
     Lit,
-    LitKind,
+    LitInt,
+    LitStr,
+    parse,
 };
 
 pub fn number_literal(num: i64) -> Expr {
-    Expr::Lit(ExprLit {
+    let lit = Expr::Lit(ExprLit {
         attrs: vec![],
-        lit: Lit {
-            span: Span::default(),
-            value: LitKind::Other(Literal::integer(num))
-        },
-    })
+        lit: Lit::Int(LitInt::new(num.abs() as u64, IntSuffix::I64, Span::default())),
+    });
+    if num < 0 {
+        parse(quote! {
+            -#lit
+        }.into()).expect("parse unary minus and lit")
+    }
+    else {
+        lit
+    }
 }
 
 pub fn string_literal(string: &str) -> Expr {
     Expr::Lit(ExprLit {
         attrs: vec![],
-        lit: Lit {
-            span: Span::default(),
-            value: LitKind::Other(Literal::string(string)),
-        },
+        lit: Lit::Str(LitStr::new(string, Span::default())),
     })
 }

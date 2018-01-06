@@ -23,8 +23,7 @@
 
 use std::str::from_utf8;
 
-use literalext::LiteralExt;
-use syn::{Expr, Ident, LitKind};
+use syn::{Expr, Ident, Lit};
 
 use ast::{
     Aggregate,
@@ -164,63 +163,28 @@ impl ToSql for Expression {
     fn to_sql(&self) -> String {
         match *self {
             Expr::Lit(ref literal) => {
-                match literal.lit.value {
-                    LitKind::Bool(boolean) => boolean.to_string().to_uppercase(),
-                    LitKind::Other(ref literal) => {
-                        if let Some(byte) = literal.parse_byte() {
-                            "'".to_string() +
-                                &escape((byte as char).to_string()) +
-                                "'"
-                        }
-                        else if let Some(ref bytestring) = literal.parse_bytes() {
-                            "'".to_string() +
-                                // TODO: check if using unwrap() is secure here.
-                                &escape(from_utf8(&bytestring[..]).unwrap().to_string()) +
-                                "'"
-                        }
-                        else if let Some(character) = literal.parse_char() {
-                            "'".to_string() +
-                                &escape(character.to_string()) +
-                                "'"
-                        }
-                        else if let Some(ref float) = literal.parse_float() {
-                            match float.suffix() {
-                                "f32" => float.as_f32().expect("f32").to_string(),
-                                "f64" | "" => float.as_f64().expect("f64").to_string(),
-                                suffix => panic!("Unexpected float suffix {}", suffix),
-                            }
-                        }
-                        else if let Some(ref int) = literal.parse_int() {
-                            match int.suffix() {
-                                "isize" => int.as_i64().expect("isize").to_string(),
-                                "i8" => int.as_i8().expect("i8").to_string(),
-                                "i16" => int.as_i16().expect("i16").to_string(),
-                                "i32" | "" => int.as_i32().expect("i32").to_string(),
-                                "i64" => int.as_i64().expect("i64").to_string(),
-                                "usize" => int.as_u64().expect("usize").to_string(),
-                                "u8" => int.as_u8().expect("u8").to_string(),
-                                "u16" => int.as_u16().expect("u16").to_string(),
-                                "u32" => int.as_u32().expect("u32").to_string(),
-                                "u64" => int.as_u64().expect("u64").to_string(),
-                                suffix => panic!("Unexpected int suffix {}", suffix),
-                            }
-                        }
-                        else if let Some(ref string) = literal.parse_string() {
-                            "'".to_string() +
-                                &escape(string.to_string()) +
-                                "'"
-                        }
-                        else {
-                            #[cfg(not(unstable))]
-                            {
-                                let string = literal.to_string();
-                                if string == "true" || string == "false" {
-                                    return string.to_uppercase();
-                                }
-                            }
-                            unreachable!("no other literal types");
-                        }
-                    }
+                match literal.lit {
+                    Lit::Bool(ref boolean) => boolean.value.to_string().to_uppercase(),
+                    Lit::Byte(ref byte) =>
+                        "'".to_string() +
+                            &escape((byte.value() as char).to_string()) +
+                            "'",
+                    Lit::ByteStr(ref bytestring) =>
+                        "'".to_string() +
+                            // TODO: check if using unwrap() is secure here.
+                            &escape(from_utf8(&bytestring.value()).unwrap().to_string()) +
+                            "'",
+                    Lit::Char(ref character) =>
+                        "'".to_string() +
+                            &escape(character.value().to_string()) +
+                            "'",
+                    Lit::Float(ref float) => float.value().to_string(),
+                    Lit::Int(ref int) => int.value().to_string(),
+                    Lit::Str(ref string) =>
+                        "'".to_string() +
+                            &escape(string.value()) +
+                            "'",
+                    Lit::Verbatim(_) => panic!("Unsupported integer bigger than 64-bits"),
                 }
             },
             _ => "?".to_string(),

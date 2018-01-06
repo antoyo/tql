@@ -21,15 +21,15 @@
 
 use std::fmt::{self, Display, Formatter};
 
-use literalext::LiteralExt;
 use syn::{
     self,
     AngleBracketedGenericArguments,
     Expr,
     ExprLit,
+    FloatSuffix,
     GenericArgument,
+    IntSuffix,
     Lit,
-    LitKind,
     Path,
     PathArguments,
     TypePath,
@@ -176,58 +176,34 @@ impl PartialEq<Expression> for Type {
                 ref typ => typ,
             };
         match *expression {
-            Expr::Lit(ExprLit { lit: Lit { value: LitKind::Bool(_), .. }, .. }) => *typ == Type::Bool,
-            Expr::Lit(ExprLit { lit: Lit { value: LitKind::Other(ref literal), .. }, .. }) => {
-                if literal.parse_byte().is_some() {
-                    false
-                }
-                else if literal.parse_bytes().is_some() {
-                    *typ == Type::ByteString
-                }
-                else if literal.parse_char().is_some() {
-                    *typ == Type::Char
-                }
-                else if let Some(float) = literal.parse_float() {
-                    match float.suffix() {
-                        // TODO: check if right suffix.
-                        "f32" => *typ == Type::F32,
-                        "f64" => *typ == Type::F64,
-                        suffix if suffix.is_empty() => *typ == Type::F32 || *typ == Type::F64,
-                        _ => panic!("Unexpected float suffix {}", float.suffix()),
-                    }
-                }
-                else if literal.parse_string().is_some() {
-                    *typ == Type::String
-                }
-                else if let Some(int) = literal.parse_int() {
-                    match int.suffix() {
-                        "isize" => false,
-                        "i8" => *typ == Type::I8,
-                        "i16" => *typ == Type::I16,
-                        "i32" => *typ == Type::I32 || *typ == Type::Serial,
-                        "i64" => *typ == Type::I64,
-                        "u8" | "u16" | "u32" | "u64" => false,
-                        suffix if suffix.is_empty() =>
-                            *typ == Type::I8 ||
-                            *typ == Type::I16 ||
-                            *typ == Type::I32 ||
-                            *typ == Type::I64 ||
-                            *typ == Type::Serial,
-                        _ => panic!("Unexpected int suffix {}", int.suffix()),
-                    }
-                }
-                else {
-                    // FIXME: workaround for stable.
-                    #[cfg(not(unstable))]
-                    {
-                        let string = literal.to_string();
-                        if string == "true" || string == "false" {
-                            return *typ == Type::Bool;
-                        }
-                    }
-                    unreachable!("types: unexpected literal type");
-                }
-            }
+            Expr::Lit(ExprLit { lit: Lit::Bool(_), .. }) => *typ == Type::Bool,
+            Expr::Lit(ExprLit { lit: Lit::Byte(_), .. }) => false,
+            Expr::Lit(ExprLit { lit: Lit::ByteStr(_), .. }) => *typ == Type::ByteString,
+            Expr::Lit(ExprLit { lit: Lit::Char(_), .. }) => *typ == Type::Char,
+            Expr::Lit(ExprLit { lit: Lit::Float(ref float), .. }) =>
+                match float.suffix() {
+                    // TODO: check if right suffix.
+                    FloatSuffix::F32 => *typ == Type::F32,
+                    FloatSuffix::F64 => *typ == Type::F64,
+                    FloatSuffix::None => *typ == Type::F32 || *typ == Type::F64,
+                },
+            Expr::Lit(ExprLit { lit: Lit::Int(ref int), .. }) =>
+                match int.suffix() {
+                    IntSuffix::Isize => false,
+                    IntSuffix::I8 => *typ == Type::I8,
+                    IntSuffix::I16 => *typ == Type::I16,
+                    IntSuffix::I32 => *typ == Type::I32 || *typ == Type::Serial,
+                    IntSuffix::I64 => *typ == Type::I64,
+                    IntSuffix::U8 | IntSuffix::U16 | IntSuffix::U32 | IntSuffix::U64 | IntSuffix::U128 |
+                        IntSuffix::Usize | IntSuffix::I128 => false,
+                    IntSuffix::None =>
+                        *typ == Type::I8 ||
+                        *typ == Type::I16 ||
+                        *typ == Type::I32 ||
+                        *typ == Type::I64 ||
+                        *typ == Type::Serial,
+                },
+            Expr::Lit(ExprLit { lit: Lit::Str(_), .. }) => *typ == Type::String,
             _ => true, // Returns true, because the type checking for non-literal is done later.
         }
     }

@@ -23,14 +23,12 @@
 
 // TODO: simplify expression composed of only literals.
 
-use literalext::LiteralExt;
 use syn::{
     BinOp,
     Expr,
     ExprBinary,
     ExprLit,
     Lit,
-    LitKind,
 };
 
 use ast::{Expression, Limit, Query};
@@ -40,9 +38,7 @@ use plugin::number_literal;
 /// Check that all the expressions in `expression` are literal.
 fn all_integer_literal(expression: &Expression) -> bool {
     match *expression {
-        Expr::Lit(ExprLit { lit: Lit { value: LitKind::Other(ref literal), .. }, .. }) => {
-            literal.parse_int().is_some()
-        },
+        Expr::Lit(ExprLit { lit: Lit::Int(_), .. }) => true,
         Expr::Binary(ExprBinary { ref left, ref right, .. }) => all_integer_literal(left) && all_integer_literal(right),
         _ => false,
     }
@@ -51,10 +47,10 @@ fn all_integer_literal(expression: &Expression) -> bool {
 /// Reduce an `expression` containing only literals to a mere literal.
 fn evaluate(expression: &Expression) -> i64 {
     match *expression {
-        Expr::Lit(ExprLit { lit: Lit { value: LitKind::Other(ref literal), .. }, .. }) => {
-            if let Some(int_literal) = literal.parse_int() {
+        Expr::Lit(ExprLit { ref lit, .. }) => {
+            if let Lit::Int(ref int_literal) = *lit {
                 // TODO: handle other types.
-                int_literal.as_i64().expect("cannot get i64")
+                int_literal.value() as i64
             }
             else {
                 0

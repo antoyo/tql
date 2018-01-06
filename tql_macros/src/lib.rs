@@ -32,7 +32,6 @@
 #![cfg_attr(feature = "unstable", feature(proc_macro))]
 #![recursion_limit="128"]
 
-extern crate literalext;
 extern crate proc_macro;
 extern crate proc_macro2;
 #[macro_use]
@@ -63,7 +62,7 @@ use std::iter::FromIterator;
 use proc_macro::TokenStream;
 #[cfg(feature = "unstable")]
 use proc_macro::{TokenNode, TokenTree};
-use proc_macro2::{Literal, Span};
+use proc_macro2::Span;
 use quote::Tokens;
 #[cfg(feature = "unstable")]
 use quote::ToTokens;
@@ -82,8 +81,7 @@ use syn::{
     Item,
     ItemEnum,
     ItemStruct,
-    Lit,
-    LitKind,
+    LitStr,
     Macro,
     TypePath,
     parse,
@@ -150,10 +148,7 @@ pub fn sql(input: TokenStream) -> TokenStream {
 pub fn to_sql(input: TokenStream) -> TokenStream {
     match to_sql_query(input) {
         Ok(args) => {
-            let expr = Lit {
-                value: LitKind::Other(Literal::string(&args.sql)),
-                span: args.span,
-            };
+            let expr = LitStr::new(&args.sql, args.span);
             let gen = quote! {
                 #expr
             };
@@ -465,10 +460,7 @@ fn generate_errors(errors: Vec<Error>) -> TokenStream {
     }
     #[cfg(feature = "unstable")]
     {
-        let expr = Lit {
-            value: LitKind::Other(Literal::string("")),
-            span: Span::default(),
-        };
+        let expr = LitStr::new("", Span::default());
         let gen = quote! {
             #expr
         };

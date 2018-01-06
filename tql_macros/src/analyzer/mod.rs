@@ -34,14 +34,14 @@ use std::borrow::Cow;
 use std::fmt::Display;
 use std::result;
 
-use literalext::LiteralExt;
 use proc_macro2::Span;
 use syn::{
     Expr,
     ExprPath,
+    FloatSuffix,
     Ident,
+    IntSuffix,
     Lit,
-    LitKind,
 };
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
@@ -439,48 +439,34 @@ fn get_type(expression: &Expression) -> &str {
     match *expression {
         Expr::Lit(ref literal) => {
             match literal.lit {
-                Lit { value: LitKind::Bool(_), .. } => "bool",
-                Lit { value: LitKind::Other(ref literal), .. } => {
-                    if let Some(int) = literal.parse_int() {
-                        match int.suffix() {
-                            "isize" => "isize",
-                            "i8" => "i8",
-                            "i16" => "i16",
-                            "i32" => "i32",
-                            "i64" => "i64",
-                            "usize" => "usize",
-                            "u8" => "u8",
-                            "u16" => "u16",
-                            "u32" => "u32",
-                            "u64" => "u64",
-                            "" => "integral variable",
-                            _ => unreachable!("unexpected int suffix"),
-                        }
+                Lit::Bool(_) => "bool",
+                Lit::Int(ref int) =>
+                    match int.suffix() {
+                        IntSuffix::Isize => "isize",
+                        IntSuffix::I8 => "i8",
+                        IntSuffix::I128 => "i128",
+                        IntSuffix::I16 => "i16",
+                        IntSuffix::I32 => "i32",
+                        IntSuffix::I64 => "i64",
+                        IntSuffix::Usize => "usize",
+                        IntSuffix::U8 => "u8",
+                        IntSuffix::U128 => "u128",
+                        IntSuffix::U16 => "u16",
+                        IntSuffix::U32 => "u32",
+                        IntSuffix::U64 => "u64",
+                        IntSuffix::None => "integral variable",
+                    },
+                Lit::Byte(_) => "u8",
+                Lit::ByteStr(_) => "Vec<u8>",
+                Lit::Char(_) => "char",
+                Lit::Float(ref float) =>
+                    match float.suffix() {
+                        FloatSuffix::F32 => "f32",
+                        FloatSuffix::F64 => "f64",
+                        FloatSuffix::None => "floating-point variable",
                     }
-                    else if literal.parse_byte().is_some() {
-                        "u8"
-                    }
-                    else if literal.parse_bytes().is_some() {
-                        "Vec<u8>"
-                    }
-                    else if literal.parse_char().is_some() {
-                        "char"
-                    }
-                    else if literal.parse_string().is_some() {
-                        "String"
-                    }
-                    else if let Some(float) = literal.parse_float() {
-                        match float.suffix() {
-                            "f32" => "f32",
-                            "f64" => "f64",
-                            "" => "floating-point variable",
-                            _ => unreachable!("unexpected float suffix"),
-                        }
-                    }
-                    else {
-                        unreachable!("analyzer: unexpected literal type");
-                    }
-                },
+                Lit::Str(_) => "String",
+                Lit::Verbatim(_) => panic!("Unsupported integer bigger than 64-bits"),
             }
         }
         _ => panic!("expression needs to be a literal"),
