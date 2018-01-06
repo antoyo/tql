@@ -19,7 +19,6 @@ before_script:
 env:
   global:
     - RUST_BACKTRACE=1
-    - RUSTFLAGS="--cfg procmacro2_semver_exempt"
 
 matrix:
     include:
@@ -34,3 +33,4 @@ matrix:
               - cargo build
               - cargo test
               - cargo test --manifest-path testcrate/Cargo.toml
+          env: RUSTFLAGS="--cfg procmacro2_semver_exempt"

@@ -84,6 +84,7 @@ use syn::{
     Macro,
     TypePath,
     parse,
+    parse2,
 };
 #[cfg(feature = "unstable")]
 use syn::{LitStr, Path};
@@ -134,7 +135,7 @@ struct SqlQueryWithArgs {
 #[proc_macro]
 pub fn sql(input: TokenStream) -> TokenStream {
     // TODO: if the first parameter is not provided, use "connection".
-    let sql_result = to_sql_query(input);
+    let sql_result = to_sql_query(input.into());
     match sql_result {
         Ok(sql_query_with_args) => gen_query(sql_query_with_args),
         Err(errors) => generate_errors(errors),
@@ -147,7 +148,7 @@ pub fn sql(input: TokenStream) -> TokenStream {
 #[cfg(feature = "unstable")]
 #[proc_macro]
 pub fn to_sql(input: TokenStream) -> TokenStream {
-    match to_sql_query(input) {
+    match to_sql_query(input.into()) {
         Ok(args) => {
             let expr = LitStr::new(&args.sql, args.span);
             let gen = quote! {
@@ -160,13 +161,13 @@ pub fn to_sql(input: TokenStream) -> TokenStream {
 }
 
 /// Convert the Rust code to an SQL string with its type, arguments, joins, and aggregate fields.
-fn to_sql_query(input: TokenStream) -> Result<SqlQueryWithArgs> {
+fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
     // TODO: use this when it becomes stable.
     /*if input.is_empty() {
         return Err(vec![Error::new_with_code("this macro takes 1 parameter but 0 parameters were supplied", cx.call_site(), "E0061")]);
     }*/
     let expr: Expr =
-        match parse(input) {
+        match parse2(input) {
             Ok(expr) => expr,
             Err(error) => return Err(vec![Error::new(&error.to_string(), Span::default())]),
         };
@@ -794,17 +795,12 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
         if let (_, Expr::Field(ExprField { ref base, .. })) = *variant.as_ref().unwrap() {
             if let Expr::Tuple(ExprTuple { ref elems, .. }) = **base {
                 if let Expr::Macro(ExprMacro { mac: Macro { ref tts, .. }, .. }) = **elems.first().unwrap().item() {
-                    let tokens: proc_macro2::TokenStream = FromIterator::from_iter(tts.clone().into_iter());
-                    let tokens = tokens.to_string();
-                    let tokens = tokens.trim();
-                    let tokens: TokenStream = std::str::FromStr::from_str(&tokens).unwrap();
-
-                    let sql_result = to_sql_query(tokens);
+                    let sql_result = to_sql_query(tts.clone());
                     let code = match sql_result {
                         Ok(sql_query_with_args) => gen_query(sql_query_with_args),
                         Err(errors) => generate_errors(errors),
                     };
-                    let code = token_stream_to_tokens(code);
+                    let code = proc_macro2::TokenStream::from(code);
 
                     let gen = quote! {
                         macro_rules! __tql_call_macro {
@@ -820,17 +816,4 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
     }
 
     empty_token_stream()
-}
-
-fn token_stream_to_tokens(tokens: TokenStream) -> Tokens {
-    let mut result = quote! {
-    };
-    let tokens: proc_macro2::TokenStream = tokens.into();
-    for token in tokens {
-        result = quote! {
-            #result
-            #token
-        };
-    }
-    result
 }

@@ -16,7 +16,7 @@ git = "https://github.com/dtolnay/quote"
 [dependencies.syn]
 features = ["extra-traits", "printing", "full"]
 git = "https://github.com/dtolnay/syn"
-rev = "73e7d161269762e7a43c9d2bafd15e8fae6aceea"
+rev = "04c5dcac336460374438ddf160bd0cbb689adf7d"
 
 [lib]
 proc-macro = true
