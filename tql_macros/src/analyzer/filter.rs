@@ -25,10 +25,6 @@ use proc_macro2::Span;
 use syn::{
     BinOp,
     Expr,
-    ExprBinary,
-    ExprMethodCall,
-    ExprParen,
-    ExprPath,
     ExprUnary,
     Ident,
     Path,
@@ -163,25 +159,26 @@ pub fn expression_to_filter_expression(arg: &Expression, table: &SqlTable) -> Re
 
     let filter =
         match *arg {
-            Expr::Binary(ExprBinary { ref op, ref left, ref right, .. }) => {
-                binary_expression_to_filter_expression(left, op, right, table)?
+            Expr::Binary(ref bin) => {
+                binary_expression_to_filter_expression(&bin.left, &bin.op, &bin.right, table)?
             },
-            Expr::MethodCall(ExprMethodCall { method, ref receiver, ref args, .. }) => {
+            Expr::MethodCall(ref call) => {
                 FilterExpression::FilterValue(WithSpan {
-                    node: method_call_expression_to_filter_expression(method, receiver, args, table, &mut errors),
+                    node: method_call_expression_to_filter_expression(call.method, &call.receiver, &call.args, table,
+                                                                      &mut errors),
                     span: arg.span(),
                 })
             },
-            Expr::Path(ExprPath { ref path, .. }) => {
-                let identifier = path.segments.first().unwrap().into_item().ident;
+            Expr::Path(ref path) => {
+                let identifier = path.path.segments.first().unwrap().into_item().ident;
                 check_field(&identifier, identifier.span, table, &mut errors);
                 FilterExpression::FilterValue(WithSpan {
                     node: FilterValue::Identifier(identifier),
                     span: arg.span(),
                 })
             },
-            Expr::Paren(ExprParen { ref expr, .. }) => {
-                let filter = expression_to_filter_expression(expr, table)?;
+            Expr::Paren(ref paren) => {
+                let filter = expression_to_filter_expression(&paren.expr, table)?;
                 FilterExpression::ParenFilter(Box::new(filter))
             },
             Expr::Unary(ExprUnary { op: UnOp::Not(_), ref expr, .. }) => {
@@ -256,8 +253,8 @@ fn method_call_expression_to_filter_expression(identifier: Ident, expr: &Express
     let method_name = identifier.to_string();
     let dummy = FilterValue::None;
     match *expr {
-        Expr::Path(ExprPath { ref path, .. }) => {
-            path_method_call_to_filter(path, identifier, &method_name, args, table, errors)
+        Expr::Path(ref path) => {
+            path_method_call_to_filter(&path.path, identifier, &method_name, args, table, errors)
         },
         _ => {
             errors.push(Error::new(

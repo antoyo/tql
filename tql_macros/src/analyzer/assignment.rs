@@ -25,8 +25,6 @@ use proc_macro2::Span;
 use syn::{
     BinOp,
     Expr,
-    ExprAssign,
-    ExprAssignOp,
 };
 use syn::spanned::Spanned;
 
@@ -70,16 +68,16 @@ pub fn argument_to_assignment(arg: &Expression, table: &SqlTable) -> Result<Assi
         value: number_literal(0),
     };
     match *arg {
-        Expr::Assign(ExprAssign { ref left, ref right, .. }) => {
-            assign_values(&mut assignment, left, right, table, &mut errors);
+        Expr::Assign(ref oper) => {
+            assign_values(&mut assignment, &oper.left, &oper.right, table, &mut errors);
         },
-        Expr::AssignOp(ExprAssignOp { ref op, ref left, ref right, .. }) => {
-            let (node, span) = binop_to_assignment_operator(&op);
+        Expr::AssignOp(ref oper) => {
+            let (node, span) = binop_to_assignment_operator(&oper.op);
             assignment.operator = WithSpan {
                 node,
                 span,
             };
-            assign_values(&mut assignment, left, right, table, &mut errors);
+            assign_values(&mut assignment, &oper.left, &oper.right, table, &mut errors);
         },
         _ => {
             errors.push(Error::new(

@@ -70,9 +70,6 @@ use rand::Rng;
 use syn::{
     AngleBracketedGenericArguments,
     Expr,
-    ExprField,
-    ExprMacro,
-    ExprTuple,
     Field,
     Fields,
     FieldsNamed,
@@ -81,7 +78,6 @@ use syn::{
     Item,
     ItemEnum,
     ItemStruct,
-    Macro,
     TypePath,
     parse,
     parse2,
@@ -792,10 +788,10 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
     let enumeration: Item = parse(input).unwrap();
     if let Item::Enum(ItemEnum { ref variants, .. }) = enumeration {
         let variant = &variants.first().unwrap().item().discriminant;
-        if let (_, Expr::Field(ExprField { ref base, .. })) = *variant.as_ref().unwrap() {
-            if let Expr::Tuple(ExprTuple { ref elems, .. }) = **base {
-                if let Expr::Macro(ExprMacro { mac: Macro { ref tts, .. }, .. }) = **elems.first().unwrap().item() {
-                    let sql_result = to_sql_query(tts.clone());
+        if let Expr::Field(ref field) = variant.as_ref().unwrap().1 {
+            if let Expr::Tuple(ref tuple) = *field.base {
+                if let Expr::Macro(ref macr) = **tuple.elems.first().unwrap().item() {
+                    let sql_result = to_sql_query(macr.mac.tts.clone());
                     let code = match sql_result {
                         Ok(sql_query_with_args) => gen_query(sql_query_with_args),
                         Err(errors) => generate_errors(errors),

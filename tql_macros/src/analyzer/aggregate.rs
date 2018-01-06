@@ -25,11 +25,6 @@ use proc_macro2::Span;
 use syn::{
     BinOp,
     Expr,
-    ExprAssign,
-    ExprBinary,
-    ExprCall,
-    ExprParen,
-    ExprPath,
     ExprUnary,
     UnOp,
 };
@@ -65,8 +60,8 @@ pub fn argument_to_aggregate(arg: &Expression, _table: &SqlTable) -> Result<Aggr
 
     let call = get_call_from_aggregate(arg, &mut aggregate, &mut errors);
 
-    if let Expr::Call(ExprCall { ref func, ref args, .. }) = *call {
-        if let Some(identifier) = path_expr_to_string(func, &mut errors) {
+    if let Expr::Call(ref call) = *call {
+        if let Some(identifier) = path_expr_to_string(&call.func, &mut errors) {
             if let Some(sql_function) = aggregates.get(&identifier) {
                 aggregate.function = sql_function.clone();
             }
@@ -83,9 +78,9 @@ pub fn argument_to_aggregate(arg: &Expression, _table: &SqlTable) -> Result<Aggr
             }
         }
 
-        if check_argument_count(args, 1, arg.span(), &mut errors) {
-            if let Expr::Path(ExprPath { ref path, .. }) = **args.first().expect("first argument").item() {
-                let path_ident = path.segments.first().unwrap().into_item().ident;
+        if check_argument_count(&call.args, 1, arg.span(), &mut errors) {
+            if let Expr::Path(ref path) = **call.args.first().expect("first argument").item() {
+                let path_ident = path.path.segments.first().unwrap().into_item().ident;
                 aggregate.field = Some(path_ident);
 
                 if aggregate.result_name.is_none() {
@@ -179,11 +174,11 @@ pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &
 
     let filter =
         match *arg {
-            Expr::Binary(ExprBinary { ref op, ref left, ref right, .. }) => {
-                binary_expression_to_aggregate_filter_expression(left, op, right, aggregates, table)?
+            Expr::Binary(ref bin) => {
+                binary_expression_to_aggregate_filter_expression(&bin.left, &bin.op, &bin.right, aggregates, table)?
             },
-            Expr::Path(ExprPath { ref path, .. }) => {
-                let segment_ident = path.segments.first().unwrap().into_item().ident;
+            Expr::Path(ref path) => {
+                let segment_ident = path.path.segments.first().unwrap().into_item().ident;
                 let identifier = segment_ident.to_string();
                 let aggregate = check_aggregate_field(&identifier, aggregates, segment_ident.span, &mut errors);
                 if let Some(aggregate) = aggregate {
@@ -197,8 +192,8 @@ pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &
                     AggregateFilterExpression::NoFilters
                 }
             },
-            Expr::Paren(ExprParen { ref expr, .. }) => {
-                let filter = expression_to_aggregate_filter_expression(expr, aggregates, table)?;
+            Expr::Paren(ref paren) => {
+                let filter = expression_to_aggregate_filter_expression(&paren.expr, aggregates, table)?;
                 AggregateFilterExpression::ParenFilter(Box::new(filter))
             },
             Expr::Unary(ExprUnary { op: UnOp::Not(_), ref expr, .. }) => {
@@ -220,11 +215,11 @@ pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &
 /// Get the call expression from an `arg` expression.
 fn get_call_from_aggregate<'a>(arg: &'a Expression, aggregate: &mut Aggregate, errors: &mut Vec<Error>) -> &'a Expression {
     // If the `arg` expression is an assignment, the call is on the right side.
-    if let Expr::Assign(ExprAssign { ref left, ref right, .. }) = *arg {
-        if let Some(identifier) = path_expr_to_identifier(left, errors) {
+    if let Expr::Assign(ref assign) = *arg {
+        if let Some(identifier) = path_expr_to_identifier(&assign.left, errors) {
             aggregate.result_name = Some(identifier); // TODO
         }
-        right
+        &assign.right
     }
     else {
         arg

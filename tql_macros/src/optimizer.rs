@@ -26,7 +26,6 @@
 use syn::{
     BinOp,
     Expr,
-    ExprBinary,
     ExprLit,
     Lit,
 };
@@ -39,7 +38,7 @@ use plugin::number_literal;
 fn all_integer_literal(expression: &Expression) -> bool {
     match *expression {
         Expr::Lit(ExprLit { lit: Lit::Int(_), .. }) => true,
-        Expr::Binary(ExprBinary { ref left, ref right, .. }) => all_integer_literal(left) && all_integer_literal(right),
+        Expr::Binary(ref bin) => all_integer_literal(&bin.left) && all_integer_literal(&bin.right),
         _ => false,
     }
 }
@@ -47,8 +46,8 @@ fn all_integer_literal(expression: &Expression) -> bool {
 /// Reduce an `expression` containing only literals to a mere literal.
 fn evaluate(expression: &Expression) -> i64 {
     match *expression {
-        Expr::Lit(ExprLit { ref lit, .. }) => {
-            if let Lit::Int(ref int_literal) = *lit {
+        Expr::Lit(ref lit) => {
+            if let Lit::Int(ref int_literal) = lit.lit {
                 // TODO: handle other types.
                 int_literal.value() as i64
             }
@@ -56,10 +55,10 @@ fn evaluate(expression: &Expression) -> i64 {
                 0
             }
         },
-        Expr::Binary(ExprBinary { op, ref left, ref right, .. }) =>
-            match op {
-                BinOp::Add(_) => evaluate(left) + evaluate(right),
-                BinOp::Sub(_) => evaluate(left) - evaluate(right),
+        Expr::Binary(ref bin) =>
+            match bin.op {
+                BinOp::Add(_) => evaluate(&bin.left) + evaluate(&bin.right),
+                BinOp::Sub(_) => evaluate(&bin.left) - evaluate(&bin.right),
                 _ => 0,
             },
         _ => 0,

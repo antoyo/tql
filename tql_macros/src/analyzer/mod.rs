@@ -37,7 +37,6 @@ use std::result;
 use proc_macro2::Span;
 use syn::{
     Expr,
-    ExprPath,
     FloatSuffix,
     Ident,
     IntSuffix,
@@ -558,8 +557,8 @@ pub fn no_primary_key(table_name: &str, position: Span) -> Error {
 /// Convert an `Expression` to an `Ident` if `expression` is an `ExprPath`.
 /// It adds an error to `errors` if `expression` is not an `ExprPath`.
 fn path_expr_to_identifier(expression: &Expression, errors: &mut Vec<Error>) -> Option<Ident> {
-    if let Expr::Path(ExprPath { ref path, .. }) = *expression {
-        let identifier = path.segments.first().unwrap().into_item().ident.clone();
+    if let Expr::Path(ref path) = *expression {
+        let identifier = path.path.segments.first().unwrap().into_item().ident.clone();
         Some(identifier)
     }
     else {

@@ -23,7 +23,6 @@
 
 use syn::{
     Expr,
-    ExprPath,
     ExprUnary,
     UnOp,
 };
@@ -43,8 +42,8 @@ pub fn argument_to_order(arg: &Expression, table: &SqlTable) -> Result<Order> {
                 let ident = get_identifier(expr, table)?;
                 Order::Descending(ident)
             }
-            Expr::Path(ExprPath { ref path, .. }) => {
-                let identifier = path.segments.first().unwrap().into_item().ident;
+            Expr::Path(ref path) => {
+                let identifier = path.path.segments.first().unwrap().into_item().ident;
                 check_field(&identifier, identifier.span, table, &mut errors);
                 Order::Ascending(identifier.to_string())
             }

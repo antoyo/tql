@@ -22,9 +22,6 @@
 use proc_macro2::Span;
 use syn::{
     Expr,
-    ExprIndex,
-    ExprMethodCall,
-    ExprPath,
     Ident,
 };
 use syn::spanned::Spanned;
@@ -82,32 +79,32 @@ impl Parser {
         /// Add the calls from the `expression` into the `calls` `Vec`.
         fn add_calls(expr: &Expr, calls: &mut MethodCalls, errors: &mut Vec<Error>) {
             match *expr {
-                Expr::MethodCall(ExprMethodCall { ref args, ref receiver, method, .. }) => {
-                    add_calls(receiver, calls, errors);
+                Expr::MethodCall(ref call) => {
+                    add_calls(&call.receiver, calls, errors);
 
-                    let args = args.iter()
+                    let args = call.args.iter()
                         .cloned()
                         .collect();
 
                     calls.push(MethodCall {
-                        name: method.to_string(),
+                        name: call.method.to_string(),
                         args,
-                        position: method.span,
+                        position: call.method.span,
                     });
                 },
-                Expr::Path(ExprPath { ref path, .. }) => {
-                    if path.segments.len() == 1 {
-                        calls.name = Some(path.segments.first()
+                Expr::Path(ref path) => {
+                    if path.path.segments.len() == 1 {
+                        calls.name = Some(path.path.segments.first()
                             .expect("first segment in path").into_item()
                             .ident);
                     }
                 },
-                Expr::Index(ExprIndex { ref expr, ref index, .. }) => {
-                    add_calls(expr, calls, errors);
+                Expr::Index(ref index) => {
+                    add_calls(&index.expr, calls, errors);
                     calls.push(MethodCall {
                         name: "limit".to_owned(),
-                        args: vec![*index.clone()],
-                        position: index.span(),
+                        args: vec![*index.index.clone()],
+                        position: index.index.span(),
                     });
                 }
                 _ => {
