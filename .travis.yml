@@ -20,9 +20,6 @@ env:
   global:
     - RUST_BACKTRACE=1
 
-allow_failures:
-  - rust: beta
-
 matrix:
     include:
         - rust: stable
@@ -37,3 +34,5 @@ matrix:
               - cargo test
               - cargo test --manifest-path testcrate/Cargo.toml
           env: RUSTFLAGS="--cfg procmacro2_semver_exempt"
+  allow_failures:
+    - rust: beta
