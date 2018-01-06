@@ -38,7 +38,8 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::mem;
 
-use syn::{self, Ident, Span};
+use proc_macro2::Span;
+use syn::{self, Ident};
 
 use ast::WithSpan;
 use methods::{add_initial_aggregates, add_initial_methods};

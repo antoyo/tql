@@ -21,7 +21,9 @@
 
 /// Analyzer for the join() method.
 
-use ast::{Expression, Join, expr_span};
+use syn::spanned::Spanned;
+
+use ast::{Expression, Join};
 use error::{Result, res};
 use state::{SqlTable, get_primary_key_field, tables_singleton};
 use super::{check_field, mismatched_types, no_primary_key, path_expr_to_identifier};
@@ -34,7 +36,7 @@ pub fn argument_to_join(arg: &Expression, table: &SqlTable) -> Result<Join> {
 
     if let Some(identifier) = path_expr_to_identifier(arg, &mut errors) {
         let name = identifier.to_string();
-        check_field(&identifier, expr_span(arg), table, &mut errors);
+        check_field(&identifier, arg.span(), table, &mut errors);
         match table.fields.get(&identifier) {
             Some(types) => {
                 let field_type = &types.ty.node;
@@ -56,7 +58,7 @@ pub fn argument_to_join(arg: &Expression, table: &SqlTable) -> Result<Join> {
                     // linter.
                 }
                 else {
-                    mismatched_types("ForeignKey<_>", field_type, expr_span(arg), &mut errors);
+                    mismatched_types("ForeignKey<_>", field_type, arg.span(), &mut errors);
                 }
             },
             None => (), // NOTE: This case is handled by the check_field() call above.

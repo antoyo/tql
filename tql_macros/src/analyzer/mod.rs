@@ -35,17 +35,17 @@ use std::fmt::Display;
 use std::result;
 
 use literalext::LiteralExt;
+use proc_macro2::Span;
 use syn::{
     Expr,
-    ExprKind,
     ExprPath,
     Ident,
     Lit,
     LitKind,
-    Span,
 };
-use syn::delimited::Delimited;
-use syn::tokens::Comma;
+use syn::punctuated::Punctuated;
+use syn::spanned::Spanned;
+use syn::token::Comma;
 
 use ast::{
     self,
@@ -64,7 +64,6 @@ use ast::{
     Query,
     TypedField,
     WithSpan,
-    expr_span,
 };
 use error::{Error, Result, res};
 use gen::ToSql;
@@ -191,7 +190,7 @@ pub fn analyze_types(query: Query) -> Result<Query> {
 
 /// Check that the `arguments` vector contains `expected_count` elements.
 /// If this is not the case, add an error to `errors`.
-fn check_argument_count(arguments: &Delimited<Expr, Comma>, expected_count: usize, position: Span, errors: &mut Vec<Error>) -> bool {
+fn check_argument_count(arguments: &Punctuated<Expr, Comma>, expected_count: usize, position: Span, errors: &mut Vec<Error>) -> bool {
     if arguments.len() == expected_count {
         true
     }
@@ -326,7 +325,7 @@ fn check_no_arguments(method_call: &MethodCall, errors: &mut Vec<Error>) {
 pub fn check_type(field_type: &Type, expression: &Expression, errors: &mut Vec<Error>) {
     if field_type != expression {
         let literal_type = get_type(expression);
-        mismatched_types(field_type, &literal_type, expr_span(expression), errors);
+        mismatched_types(field_type, &literal_type, expression.span(), errors);
     }
 }
 
@@ -437,9 +436,9 @@ fn get_query_fields(table: &SqlTable, joins: &[Join], sql_tables: &SqlTables) ->
 /// Get the string representation of an literal `Expression` type.
 /// Useful to show in an error.
 fn get_type(expression: &Expression) -> &str {
-    match expression.node {
-        ExprKind::Lit(ref literal) => {
-            match *literal {
+    match *expression {
+        Expr::Lit(ref literal) => {
+            match literal.lit {
                 Lit { value: LitKind::Bool(_), .. } => "bool",
                 Lit { value: LitKind::Other(ref literal), .. } => {
                     if let Some(int) = literal.parse_int() {
@@ -574,14 +573,14 @@ pub fn no_primary_key(table_name: &str, position: Span) -> Error {
 /// Convert an `Expression` to an `Ident` if `expression` is an `ExprPath`.
 /// It adds an error to `errors` if `expression` is not an `ExprPath`.
 fn path_expr_to_identifier(expression: &Expression, errors: &mut Vec<Error>) -> Option<Ident> {
-    if let ExprKind::Path(ExprPath { ref path, .. }) = expression.node {
+    if let Expr::Path(ExprPath { ref path, .. }) = *expression {
         let identifier = path.segments.first().unwrap().into_item().ident.clone();
         Some(identifier)
     }
     else {
         errors.push(Error::new(
             "Expected identifier", // TODO: improve this message.
-            expr_span(expression),
+            expression.span(),
         ));
         None
     }

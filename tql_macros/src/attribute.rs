@@ -31,8 +31,9 @@ use syn::{
     PathArguments,
     TypePath,
 };
+use syn::spanned::Spanned;
 
-use ast::{WithSpan, arg_span, type_span};
+use ast::WithSpan;
 use state::{BothTypes, SqlFields};
 use types::Type;
 
@@ -49,14 +50,14 @@ pub fn field_ty_to_type(ty: &syn::Type) -> WithSpan<Type> {
             let _ = write!(type_string, "{}", quote! { #ty });
             Type::UnsupportedType(type_string)
         };
-    let mut position = type_span(&ty);
+    let mut position = ty.span();
     if let syn::Type::Path(TypePath { ref path, .. }) =  *ty {
         if path.segments.first().expect("first segment in path").item().ident.to_string() == "Option" {
             if let PathArguments::AngleBracketed(AngleBracketedGenericArguments { ref args, .. }) = path.segments.first().expect("first segment in path").item().arguments {
                 // TODO: use unwrap().
                 let element = args.first().expect("first arg");
                 let typ = element.item();
-                position = arg_span(*typ);
+                position = typ.span();
             }
         }
     }

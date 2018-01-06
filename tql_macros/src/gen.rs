@@ -24,7 +24,7 @@
 use std::str::from_utf8;
 
 use literalext::LiteralExt;
-use syn::{ExprKind, Ident, LitKind};
+use syn::{Expr, Ident, LitKind};
 
 use ast::{
     Aggregate,
@@ -162,9 +162,9 @@ impl ToSql for AssignementOperator {
 /// A non-literal is converted to ? for use with query parameters.
 impl ToSql for Expression {
     fn to_sql(&self) -> String {
-        match self.node {
-            ExprKind::Lit(ref literal) => {
-                match literal.value {
+        match *self {
+            Expr::Lit(ref literal) => {
+                match literal.lit.value {
                     LitKind::Bool(boolean) => boolean.to_string().to_uppercase(),
                     LitKind::Other(ref literal) => {
                         if let Some(byte) = literal.parse_byte() {

@@ -28,12 +28,9 @@ use std::result;
 
 #[cfg(feature = "unstable")]
 use proc_macro::{Diagnostic, Level};
+use proc_macro2::Span;
 #[cfg(not(feature = "unstable"))]
 use quote::Tokens;
-use syn::Span;
-
-#[cfg(feature = "unstable")]
-use to_proc_macro_span;
 
 /// `Error` is a type that represents an error with its position.
 #[derive(Debug)]
@@ -151,7 +148,7 @@ impl Error {
 
     #[cfg(feature = "unstable")]
     pub fn emit_diagnostic(self) {
-        let span = to_proc_macro_span(self.position);
+        let span = self.position.unstable();
         let mut diagnostic = Diagnostic::spanned(span, self.kind.into(), self.message);
         for child in self.children {
             let func =

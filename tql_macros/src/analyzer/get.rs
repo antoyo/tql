@@ -21,7 +21,7 @@
 
 /// Analyzer for the get() method.
 
-use syn::ExprKind;
+use syn::Expr;
 
 use ast::{
     Expression,
@@ -42,8 +42,8 @@ pub fn get_expression_to_filter_expression(arg: &Expression, table: &SqlTable) -
     let primary_key_field = get_primary_key_field(table);
     match primary_key_field {
         Some(primary_key_field) =>
-            match arg.node {
-                ExprKind::Lit(_) | ExprKind::Path(_) => {
+            match *arg {
+                Expr::Lit(_) | Expr::Path(_) => {
                     let filter = FilterExpression::Filter(Filter {
                         operand1: FilterValue::Identifier(primary_key_field.clone()),
                         operator: RelationalOperator::Equal,

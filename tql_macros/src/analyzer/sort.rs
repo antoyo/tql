@@ -22,13 +22,14 @@
 /// Analyzer for the sort() method.
 
 use syn::{
-    ExprKind,
+    Expr,
     ExprPath,
     ExprUnary,
     UnOp,
 };
+use syn::spanned::Spanned;
 
-use ast::{Expression, Order, expr_span};
+use ast::{Expression, Order};
 use error::{Error, Result, res};
 use state::SqlTable;
 use super::{check_field, path_expr_to_identifier};
@@ -37,12 +38,12 @@ use super::{check_field, path_expr_to_identifier};
 pub fn argument_to_order(arg: &Expression, table: &SqlTable) -> Result<Order> {
     let mut errors = vec![];
     let order =
-        match arg.node {
-            ExprKind::Unary(ExprUnary { op: UnOp::Neg(_), ref expr }) => {
+        match *arg {
+            Expr::Unary(ExprUnary { op: UnOp::Neg(_), ref expr, .. }) => {
                 let ident = get_identifier(expr, table)?;
                 Order::Descending(ident)
             }
-            ExprKind::Path(ExprPath { ref path, .. }) => {
+            Expr::Path(ExprPath { ref path, .. }) => {
                 let identifier = path.segments.first().unwrap().into_item().ident;
                 check_field(&identifier, identifier.span, table, &mut errors);
                 Order::Ascending(identifier.to_string())
@@ -50,7 +51,7 @@ pub fn argument_to_order(arg: &Expression, table: &SqlTable) -> Result<Order> {
             _ => {
                 errors.push(Error::new(
                     "Expected - or identifier",
-                    expr_span(arg),
+                    arg.span(),
                 ));
                 Order::Ascending("".to_string())
             }
@@ -62,7 +63,7 @@ pub fn argument_to_order(arg: &Expression, table: &SqlTable) -> Result<Order> {
 fn get_identifier(identifier_expr: &Expression, table: &SqlTable) -> Result<String> {
     let mut errors = vec![];
     if let Some(identifier) = path_expr_to_identifier(identifier_expr, &mut errors) {
-        check_field(&identifier, expr_span(identifier_expr), table, &mut errors);
+        check_field(&identifier, identifier_expr.span(), table, &mut errors);
         res(identifier.to_string(), errors)
     }
     else {

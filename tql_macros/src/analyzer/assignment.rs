@@ -21,13 +21,14 @@
 
 /// Argument to assignment converter.
 
+use proc_macro2::Span;
 use syn::{
     BinOp,
+    Expr,
     ExprAssign,
     ExprAssignOp,
-    ExprKind,
-    Span,
 };
+use syn::spanned::Spanned;
 
 use ast::{
     Assignment,
@@ -35,7 +36,6 @@ use ast::{
     Expression,
     FilterValue,
     WithSpan,
-    expr_span,
 };
 use error::{Error, Result, res};
 use plugin::number_literal;
@@ -55,7 +55,7 @@ pub fn argument_to_assignment(arg: &Expression, table: &SqlTable) -> Result<Assi
     fn assign_values(assignment: &mut Assignment, expr1: &Expression, expr2: &Expression, table: &SqlTable, errors: &mut Vec<Error>) {
         assignment.value = expr2.clone();
         if let Some(identifier) = path_expr_to_identifier(expr1, errors) {
-            check_field(&identifier, expr_span(expr1), table, errors);
+            check_field(&identifier, expr1.span(), table, errors);
             assignment.identifier = Some(identifier);
         }
     }
@@ -65,15 +65,15 @@ pub fn argument_to_assignment(arg: &Expression, table: &SqlTable) -> Result<Assi
         identifier: None,
         operator: WithSpan {
             node: AssignementOperator::Equal,
-            span: expr_span(arg),
+            span: arg.span(),
         },
         value: number_literal(0),
     };
-    match arg.node {
-        ExprKind::Assign(ExprAssign { ref left, ref right, .. }) => {
+    match *arg {
+        Expr::Assign(ExprAssign { ref left, ref right, .. }) => {
             assign_values(&mut assignment, left, right, table, &mut errors);
         },
-        ExprKind::AssignOp(ExprAssignOp { ref op, ref left, ref right }) => {
+        Expr::AssignOp(ExprAssignOp { ref op, ref left, ref right, .. }) => {
             let (node, span) = binop_to_assignment_operator(&op);
             assignment.operator = WithSpan {
                 node,
@@ -84,7 +84,7 @@ pub fn argument_to_assignment(arg: &Expression, table: &SqlTable) -> Result<Assi
         _ => {
             errors.push(Error::new(
                 "Expected assignment", // TODO: improve this message.
-                expr_span(arg),
+                arg.span(),
             ));
         },
     }

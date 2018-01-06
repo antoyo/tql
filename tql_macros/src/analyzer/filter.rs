@@ -21,22 +21,22 @@
 
 /// Analyzer for the filter() method.
 
+use proc_macro2::Span;
 use syn::{
     BinOp,
     Expr,
     ExprBinary,
     ExprMethodCall,
-    ExprKind,
     ExprParen,
     ExprPath,
     ExprUnary,
     Ident,
     Path,
-    Span,
     UnOp,
 };
-use syn::delimited::Delimited;
-use syn::tokens::Comma;
+use syn::punctuated::Punctuated;
+use syn::spanned::Spanned;
+use syn::token::Comma;
 
 use ast::{
     self,
@@ -48,7 +48,6 @@ use ast::{
     LogicalOperator,
     RelationalOperator,
     WithSpan,
-    expr_span,
 };
 use error::{Error, Result, res};
 use state::{SqlMethod, SqlMethodTypes, SqlTable, methods_singleton};
@@ -163,36 +162,36 @@ pub fn expression_to_filter_expression(arg: &Expression, table: &SqlTable) -> Re
     let mut errors = vec![];
 
     let filter =
-        match arg.node {
-            ExprKind::Binary(ExprBinary { ref op, ref left, ref right }) => {
+        match *arg {
+            Expr::Binary(ExprBinary { ref op, ref left, ref right, .. }) => {
                 binary_expression_to_filter_expression(left, op, right, table)?
             },
-            ExprKind::MethodCall(ExprMethodCall { method, ref expr, ref args, .. }) => {
+            Expr::MethodCall(ExprMethodCall { method, ref receiver, ref args, .. }) => {
                 FilterExpression::FilterValue(WithSpan {
-                    node: method_call_expression_to_filter_expression(method, expr, args, table, &mut errors),
-                    span: expr_span(&arg),
+                    node: method_call_expression_to_filter_expression(method, receiver, args, table, &mut errors),
+                    span: arg.span(),
                 })
             },
-            ExprKind::Path(ExprPath { ref path, .. }) => {
+            Expr::Path(ExprPath { ref path, .. }) => {
                 let identifier = path.segments.first().unwrap().into_item().ident;
                 check_field(&identifier, identifier.span, table, &mut errors);
                 FilterExpression::FilterValue(WithSpan {
                     node: FilterValue::Identifier(identifier),
-                    span: expr_span(&arg),
+                    span: arg.span(),
                 })
             },
-            ExprKind::Paren(ExprParen { ref expr, .. }) => {
+            Expr::Paren(ExprParen { ref expr, .. }) => {
                 let filter = expression_to_filter_expression(expr, table)?;
                 FilterExpression::ParenFilter(Box::new(filter))
             },
-            ExprKind::Unary(ExprUnary { op: UnOp::Not(_), ref expr }) => {
+            Expr::Unary(ExprUnary { op: UnOp::Not(_), ref expr, .. }) => {
                 let filter = expression_to_filter_expression(expr, table)?;
                 FilterExpression::NegFilter(Box::new(filter))
             },
             _ => {
                 errors.push(Error::new(
                     "Expected binary operation", // TODO: improve this message.
-                    expr_span(arg),
+                    arg.span(),
                 ));
                 FilterExpression::NoFilters
             },
@@ -202,7 +201,7 @@ pub fn expression_to_filter_expression(arg: &Expression, table: &SqlTable) -> Re
 }
 
 /// Get an SQL method and arguments by type and name.
-fn get_method<'a>(object_type: &'a WithSpan<Type>, args: &Delimited<Expr, Comma>, method_name: &str, identifier: Ident, errors: &mut Vec<Error>) -> Option<(&'a SqlMethodTypes, Vec<Expression>)> {
+fn get_method<'a>(object_type: &'a WithSpan<Type>, args: &Punctuated<Expr, Comma>, method_name: &str, identifier: Ident, errors: &mut Vec<Error>) -> Option<(&'a SqlMethodTypes, Vec<Expression>)> {
     let methods = methods_singleton();
     let type_methods =
         if let Type::Nullable(_) = object_type.node {
@@ -216,7 +215,6 @@ fn get_method<'a>(object_type: &'a WithSpan<Type>, args: &Delimited<Expr, Comma>
             match type_methods.get(method_name) {
                 Some(sql_method) => {
                     let arguments: Vec<Expression> = args.iter()
-                        .map(|element| element.item().clone())
                         .cloned()
                         .collect();
                     check_method_arguments(&arguments, &sql_method.argument_types, errors);
@@ -252,19 +250,19 @@ pub fn is_relational_operator(binop: &BinOp) -> bool {
 }
 
 /// Convert a method call expression to a filter expression.
-fn method_call_expression_to_filter_expression(identifier: Ident, expr: &Expression, args: &Delimited<Expr, Comma>,
+fn method_call_expression_to_filter_expression(identifier: Ident, expr: &Expression, args: &Punctuated<Expr, Comma>,
     table: &SqlTable, errors: &mut Vec<Error>) -> FilterValue
 {
     let method_name = identifier.to_string();
     let dummy = FilterValue::None;
-    match expr.node {
-        ExprKind::Path(ExprPath { ref path, .. }) => {
+    match *expr {
+        Expr::Path(ExprPath { ref path, .. }) => {
             path_method_call_to_filter(path, identifier, &method_name, args, table, errors)
         },
         _ => {
             errors.push(Error::new(
                 "expected identifier", // TODO: improve this message.
-                expr_span(expr),
+                expr.span(),
             ));
             dummy
         },
@@ -272,7 +270,7 @@ fn method_call_expression_to_filter_expression(identifier: Ident, expr: &Express
 }
 
 /// Convert a method call where the object is an identifier to a filter expression.
-fn path_method_call_to_filter(path: &Path, identifier: Ident, method_name: &str, args: &Delimited<Expr, Comma>,
+fn path_method_call_to_filter(path: &Path, identifier: Ident, method_name: &str, args: &Punctuated<Expr, Comma>,
                               table: &SqlTable, errors: &mut Vec<Error>) -> FilterValue
 {
     // TODO: return errors instead of dummy.

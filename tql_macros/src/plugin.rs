@@ -19,15 +19,30 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use syn::{Expr, ExprKind, Lit, LitKind, Span};
-use proc_macro2::Literal;
+use proc_macro2::{Literal, Span};
+use syn::{
+    Expr,
+    ExprLit,
+    Lit,
+    LitKind,
+};
 
 pub fn number_literal(num: i64) -> Expr {
-    Expr {
-        node: ExprKind::Lit(Lit {
+    Expr::Lit(ExprLit {
+        attrs: vec![],
+        lit: Lit {
             span: Span::default(),
             value: LitKind::Other(Literal::integer(num))
-        }),
+        },
+    })
+}
+
+pub fn string_literal(string: &str) -> Expr {
+    Expr::Lit(ExprLit {
         attrs: vec![],
-    }
+        lit: Lit {
+            span: Span::default(),
+            value: LitKind::Other(Literal::string(string)),
+        },
+    })
 }

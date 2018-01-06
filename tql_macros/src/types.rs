@@ -25,7 +25,8 @@ use literalext::LiteralExt;
 use syn::{
     self,
     AngleBracketedGenericArguments,
-    ExprKind,
+    Expr,
+    ExprLit,
     GenericArgument,
     Lit,
     LitKind,
@@ -174,9 +175,9 @@ impl PartialEq<Expression> for Type {
                 Type::Nullable(ref typ) => typ,
                 ref typ => typ,
             };
-        match expression.node {
-            ExprKind::Lit(Lit { value: LitKind::Bool(_), .. }) => *typ == Type::Bool,
-            ExprKind::Lit(Lit { value: LitKind::Other(ref literal), .. }) => {
+        match *expression {
+            Expr::Lit(ExprLit { lit: Lit { value: LitKind::Bool(_), .. }, .. }) => *typ == Type::Bool,
+            Expr::Lit(ExprLit { lit: Lit { value: LitKind::Other(ref literal), .. }, .. }) => {
                 if literal.parse_byte().is_some() {
                     false
                 }

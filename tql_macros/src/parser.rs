@@ -19,17 +19,16 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+use proc_macro2::Span;
 use syn::{
     Expr,
     ExprIndex,
-    ExprKind,
     ExprMethodCall,
     ExprPath,
     Ident,
-    Span,
 };
+use syn::spanned::Spanned;
 
-use ast::expr_span;
 use error::{Error, Result, res};
 
 /// A method call.
@@ -54,7 +53,7 @@ impl MethodCalls {
         Self {
             calls: vec![],
             name:  None,
-            position: expr_span(expr),
+            position: expr.span(),
         }
     }
 
@@ -79,12 +78,12 @@ impl Parser {
 
         /// Add the calls from the `expression` into the `calls` `Vec`.
         fn add_calls(expr: &Expr, calls: &mut MethodCalls, errors: &mut Vec<Error>) {
-            match expr.node {
-                ExprKind::MethodCall(ExprMethodCall { ref args, ref expr, method, .. }) => {
-                    add_calls(expr, calls, errors);
+            match *expr {
+                Expr::MethodCall(ExprMethodCall { ref args, ref receiver, method, .. }) => {
+                    add_calls(receiver, calls, errors);
 
                     let args = args.iter()
-                        .map(|element| element.into_item().clone())
+                        .cloned()
                         .collect();
 
                     calls.push(MethodCall {
@@ -93,25 +92,25 @@ impl Parser {
                         position: method.span,
                     });
                 },
-                ExprKind::Path(ExprPath { ref path, .. }) => {
+                Expr::Path(ExprPath { ref path, .. }) => {
                     if path.segments.len() == 1 {
                         calls.name = Some(path.segments.first()
                             .expect("first segment in path").into_item()
                             .ident);
                     }
                 },
-                ExprKind::Index(ExprIndex { ref expr, ref index, .. }) => {
+                Expr::Index(ExprIndex { ref expr, ref index, .. }) => {
                     add_calls(expr, calls, errors);
                     calls.push(MethodCall {
                         name: "limit".to_owned(),
                         args: vec![*index.clone()],
-                        position: expr_span(&index),
+                        position: index.span(),
                     });
                 }
                 _ => {
                     errors.push(Error::new(
                         "Expected method call", // TODO: improve this message.
-                        expr_span(expr),
+                        expr.span(),
                     ));
                 }
             }

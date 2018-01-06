@@ -21,9 +21,10 @@
 
 /// Analyzer for the limit() method.
 
-use syn::{ExprKind, ExprRange};
+use syn::{Expr, ExprRange};
+use syn::spanned::Spanned;
 
-use ast::{Expression, Limit, expr_span};
+use ast::{Expression, Limit};
 use error::{Error, Result, res};
 use super::check_type;
 use types::Type;
@@ -50,26 +51,26 @@ pub fn analyze_limit_types(limit: &Limit, errors: &mut Vec<Error>) {
 pub fn argument_to_limit(expression: &Expression) -> Result<Limit> {
     let mut errors = vec![];
     let limit =
-        match expression.node {
-            ExprKind::Range(ExprRange { from: None, to: Some(ref range_end), .. }) => {
+        match *expression {
+            Expr::Range(ExprRange { from: None, to: Some(ref range_end), .. }) => {
                 Limit::EndRange(*range_end.clone())
             }
-            ExprKind::Range(ExprRange { from: Some(ref range_start), to: None, .. }) => {
+            Expr::Range(ExprRange { from: Some(ref range_start), to: None, .. }) => {
                 Limit::StartRange(*range_start.clone())
             }
             // TODO: check the RangeLimits.
-            ExprKind::Range(ExprRange { from: Some(ref range_start), to: Some(ref range_end), .. }) => {
+            Expr::Range(ExprRange { from: Some(ref range_start), to: Some(ref range_end), .. }) => {
                 // TODO: check that range_start < range_end.
                 Limit::Range(*range_start.clone(), *range_end.clone())
             }
-            ExprKind::Lit(_) | ExprKind::Path(_) | ExprKind::Call(_) | ExprKind::MethodCall(_) |
-                ExprKind::Binary(_) | ExprKind::Unary(_) | ExprKind::Cast(_)  => {
+            Expr::Lit(_) | Expr::Path(_) | Expr::Call(_) | Expr::MethodCall(_) |
+                Expr::Binary(_) | Expr::Unary(_) | Expr::Cast(_)  => {
                 Limit::Index(expression.clone())
             }
             _ => {
                 errors.push(Error::new(
                     "Expected index range or number expression",
-                    expr_span(expression),
+                    expression.span(),
                 ));
                 Limit::NoLimit
             }

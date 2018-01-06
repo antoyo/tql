@@ -1,4 +1,7 @@
 /*
+ * TODO: for the tests of the other backend, create a new crate and include!() the _expr test files
+ * and create a new test to check that all the files are included, so that the tests fail when we
+ * forget to include!() a file.
  * TODO: remove the internal state of the proc-macro and use dummy code generation to check the
  * identifiers (to make it work with models defined in external crates). Also, use the trait bound
  * SqlTable trick to check that it is a table.
@@ -12,6 +15,7 @@
  * TODO: join on non foreign key.
  * TODO: unique constraints.
  * TODO: support primary key with multiple columns.
+ * TODO: allow user-defined functions (maybe with partial query?) and types.
  * TODO: document the management of the connection.
  * TODO: add table_name attribute to allow changing the table name.
  * TODO: improve the error handling of the generated code.
@@ -55,22 +59,24 @@ mod types;
 
 use std::collections::BTreeMap;
 use std::iter::FromIterator;
-#[cfg(feature = "unstable")]
-use std::mem;
 
 use proc_macro::TokenStream;
 #[cfg(feature = "unstable")]
 use proc_macro::{TokenNode, TokenTree};
-use proc_macro2::{Literal, Term};
+use proc_macro2::{Literal, Span};
 use quote::Tokens;
 #[cfg(feature = "unstable")]
 use quote::ToTokens;
 use rand::Rng;
 use syn::{
     AngleBracketedGenericArguments,
-    ExprKind,
-    ExprTup,
-    ExprTupField,
+    Expr,
+    ExprField,
+    ExprMacro,
+    ExprTuple,
+    Field,
+    Fields,
+    FieldsNamed,
     GenericArgument,
     Ident,
     Item,
@@ -79,12 +85,11 @@ use syn::{
     Lit,
     LitKind,
     Macro,
-    Span,
     TypePath,
-    VariantData,
     parse,
 };
 use syn::PathArguments::AngleBracketed;
+use syn::spanned::Spanned;
 
 use analyzer::{analyze, analyze_types, has_joins};
 use arguments::{Args, arguments};
@@ -93,11 +98,8 @@ use ast::{
     Join,
     Query,
     QueryType,
-    item_span,
     query_type,
 };
-#[cfg(feature = "unstable")]
-use ast::{generic_arg_span, expr_span};
 use attribute::{field_ty_to_type, fields_vec_to_hashmap};
 use error::{Error, Result, res};
 #[cfg(not(feature = "unstable"))]
@@ -105,6 +107,7 @@ use error::compiler_error;
 use gen::ToSql;
 use optimizer::optimize;
 use parser::Parser;
+use plugin::string_literal;
 use state::{
     SqlFields,
     SqlTable,
@@ -166,13 +169,13 @@ fn to_sql_query(input: TokenStream) -> Result<SqlQueryWithArgs> {
     /*if input.is_empty() {
         return Err(vec![Error::new_with_code("this macro takes 1 parameter but 0 parameters were supplied", cx.call_site(), "E0061")]);
     }*/
-    let expr =
+    let expr: Expr =
         match parse(input) {
             Ok(expr) => expr,
             Err(error) => return Err(vec![Error::new(&error.to_string(), Span::default())]),
         };
     #[cfg(feature = "unstable")]
-    let span = expr_span(&expr);
+    let span = expr.span();
     let sql_tables = tables_singleton();
     let parser = Parser::new();
     let method_calls = parser.parse(&expr)?;
@@ -268,7 +271,7 @@ pub fn sql_table(input: TokenStream) -> TokenStream {
         }
         else {
             let mut compiler_errors = quote! {};
-            let error = Error::new("Expected struct but found", item_span(&item)); // TODO: improve this message.
+            let error = Error::new("Expected struct but found", item.span()); // TODO: improve this message.
             add_error(error, &mut compiler_errors);
             compiler_errors.into()
         };
@@ -326,9 +329,9 @@ fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, TokenStrea
     let mut impls: TokenStream = quote! {}.into();
     let mut errors = vec![];
 
-    let fields =
-        match item_struct.data {
-            VariantData::Struct(ref fields, _) => fields.clone().into_vec(),
+    let fields: Vec<Field> =
+        match item_struct.fields {
+            Fields::Named(FieldsNamed { ref named , .. }) => named.into_iter().cloned().collect(),
             _ => return (Err(vec![Error::new("Expected normal struct, found", position)]), empty_token_stream()), // TODO: improve this message.
         };
     let mut primary_key_count = 0;
@@ -363,8 +366,8 @@ fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, TokenStrea
                     }.into();
                     #[cfg(feature = "unstable")]
                     {
-                        let field_pos = generic_arg_span(&field_type);
-                        let span = to_proc_macro_span(field_pos);
+                        let field_pos = field_type.span();
+                        let span = field_pos.unstable();
                         // NOTE: position the trait at this position so that the error message points
                         // on the type.
                         code = respan_with(code, span);
@@ -427,15 +430,12 @@ fn tosql_impl(item_struct: &ItemStruct) -> Tokens {
 fn create_debug_impl(item_struct: &ItemStruct) -> Tokens {
     let table_ident = &item_struct.ident;
     let table_name = table_ident.to_string();
-    if let VariantData::Struct(ref fields, _) = item_struct.data {
-        let fields = fields.clone();
-        let field_idents = fields.iter()
-            .map(|element| element.into_item())
+    if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
+        let field_idents = named.iter()
             .map(|field| field.ident.expect("field has name"));
         let field_names = field_idents
             .map(|ident| ident.to_string());
-        let field_idents = fields.iter()
-            .map(|element| element.into_item())
+        let field_idents = named.iter()
             .map(|field| field.ident.expect("field has name"));
         quote! {
             impl ::std::fmt::Debug for #table_ident {
@@ -479,7 +479,7 @@ fn generate_errors(errors: Vec<Error>) -> TokenStream {
 /// Generate the Rust code from the SQL query.
 fn gen_query(args: SqlQueryWithArgs) -> TokenStream {
     let table_ident = &args.table_name;
-    let ident = Ident::new(Term::intern("connection"), table_ident.span);
+    let ident = Ident::new("connection", table_ident.span);
     let sql_tables = tables_singleton();
     let table_name = table_ident.to_string();
     let tokens =
@@ -499,10 +499,7 @@ fn gen_query(args: SqlQueryWithArgs) -> TokenStream {
 fn gen_query_expr(ident: Ident, sql_query: String, args_expr: Tokens, struct_expr: Tokens,
                   aggregate_struct: Tokens, aggregate_expr: Tokens, query_type: QueryType) -> Tokens
 {
-    let sql_query = ExprKind::Lit(Lit {
-        value: LitKind::Other(Literal::string(&sql_query)),
-        span: Span::default(),
-    });
+    let sql_query = string_literal(&sql_query);
     match query_type {
         QueryType::AggregateMulti => {
             let result = quote! {{
@@ -593,9 +590,9 @@ fn get_query_arguments(arguments: Args) -> Tokens {
     let mut exprs = vec![];
 
     for arg in arguments {
-        match arg.expression.node {
+        match arg.expression {
             // Do not add literal arguments as they are in the final string literal.
-            ExprKind::Lit(_) => (),
+            Expr::Lit(_) => (),
             _ => {
                 let expr = &arg.expression;
                 arg_refs.push(quote! { &(#expr) });
@@ -719,7 +716,7 @@ fn gen_aggregate_struct(aggregates: &[Aggregate]) -> (Tokens, Tokens) {
 }
 
 fn new_ident(string: &str) -> Ident {
-    Ident::new(Term::intern(string), Span::default())
+    Ident::new(string, Span::default())
 }
 
 fn is_string_type(typ: &syn::Type) -> bool {
@@ -755,12 +752,6 @@ fn rand_string() -> String {
     rand::thread_rng().gen_ascii_chars().take(30).collect()
 }
 
-#[cfg(feature = "unstable")]
-fn to_proc_macro_span(span: Span) -> proc_macro::Span {
-    // TODO: avoid using transmute.
-    unsafe { mem::transmute(span) }
-}
-
 fn concat_token_stream(stream1: TokenStream, stream2: TokenStream) -> TokenStream {
     FromIterator::from_iter(stream1.into_iter().chain(stream2.into_iter()))
 }
@@ -793,10 +784,10 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
     let enumeration: Item = parse(input).unwrap();
     if let Item::Enum(ItemEnum { ref variants, .. }) = enumeration {
         let variant = &variants.first().unwrap().item().discriminant;
-        if let ExprKind::TupField(ExprTupField { ref expr, .. }) = variant.as_ref().unwrap().node {
-            if let ExprKind::Tup(ExprTup { ref args, .. }) = expr.node {
-                if let ExprKind::Macro(Macro { ref tokens, .. }) = args.first().unwrap().item().node {
-                    let tokens: proc_macro2::TokenStream = tokens[0].clone().0.into();
+        if let (_, Expr::Field(ExprField { ref base, .. })) = *variant.as_ref().unwrap() {
+            if let Expr::Tuple(ExprTuple { ref elems, .. }) = **base {
+                if let Expr::Macro(ExprMacro { mac: Macro { ref tts, .. }, .. }) = **elems.first().unwrap().item() {
+                    let tokens: proc_macro2::TokenStream = tts.clone().into_iter().next().unwrap().clone().into();
                     let tokens = tokens.to_string();
                     let tokens = tokens.trim();
                     let tokens = &tokens[1..tokens.len() - 1]; // Remove the parenthesis.

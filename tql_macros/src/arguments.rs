@@ -23,7 +23,7 @@
 
 use syn::{
     self,
-    ExprKind,
+    Expr,
     Ident,
     parse,
 };
@@ -104,7 +104,7 @@ fn add_assignments(assignments: Vec<Assignment>, arguments: &mut Args, table_nam
 /// Add an argument to `arguments`.
 fn add_expr(arguments: &mut Args, arg: Arg) {
     // Do not add literal.
-    if let ExprKind::Lit(_) = arg.expression.node {
+    if let Expr::Lit(_) = arg.expression {
         return;
     }
     arguments.push(arg);

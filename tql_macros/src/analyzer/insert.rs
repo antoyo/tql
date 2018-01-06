@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use syn::Span;
+use proc_macro2::Span;
 
 use ast::{Assignment, AssignementOperator, WithSpan};
 use error::Error;

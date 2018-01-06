@@ -26,8 +26,9 @@
 use literalext::LiteralExt;
 use syn::{
     BinOp,
+    Expr,
     ExprBinary,
-    ExprKind,
+    ExprLit,
     Lit,
     LitKind,
 };
@@ -38,19 +39,19 @@ use plugin::number_literal;
 
 /// Check that all the expressions in `expression` are literal.
 fn all_integer_literal(expression: &Expression) -> bool {
-    match expression.node {
-        ExprKind::Lit(Lit { value: LitKind::Other(ref literal), .. }) => {
+    match *expression {
+        Expr::Lit(ExprLit { lit: Lit { value: LitKind::Other(ref literal), .. }, .. }) => {
             literal.parse_int().is_some()
         },
-        ExprKind::Binary(ExprBinary { ref left, ref right, .. }) => all_integer_literal(left) && all_integer_literal(right),
+        Expr::Binary(ExprBinary { ref left, ref right, .. }) => all_integer_literal(left) && all_integer_literal(right),
         _ => false,
     }
 }
 
 /// Reduce an `expression` containing only literals to a mere literal.
 fn evaluate(expression: &Expression) -> i64 {
-    match expression.node {
-        ExprKind::Lit(Lit { value: LitKind::Other(ref literal), .. }) => {
+    match *expression {
+        Expr::Lit(ExprLit { lit: Lit { value: LitKind::Other(ref literal), .. }, .. }) => {
             if let Some(int_literal) = literal.parse_int() {
                 // TODO: handle other types.
                 int_literal.as_i64().expect("cannot get i64")
@@ -59,7 +60,7 @@ fn evaluate(expression: &Expression) -> i64 {
                 0
             }
         },
-        ExprKind::Binary(ExprBinary { op, ref left, ref right }) =>
+        Expr::Binary(ExprBinary { op, ref left, ref right, .. }) =>
             match op {
                 BinOp::Add(_) => evaluate(left) + evaluate(right),
                 BinOp::Sub(_) => evaluate(left) - evaluate(right),
