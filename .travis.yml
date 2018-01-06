@@ -20,6 +20,9 @@ env:
   global:
     - RUST_BACKTRACE=1
 
+allow_failures:
+  - rust: beta
+
 matrix:
     include:
         - rust: stable

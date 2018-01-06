@@ -1,7 +1,10 @@
 /*
+ * TODO: remove allow_failure for beta when this issue is fixed:
+ * https://github.com/rust-lang/rust/issues/46478
  * TODO: for the tests of the other backend, create a new crate and include!() the _expr test files
  * and create a new test to check that all the files are included, so that the tests fail when we
  * forget to include!() a file.
+ * TODO: write fail tests for stable using include!().
  * TODO: remove the internal state of the proc-macro and use dummy code generation to check the
  * identifiers (to make it work with models defined in external crates). Also, use the trait bound
  * SqlTable trick to check that it is a table.
