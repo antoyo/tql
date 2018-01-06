@@ -712,7 +712,7 @@ fn try<F: FnMut(T), T>(mut result: result::Result<T, Vec<Error>>, errors: &mut V
 pub fn unknown_table_error(table_name: &str, position: Span, sql_tables: &SqlTables, errors: &mut Vec<Error>) {
     let mut error = Error::new_with_code(
         &format!("`{table}` does not name an SQL table",
-                table = table_name
+                 table = table_name
         ),
         position,
         "E0422",

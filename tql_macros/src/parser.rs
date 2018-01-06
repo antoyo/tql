@@ -29,6 +29,7 @@ use syn::{
 };
 use syn::spanned::Spanned;
 
+use ast::first_token_span;
 use error::{Error, Result, res};
 
 /// A method call.
@@ -53,7 +54,9 @@ impl MethodCalls {
         Self {
             calls: vec![],
             name:  None,
-            position: expr.span(),
+            // NOTE: we only want the position of the first token since this position is used in
+            // errors for the table name.
+            position: first_token_span(expr),
         }
     }
 

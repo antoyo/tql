@@ -32,7 +32,7 @@ error: mismatched types:
   --> $DIR/methods.rs:59:23
    |
 59 |     sql!(Table.filter(date.year()));
-   |                       ^^^^
+   |                       ^^^^^^^^^^^
    |
    = note: in this expansion of sql! (defined in tql)
 
@@ -62,7 +62,7 @@ error: mismatched types:
   --> $DIR/methods.rs:77:23
    |
 77 |     sql!(Table.filter(field1.len()));
-   |                       ^^^^^^
+   |                       ^^^^^^^^^^^^
    |
    = note: in this expansion of sql! (defined in tql)
 
@@ -72,7 +72,7 @@ error: mismatched types:
   --> $DIR/methods.rs:83:23
    |
 83 |     sql!(Table.filter(field1.len() && option_field.is_some()));
-   |                       ^^^^^^
+   |                       ^^^^^^^^^^^^
    |
    = note: in this expansion of sql! (defined in tql)
 

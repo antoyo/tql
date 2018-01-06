@@ -43,6 +43,7 @@ use ast::{
     Expression,
     Identifier,
     WithSpan,
+    first_token_span,
 };
 use error::{Error, Result, res};
 use new_ident;
@@ -72,7 +73,9 @@ pub fn argument_to_aggregate(arg: &Expression, _table: &SqlTable) -> Result<Aggr
             else {
                 let mut error = Error::new_with_code(
                     &format!("unresolved name `{}`", identifier),
-                    arg.span(),
+                    // NOTE: we only want the position of the function name, not the parenthesis
+                    // and the arguments, hence, we only fetch the position of the first token.
+                    first_token_span(arg),
                     "E0425",
                 );
                 propose_similar_name(&identifier, aggregates.keys().map(String::as_ref), &mut error);

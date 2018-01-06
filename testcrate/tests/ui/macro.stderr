@@ -22,7 +22,7 @@ error: Expected method call
   --> $DIR/macro.rs:60:10
    |
 60 |     sql!(Table());
-   |          ^^^^^
+   |          ^^^^^^^
 
 error: cannot call the filter() method with the insert() method
   --> $DIR/macro.rs:63:25

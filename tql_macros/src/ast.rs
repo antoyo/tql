@@ -23,7 +23,8 @@
 
 use std::fmt::{Display, Error, Formatter};
 
-use proc_macro2::Span;
+use proc_macro2::{Span, TokenStream};
+use quote::ToTokens;
 use syn::{Expr, Ident};
 
 use state::tables_singleton;
@@ -342,4 +343,10 @@ pub fn query_type(query: &Query) -> QueryType {
 pub struct WithSpan<T> {
     pub node: T,
     pub span: Span,
+}
+
+/// Get the position of the first token of the expression.
+pub fn first_token_span(expr: &Expr) -> Span {
+    let tokens: TokenStream = expr.into_tokens().into();
+    tokens.into_iter().next().expect("first token of method call expression").span
 }

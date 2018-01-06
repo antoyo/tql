@@ -199,16 +199,16 @@ error: mismatched types:
     = note: in this expansion of sql! (defined in tql)
 
 error: Expected - or identifier
-   --> $DIR/select.rs:156:68
+   --> $DIR/select.rs:156:67
     |
 156 |     sql!(Table.filter(i32_field < 100 && field1 == "value1").sort(*i32_field, *field1));
-    |                                                                    ^^^^^^^^^
+    |                                                                   ^^^^^^^^^^
 
 error: Expected - or identifier
-   --> $DIR/select.rs:156:80
+   --> $DIR/select.rs:156:79
     |
 156 |     sql!(Table.filter(i32_field < 100 && field1 == "value1").sort(*i32_field, *field1));
-    |                                                                                ^^^^^^
+    |                                                                               ^^^^^^^
 
 error: `Tble` does not name an SQL table
    --> $DIR/select.rs:160:10

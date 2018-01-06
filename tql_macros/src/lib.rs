@@ -83,6 +83,7 @@ use syn::{
     ItemStruct,
     LitStr,
     Macro,
+    Path,
     TypePath,
     parse,
 };
@@ -361,7 +362,21 @@ fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, TokenStrea
                     }.into();
                     #[cfg(feature = "unstable")]
                     {
-                        let field_pos = field_type.span();
+                        let field_pos =
+                            if let syn::Type::Path(TypePath { path: Path { ref segments, .. }, ..}) = *field_type {
+                                let segment = segments.first().expect("first segment").into_item();
+                                if let AngleBracketed(AngleBracketedGenericArguments { ref args, .. }) =
+                                    segment.arguments
+                                {
+                                    args.first().expect("first argument").span()
+                                }
+                                else {
+                                    field_type.span()
+                                }
+                            }
+                            else {
+                                field_type.span()
+                            };
                         let span = field_pos.unstable();
                         // NOTE: position the trait at this position so that the error message points
                         // on the type.

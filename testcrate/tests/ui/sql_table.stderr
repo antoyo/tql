@@ -8,7 +8,7 @@ error: use of unsupported type name `& 'a str`
   --> $DIR/sql_table.rs:36:13
    |
 36 |     string: &'a str,
-   |             ^
+   |             ^^^^^^^
 
 error: use of unsupported type name `Connection`
   --> $DIR/sql_table.rs:38:17
@@ -26,7 +26,7 @@ error: use of unsupported type name `Option<String>`
   --> $DIR/sql_table.rs:42:28
    |
 42 |     nested_options: Option<Option<String>>,
-   |                            ^^^^^^
+   |                            ^^^^^^^^^^^^^^^
 
 error: use of unsupported type name `DateTime`
   --> $DIR/sql_table.rs:44:15
@@ -38,7 +38,7 @@ error: use of unsupported type name `DateTime<i32>`
   --> $DIR/sql_table.rs:46:19
    |
 46 |     datetime_i32: DateTime<i32>,
-   |                   ^^^^^^^^
+   |                   ^^^^^^^^^^^^^
 
 error: use of unsupported type name `ForeignKey`
   --> $DIR/sql_table.rs:48:20
@@ -62,7 +62,7 @@ error: use of unsupported type name `Vec<i32>`
   --> $DIR/sql_table.rs:54:17
    |
 54 |     vector_i32: Vec<i32>,
-   |                 ^^^
+   |                 ^^^^^^^^
 
 error: aborting due to 10 previous errors
 
