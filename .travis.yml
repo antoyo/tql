@@ -34,5 +34,5 @@ matrix:
               - cargo test
               - cargo test --manifest-path testcrate/Cargo.toml
           env: RUSTFLAGS="--cfg procmacro2_semver_exempt"
-  allow_failures:
-    - rust: beta
+    allow_failures:
+        - rust: beta
