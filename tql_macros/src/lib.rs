@@ -81,12 +81,12 @@ use syn::{
     Item,
     ItemEnum,
     ItemStruct,
-    LitStr,
     Macro,
-    Path,
     TypePath,
     parse,
 };
+#[cfg(feature = "unstable")]
+use syn::{LitStr, Path};
 use syn::PathArguments::AngleBracketed;
 use syn::spanned::Spanned;
 
@@ -794,10 +794,9 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
         if let (_, Expr::Field(ExprField { ref base, .. })) = *variant.as_ref().unwrap() {
             if let Expr::Tuple(ExprTuple { ref elems, .. }) = **base {
                 if let Expr::Macro(ExprMacro { mac: Macro { ref tts, .. }, .. }) = **elems.first().unwrap().item() {
-                    let tokens: proc_macro2::TokenStream = tts.clone().into_iter().next().unwrap().clone().into();
+                    let tokens: proc_macro2::TokenStream = FromIterator::from_iter(tts.clone().into_iter());
                     let tokens = tokens.to_string();
                     let tokens = tokens.trim();
-                    let tokens = &tokens[1..tokens.len() - 1]; // Remove the parenthesis.
                     let tokens: TokenStream = std::str::FromStr::from_str(&tokens).unwrap();
 
                     let sql_result = to_sql_query(tokens);
