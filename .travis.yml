@@ -17,8 +17,9 @@ before_script:
   - psql -d database -c "ALTER USER test PASSWORD 'test';"
 
 env:
-  - RUST_BACKTRACE=1
-  - RUSTFLAGS="--cfg procmacro2_semver_exempt"
+  global:
+    - RUST_BACKTRACE=1
+    - RUSTFLAGS="--cfg procmacro2_semver_exempt"
 
 matrix:
     include:
