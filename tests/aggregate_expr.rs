@@ -51,10 +51,10 @@ fn test_aggregate() {
     let connection = get_connection();
 
     let _teardown = TearDown::new(|| {
-        let _ = TableAggregateExpr::drop(&connection);
+        let _ = sql!(TableAggregateExpr.drop());
     });
 
-    let _ = TableAggregateExpr::create(&connection);
+    let _ = sql!(TableAggregateExpr.create());
 
     sql!(TableAggregateExpr.insert(field1 = "test", field2 = 55)).unwrap();
     sql!(TableAggregateExpr.insert(field1 = "testing", field2 = 12)).unwrap();

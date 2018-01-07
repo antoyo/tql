@@ -70,12 +70,12 @@ fn test_select() {
     let connection = get_connection();
 
     let _teardown = TearDown::new(|| {
-        let _ = TableSelectExpr::drop(&connection);
-        let _ = RelatedTableSelectExpr::drop(&connection);
+        let _ = sql!(TableSelectExpr.drop());
+        let _ = sql!(RelatedTableSelectExpr.drop());
     });
 
-    let _ = RelatedTableSelectExpr::create(&connection);
-    let _ = TableSelectExpr::create(&connection);
+    let _ = sql!(RelatedTableSelectExpr.create());
+    let _ = sql!(TableSelectExpr.create());
 
     let datetime: DateTime<Utc> = FromStr::from_str("2015-11-16T15:51:12-05:00").unwrap();
     let datetime2: DateTime<Utc> = FromStr::from_str("2013-11-15T15:51:12-05:00").unwrap();

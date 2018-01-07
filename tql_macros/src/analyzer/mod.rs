@@ -113,8 +113,6 @@ struct QueryData {
     filter: FilterExpression,
     // Aggregate / Select
     joins: Vec<Join>,
-    // Create
-    fields_to_create: Vec<TypedField>,
     // Insert / Update
     assignments: Vec<Assignment>,
     // Select
@@ -240,7 +238,9 @@ fn check_method_calls_validity(method_calls: &MethodCalls, errors: &mut Vec<Erro
         hashmap!{
             "aggregate" => vec!["filter", "join", "values"],
             "all" => vec!["filter", "get", "join", "limit", "sort"],
+            "create" => vec![],
             "delete" => vec!["filter", "get"],
+            "drop" => vec![],
             "insert" => vec![],
             "update" => vec!["filter", "get"],
         };
@@ -378,7 +378,9 @@ fn get_methods() -> Vec<String> {
     vec![
         "aggregate".to_string(),
         "all".to_string(),
+        "create".to_string(),
         "delete".to_string(),
+        "drop".to_string(),
         "filter".to_string(),
         "get".to_string(),
         "insert".to_string(),
@@ -453,7 +455,7 @@ fn mismatched_types<S: Display, T: Display>(expected_type: S, actual_type: &T, p
 }
 
 /// Create a new query from all the data gathered by the method calls.
-fn new_query(QueryData { selected_fields, filter, joins, limit, order, assignments, fields_to_create, aggregates, groups,
+fn new_query(QueryData { selected_fields, filter, joins, limit, order, assignments, aggregates, groups,
     aggregate_filter, query_type }: QueryData, table_name: String) -> Query
 {
     match query_type {
@@ -468,7 +470,6 @@ fn new_query(QueryData { selected_fields, filter, joins, limit, order, assignmen
             },
         SqlQueryType::CreateTable =>
             Query::CreateTable {
-                fields: fields_to_create,
                 table: table_name,
             },
         SqlQueryType::Delete =>
@@ -555,10 +556,18 @@ fn process_methods(calls: &[MethodCall], table_name: &str, delete_position: &mut
             "all" => {
                 check_no_arguments(&method_call, &mut errors);
             },
+            "create" => {
+                check_no_arguments(&method_call, &mut errors);
+                query_data.query_type = SqlQueryType::CreateTable;
+            },
             "delete" => {
                 check_no_arguments(&method_call, &mut errors);
                 query_data.query_type = SqlQueryType::Delete;
                 *delete_position = Some(method_call.position);
+            },
+            "drop" => {
+                check_no_arguments(&method_call, &mut errors);
+                query_data.query_type = SqlQueryType::Drop;
             },
             "filter" => {
                 if query_data.aggregates.is_empty() {

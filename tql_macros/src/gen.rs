@@ -322,11 +322,9 @@ impl ToSql for Query {
                                             aggregate_filter = aggregate_filter.to_sql())
                                     )
             },
-            Query::CreateTable { ref fields, ref table } => {
-                format!("CREATE TABLE {table} ({fields})",
-                    table = table,
-                    fields = fields.to_sql()
-                )
+            Query::CreateTable { ref table } => {
+                // NOTE: the query is in a method added to the table struct.
+                String::new()
             },
             Query::Delete { ref filter, ref table } => {
                 let where_clause = filter_to_where_clause(filter);

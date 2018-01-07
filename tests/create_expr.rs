@@ -21,26 +21,64 @@
 
 #![feature(proc_macro)]
 
+extern crate chrono;
 extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
-use postgres::{Connection, TlsMode};
-use postgres::error::UNDEFINED_TABLE;
-use tql::PrimaryKey;
-use tql_macros::sql;
-
 mod teardown;
+
+use chrono::DateTime;
+use chrono::naive::{NaiveDate, NaiveDateTime, NaiveTime};
+use chrono::offset::{Local, Utc};
+use postgres::{Connection, TlsMode};
+use tql::{ForeignKey, PrimaryKey};
+use tql_macros::sql;
 
 use teardown::TearDown;
 
 #[derive(SqlTable)]
 #[allow(dead_code)]
-struct TableDropExpr {
-    primary_key: PrimaryKey,
+struct SqlTable {
+    id: PrimaryKey,
     field1: String,
     field2: i32,
+    field3: Option<i32>,
+    related_field: ForeignKey<RelatedTable>,
+}
+
+#[derive(SqlTable)]
+#[allow(dead_code)]
+struct RelatedTable {
+    id: PrimaryKey,
+    field1: String,
+}
+
+#[derive(SqlTable)]
+#[allow(dead_code)]
+struct Dates {
+    pk: PrimaryKey,
+    date1: NaiveDateTime,
+    date2: DateTime<Utc>,
+    date3: DateTime<Local>,
+    date4: NaiveDate,
+    date5: NaiveTime,
+}
+
+#[derive(SqlTable)]
+#[allow(dead_code)]
+struct OtherTypes {
+    pk: PrimaryKey,
+    boolean: bool,
+    bytestring: Vec<u8>,
+    //character: char, // FIXME: does not work.
+    float32: f32,
+    float64: f64,
+    int8: i8,
+    int16: i16,
+    int32: i32,
+    int64: i64,
 }
 
 fn get_connection() -> Connection {
@@ -48,23 +86,26 @@ fn get_connection() -> Connection {
 }
 
 #[test]
-fn test_drop() {
+fn test_create() {
     let connection = get_connection();
 
     let _teardown = TearDown::new(|| {
-        let _ = sql!(TableDropExpr.drop());
+        let _ = sql!(SqlTable.drop());
+        let _ = sql!(RelatedTable.drop());
+        let _ = sql!(Dates.drop());
+        let _ = sql!(OtherTypes.drop());
     });
 
-    let _ = sql!(TableDropExpr.create());
+    assert!(sql!(RelatedTable.create()).is_ok());
 
-    let result = sql!(TableDropExpr.insert(field1 = "value1", field2 = 55));
-    assert!(result.is_ok());
+    assert!(sql!(SqlTable.create()).is_ok());
 
-    let _ = sql!(TableDropExpr.drop());
+    assert!(sql!(Dates.create()).is_ok());
+    assert!(sql!(Dates.drop()).is_ok());
 
-    let result = sql!(TableDropExpr.insert(field1 = "value1", field2 = 55));
-    match result {
-        Err(db_error) => assert_eq!(Some(&UNDEFINED_TABLE), db_error.code()),
-        Ok(_) => assert!(false),
-    }
+    assert!(sql!(OtherTypes.create()).is_ok());
+    assert!(sql!(OtherTypes.drop()).is_ok());
+
+    assert!(sql!(SqlTable.drop()).is_ok());
+    assert!(sql!(RelatedTable.drop()).is_ok());
 }

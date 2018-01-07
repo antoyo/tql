@@ -149,10 +149,21 @@ pub fn sql(input: TokenStream) -> TokenStream {
 pub fn to_sql(input: TokenStream) -> TokenStream {
     match to_sql_query(input.into()) {
         Ok(args) => {
-            let expr = LitStr::new(&args.sql, args.span);
-            let gen = quote! {
-                #expr
-            };
+            let gen =
+                match args.query_type {
+                    QueryType::Create => {
+                        let table_name = args.table_name;
+                        quote! {
+                            #table_name::_create_query()
+                        }
+                    },
+                    _ => {
+                        let expr = LitStr::new(&args.sql, args.span);
+                        quote! {
+                            #expr
+                        }
+                    }
+                };
             gen.into()
         },
         Err(errors) => generate_errors(errors),
@@ -375,7 +386,7 @@ fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, Option<Str
     (res(fields, errors), primary_key_field, impls)
 }
 
-/// Create the create() and from_row() method for the table struct.
+/// Create the _create_query() and from_row() method for the table struct.
 fn table_methods(item_struct: &ItemStruct) -> Tokens {
     let table_ident = &item_struct.ident;
     if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
@@ -390,7 +401,6 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
             table = table_ident,
             fields = fields_to_create.to_sql()
         );
-        let drop_query = format!("DROP TABLE {table}", table = table_ident);
 
         let field_names = named.iter()
             .map(|field| field.ident.expect("field has name"));
@@ -417,22 +427,12 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
 
         quote! {
             impl #table_ident {
-                #[allow(unused)]
-                fn create(connection: &::postgres::Connection) -> Result<(), ::postgres::Error> {
-                    connection.prepare(#create_query)
-                        .and_then(|result| result.execute(&[]))
-                        .map(|_| ())
+                pub fn _create_query() -> &'static str {
+                    #create_query
                 }
 
                 #[allow(unused)]
-                fn drop(connection: &::postgres::Connection) -> Result<(), ::postgres::Error> {
-                    connection.prepare(#drop_query)
-                        .and_then(|result| result.execute(&[]))
-                        .map(|_| ())
-                }
-
-                #[allow(unused)]
-                fn from_row(row: ::postgres::rows::Row) -> Self {
+                pub fn from_row(row: ::postgres::rows::Row) -> Self {
                     Self {
                         #(#field_names: #columns,)*
                     }
@@ -529,23 +529,23 @@ fn generate_errors(errors: Vec<Error>) -> TokenStream {
 fn gen_query(args: SqlQueryWithArgs) -> TokenStream {
     let table_ident = &args.table_name;
     let ident = Ident::new("connection", table_ident.span);
-    let table_name = table_ident.to_string();
     let struct_expr = create_struct(table_ident, args.joins);
     let (aggregate_struct, aggregate_expr) = gen_aggregate_struct(&args.aggregates);
     let args_expr = get_query_arguments(args.arguments);
-    let tokens = gen_query_expr(ident, args.sql, args_expr, struct_expr, aggregate_struct, aggregate_expr, args.query_type);
+    let tokens = gen_query_expr(ident, args.sql, args_expr, struct_expr, aggregate_struct, aggregate_expr,
+                                args.query_type, table_ident);
     tokens.into()
 }
 
 /// Generate the Rust code using the `postgres` library depending on the `QueryType`.
-fn gen_query_expr(ident: Ident, sql_query: String, args_expr: Tokens, struct_expr: Tokens,
-                  aggregate_struct: Tokens, aggregate_expr: Tokens, query_type: QueryType) -> Tokens
+fn gen_query_expr(connection_ident: Ident, sql_query: String, args_expr: Tokens, struct_expr: Tokens,
+                  aggregate_struct: Tokens, aggregate_expr: Tokens, query_type: QueryType, table_ident: &Ident) -> Tokens
 {
     let sql_query = string_literal(&sql_query);
     match query_type {
         QueryType::AggregateMulti => {
             let result = quote! {{
-                let result = #ident.prepare(#sql_query).expect("prepare query");
+                let result = #connection_ident.prepare(#sql_query).expect("prepare query");
                 result.query(&#args_expr).expect("execute query").iter()
             }};
             let call = quote! {
@@ -562,15 +562,21 @@ fn gen_query_expr(ident: Ident, sql_query: String, args_expr: Tokens, struct_exp
         QueryType::AggregateOne => {
             quote! {{
                 #aggregate_struct
-                let result = #ident.prepare(#sql_query).expect("prepare query");
+                let result = #connection_ident.prepare(#sql_query).expect("prepare query");
                 result.query(&#args_expr).expect("execute query").iter().next().map(|row| {
                     #aggregate_expr
                 })
             }}
         },
+        QueryType::Create => {
+            quote! {{
+                #connection_ident.prepare(#table_ident::_create_query())
+                    .and_then(|result| result.execute(&[]))
+            }}
+        },
         QueryType::InsertOne => {
             quote! {{
-                #ident.prepare(#sql_query)
+                #connection_ident.prepare(#sql_query)
                     .and_then(|result| {
                         // NOTE: The query is not supposed to fail, hence expect().
                         let rows = result.query(&#args_expr).expect("execute query");
@@ -584,7 +590,7 @@ fn gen_query_expr(ident: Ident, sql_query: String, args_expr: Tokens, struct_exp
         QueryType::SelectMulti => {
             let result =
                 quote! {{
-                    let result = #ident.prepare(#sql_query).expect("prepare query");
+                    let result = #connection_ident.prepare(#sql_query).expect("prepare query");
                     result.query(&#args_expr).expect("execute query").iter()
                 }};
             let call = respan_tokens(quote! {
@@ -601,7 +607,7 @@ fn gen_query_expr(ident: Ident, sql_query: String, args_expr: Tokens, struct_exp
         QueryType::SelectOne => {
             let result =
                 quote! {{
-                    let result = #ident.prepare(#sql_query).expect("prepare query");
+                    let result = #connection_ident.prepare(#sql_query).expect("prepare query");
                     result.query(&#args_expr).expect("execute query").iter().next()
                 }};
             let call = respan_tokens(quote! {
@@ -615,7 +621,7 @@ fn gen_query_expr(ident: Ident, sql_query: String, args_expr: Tokens, struct_exp
         },
         QueryType::Exec => {
             quote! {{
-                #ident.prepare(#sql_query)
+                #connection_ident.prepare(#sql_query)
                     .and_then(|result| result.execute(&#args_expr))
             }}
         },

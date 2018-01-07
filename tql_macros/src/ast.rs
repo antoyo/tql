@@ -243,7 +243,6 @@ pub enum Query {
         table: Identifier,
     },
     CreateTable {
-        fields: Vec<TypedField>,
         table: Identifier,
     },
     Delete {
@@ -277,6 +276,7 @@ pub enum Query {
 pub enum QueryType {
     AggregateMulti,
     AggregateOne,
+    Create,
     Exec,
     InsertOne,
     SelectMulti,
@@ -327,7 +327,8 @@ pub fn query_type(query: &Query) -> QueryType {
             }
             typ
         },
-        Query::CreateTable { .. } | Query::Delete { .. } | Query::Drop { .. } | Query::Update { .. } => QueryType::Exec,
+        Query::CreateTable { .. } => QueryType::Create,
+        Query::Delete { .. } | Query::Drop { .. } | Query::Update { .. } => QueryType::Exec,
     }
 }
 

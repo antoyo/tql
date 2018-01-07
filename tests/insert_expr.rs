@@ -66,12 +66,12 @@ fn test_insert() {
     let connection = get_connection();
 
     let _teardown = TearDown::new(|| {
-        let _ = TableInsertExpr::drop(&connection);
-        let _ = RelatedTableInsertExpr::drop(&connection);
+        let _ = sql!(TableInsertExpr.drop());
+        let _ = sql!(RelatedTableInsertExpr.drop());
     });
 
-    let _ = RelatedTableInsertExpr::create(&connection);
-    let _ = TableInsertExpr::drop(&connection);
+    let _ = sql!(RelatedTableInsertExpr.create());
+    let _ = sql!(TableInsertExpr.drop());
 
     let related_id = sql!(RelatedTableInsertExpr.insert(field1 = 42)).unwrap();
     let related_field = sql!(RelatedTableInsertExpr.get(related_id)).unwrap();
@@ -82,7 +82,7 @@ fn test_insert() {
         Ok(_) => assert!(false),
     }
 
-    let _ = TableInsertExpr::create(&connection);
+    let _ = sql!(TableInsertExpr.create());
 
     let id = sql!(TableInsertExpr.insert(field1 = "value1", field2 = 55, related_field = related_field)).unwrap();
     assert_eq!(1, id);
