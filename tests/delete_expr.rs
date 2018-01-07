@@ -51,10 +51,10 @@ fn test_delete() {
     let connection = get_connection();
 
     let _teardown = TearDown::new(|| {
-        let _ = sql!(TableDeleteExpr.drop());
+        let _ = TableDeleteExpr::drop(&connection);
     });
 
-    let _ = sql!(TableDeleteExpr.create());
+    let _ = TableDeleteExpr::create(&connection);
 
     let id = sql!(TableDeleteExpr.insert(field1 = "", field2 = 0)).unwrap();
 

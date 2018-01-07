@@ -25,7 +25,7 @@ use syn::Expr;
 use syn::spanned::Spanned;
 
 use ast::{Expression, Join};
-use error::{Result, res};
+use error::{Error, Result, res};
 use string::token_to_string;
 use super::{check_field, mismatched_types, no_primary_key, path_expr_to_identifier};
 use types::Type;
@@ -49,7 +49,7 @@ pub fn argument_to_join(arg: &Expression, table_name: &str) -> Result<(Join, Vec
             }
         }
         else {
-            // TODO: error.
+            return Err(vec![Error::new("Expecting structure expression, but got", assign.right.span())]); // TODO: improve error message.
         }
 
         if let Some(identifier) = path_expr_to_identifier(&assign.left, &mut errors) {
@@ -71,7 +71,7 @@ pub fn argument_to_join(arg: &Expression, table_name: &str) -> Result<(Join, Vec
         }
     }
     else {
-        // TODO: add error.
+        return Err(vec![Error::new("Expecting assignment, but got", arg.span())]); // TODO: improve error message.
     }
     res((join, selected_fields), errors)
 }

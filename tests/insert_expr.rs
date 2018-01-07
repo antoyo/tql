@@ -37,7 +37,7 @@ use teardown::TearDown;
 
 #[derive(SqlTable)]
 struct TableInsertExpr {
-    primary_key: PrimaryKey,
+    id: PrimaryKey,
     field1: String,
     field2: i32,
     related_field: ForeignKey<RelatedTableInsertExpr>,
@@ -66,12 +66,12 @@ fn test_insert() {
     let connection = get_connection();
 
     let _teardown = TearDown::new(|| {
-        let _ = sql!(TableInsertExpr.drop());
-        let _ = sql!(RelatedTableInsertExpr.drop());
+        let _ = TableInsertExpr::drop(&connection);
+        let _ = RelatedTableInsertExpr::drop(&connection);
     });
 
-    let _ = sql!(RelatedTableInsertExpr.create());
-    let _ = sql!(TableInsertExpr.drop());
+    let _ = RelatedTableInsertExpr::create(&connection);
+    let _ = TableInsertExpr::drop(&connection);
 
     let related_id = sql!(RelatedTableInsertExpr.insert(field1 = 42)).unwrap();
     let related_field = sql!(RelatedTableInsertExpr.get(related_id)).unwrap();
@@ -82,7 +82,7 @@ fn test_insert() {
         Ok(_) => assert!(false),
     }
 
-    let _ = sql!(TableInsertExpr.create());
+    let _ = TableInsertExpr::create(&connection);
 
     let id = sql!(TableInsertExpr.insert(field1 = "value1", field2 = 55, related_field = related_field)).unwrap();
     assert_eq!(1, id);
@@ -93,7 +93,10 @@ fn test_insert() {
     assert!(table.related_field.is_none());
     assert!(table.optional_field.is_none());
 
-    let table = sql!(TableInsertExpr.get(id).join(related_field)).unwrap();
+    let table = sql!(TableInsertExpr.get(id).join(related_field = RelatedTableInsertExpr {
+        field1,
+        id,
+    })).unwrap();
     assert_eq!("value1", table.field1);
     assert_eq!(55, table.field2);
     let related_table = table.related_field.unwrap();

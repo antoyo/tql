@@ -38,7 +38,7 @@ use super::no_primary_key;
 use super::filter::expression_to_filter_expression;
 
 /// Convert an expression from a `get()` method to a FilterExpression and a Limit.
-pub fn get_expression_to_filter_expression(arg: &Expression) -> Result<(FilterExpression, Limit)> {
+pub fn get_expression_to_filter_expression(arg: &Expression, table_name: &str) -> Result<(FilterExpression, Limit)> {
     // TODO: get() should allow specifying the primary key.
     // TODO: check that the table has the field id.
     // Err(vec![no_primary_key(&table.name.to_string(), table.position)]),
@@ -46,13 +46,13 @@ pub fn get_expression_to_filter_expression(arg: &Expression) -> Result<(FilterEx
     match *arg {
         Expr::Lit(_) | Expr::Path(_) => {
             let filter = FilterExpression::Filter(Filter {
-                operand1: FilterValue::Identifier(Ident::new(pk, Span::default())),
+                operand1: FilterValue::Identifier(table_name.to_string(), Ident::new(pk, Span::default())),
                 operator: RelationalOperator::Equal,
                 operand2: arg.clone(),
             });
             res((filter, Limit::NoLimit), vec![])
         },
-        _ => expression_to_filter_expression(arg)
+        _ => expression_to_filter_expression(arg, table_name)
             .and_then(|filter| Ok((filter, Limit::Index(number_literal(0))))),
     }
 }

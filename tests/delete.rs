@@ -45,7 +45,7 @@ fn test_delete() {
         //warnings) return a dummy result.
     //);
     assert_eq!(
-        "DELETE FROM Table WHERE field1 = 'test'",
+        "DELETE FROM Table WHERE Table.field1 = 'test'",
         to_sql!(Table.filter(field1 == "test").delete())
     );
 }

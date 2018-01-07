@@ -68,12 +68,12 @@ fn test_update() {
     let connection = LOCK.lock().unwrap();
 
     let _teardown = TearDown::new(|| {
-        let _ = sql!(TableUpdateExpr.drop());
-        let _ = sql!(RelatedTable.drop());
+        let _ = TableUpdateExpr::drop(&connection);
+        let _ = RelatedTable::drop(&connection);
     });
 
-    let _ = sql!(RelatedTable.create());
-    let _ = sql!(TableUpdateExpr.create());
+    let _ = RelatedTable::create(&connection);
+    let _ = TableUpdateExpr::create(&connection);
 
     let id = sql!(RelatedTable.insert(field1 = "")).unwrap();
     let related_field = sql!(RelatedTable.get(id)).unwrap();
@@ -128,12 +128,12 @@ fn test_update_operation() {
     let connection = LOCK.lock().unwrap();
 
     let _teardown = TearDown::new(|| {
-        let _ = sql!(TableUpdateExpr.drop());
-        let _ = sql!(RelatedTable.drop());
+        let _ = TableUpdateExpr::drop(&connection);
+        let _ = RelatedTable::drop(&connection);
     });
 
-    let _ = sql!(RelatedTable.create());
-    let _ = sql!(TableUpdateExpr.create());
+    let _ = RelatedTable::create(&connection);
+    let _ = TableUpdateExpr::create(&connection);
 
     let id = sql!(RelatedTable.insert(field1 = "")).unwrap();
     let related_field = sql!(RelatedTable.get(id)).unwrap();

@@ -149,12 +149,11 @@ fn add_aggregate_filter_value_arguments(aggregate: &Aggregate, args: &mut Args, 
 
 fn add_filter_value_arguments(filter_value: &FilterValue, args: &mut Args, table_name: &str, expression: Option<Expression>) {
     match *filter_value {
-        FilterValue::Identifier(ref identifier) => {
+        FilterValue::Identifier(ref table, ref identifier) => {
             // It is possible to have an identifier without expression, when the identifier is a
             // boolean field name, hence this condition.
             if let Some(expr) = expression {
-                // NOTE: At this stage (code generation), the field exists, hence unwrap().
-                add(args, Some(identifier.to_string()), expr);
+                add(args, Some(format!("{}.{}", table, identifier)), expr);
             }
         },
         FilterValue::MethodCall(MethodCall { ref arguments, ref method_name, ref object_name, .. }) => {

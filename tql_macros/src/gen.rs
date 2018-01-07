@@ -215,7 +215,7 @@ impl ToSql for Ident {
 impl ToSql for FilterValue {
     fn to_sql(&self) -> String {
         match *self {
-            FilterValue::Identifier(ref identifier) => identifier.to_sql(),
+            FilterValue::Identifier(ref table, ref identifier) => format!("{}.{}", table, identifier.to_sql()),
             FilterValue::MethodCall(MethodCall { ref arguments, ref object_name, ref method_name, ..  }) => {
                 let methods = methods_singleton();
                 let method = &methods[method_name];
@@ -346,14 +346,13 @@ impl ToSql for Query {
                 let values: Vec<_> = assignments.iter().map(|assign| assign.value.to_sql()).collect();
                 // Add the SQL code to get the inserted primary key.
                 // TODO: what to do when there is no primary key?
-                // TODO: return the primary key somehow.
-                replace_placeholder(format!("INSERT INTO {table}({fields}) VALUES({values})",
+                replace_placeholder(format!("INSERT INTO {table}({fields}) VALUES({values}) RETURNING CAST(LASTVAL() AS INT4)",
                         table = table,
                         fields = fields.to_sql(),
                         values = values.to_sql(),
                     ))
             },
-            Query::Select{ ref filter, ref joins, ref limit, ref order, ref selected_fields, ref table } => {
+            Query::Select{ ref filter, get: _get, ref joins, ref limit, ref order, ref selected_fields, ref table } => {
                 let where_clause = filter_to_where_clause(filter);
                 let order_clause =
                     if !order.is_empty() {
@@ -368,7 +367,7 @@ impl ToSql for Query {
                     }
                     else {
                         selected_fields.iter()
-                            .map(|field| format!(", {}", field))
+                            .map(|field| format!(", {field} AS \"{field}\"", field = field))
                             .collect::<Vec<_>>()
                             .join("")
                     };

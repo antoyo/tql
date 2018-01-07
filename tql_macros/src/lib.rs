@@ -2,6 +2,7 @@
  * Primary key field
  * SQLite: ROWID
  *
+ * TODO: test that get() does not work when the primary key is not named id.
  * TODO: allow selecting only some fields.
  * TODO: remove allow_failure for beta when this issue is fixed:
  * https://github.com/rust-lang/rust/issues/46478
@@ -101,6 +102,7 @@ use ast::{
     Join,
     Query,
     QueryType,
+    TypedField,
     query_type,
 };
 use attribute::{field_ty_to_type, fields_vec_to_hashmap};
@@ -210,13 +212,14 @@ pub fn sql_table(input: TokenStream) -> TokenStream {
     let gen =
         if let Item::Struct(item_struct) = item {
             let table_name = item_struct.ident.to_string();
-            let (fields, impls) = get_struct_fields(&item_struct);
+            let (fields, primary_key, impls) = get_struct_fields(&item_struct);
             let mut compiler_errors = quote! {};
             if let Ok(fields) = fields {
                 // NOTE: Transform the span by dummy spans to workaround this issue:
                 // https://github.com/rust-lang/rust/issues/42337
                 // https://github.com/rust-lang/rust/issues/45934#issuecomment-344497531
-                let code = tosql_impl(&item_struct);
+                // NOTE: if there is no error, there is a primary key, hence expect().
+                let code = tosql_impl(&item_struct, &primary_key.expect("primary key"));
                 let methods = table_methods(&item_struct);
                 let code = quote! {
                     #code
@@ -283,12 +286,13 @@ fn respan_with(tokens: TokenStream, span: proc_macro::Span) -> TokenStream {
 /// Get the fields from the struct (also returns the ToSql implementations to check that the types
 /// used for ForeignKey have a #[derive(SqlTable)]).
 /// Also check if the field types from the struct are supported types.
-fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, TokenStream) {
+fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, Option<String>, TokenStream) {
     fn error(span: Span, typ: &str) -> Error {
         Error::new_with_code(&format!("use of unsupported type name `{}`", typ),
             span, "E0412")
     }
 
+    let mut primary_key_field = None;
     let position = item_struct.ident.span;
     let mut impls: TokenStream = quote! {}.into();
     let mut errors = vec![];
@@ -296,13 +300,14 @@ fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, TokenStrea
     let fields: Vec<Field> =
         match item_struct.fields {
             Fields::Named(FieldsNamed { ref named , .. }) => named.into_iter().cloned().collect(),
-            _ => return (Err(vec![Error::new("Expected normal struct, found", position)]), empty_token_stream()), // TODO: improve this message.
+            _ => return (Err(vec![Error::new("Expected normal struct, found", position)]), None, empty_token_stream()), // TODO: improve this message.
         };
     let mut primary_key_count = 0;
     for field in &fields {
-        if field.ident.is_some() {
+        if let Some(field_ident) = field.ident {
             #[cfg(feature = "unstable")]
             let field_type = &field.ty;
+            let field_name = field_ident.to_string();
             let field = field_ty_to_type(&field.ty);
             match field.node {
                 Type::Nullable(ref inner_type) => {
@@ -313,7 +318,10 @@ fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, TokenStrea
                 Type::UnsupportedType(ref typ) =>
                     errors.push(error(field.span, typ)),
                 // NOTE: Other types are supported.
-                Type::Serial => primary_key_count += 1,
+                Type::Serial => {
+                    primary_key_field = Some(field_name);
+                    primary_key_count += 1;
+                },
                 Type::Custom(ref typ) => {
                     let type_ident = new_ident(typ);
                     let struct_ident = new_ident(&format!("CheckForeignKey{}", rand_string()));
@@ -364,13 +372,26 @@ fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, TokenStrea
     }
 
     let fields = fields_vec_to_hashmap(&fields);
-    (res(fields, errors), impls)
+    (res(fields, errors), primary_key_field, impls)
 }
 
 /// Create the create() and from_row() method for the table struct.
 fn table_methods(item_struct: &ItemStruct) -> Tokens {
     let table_ident = &item_struct.ident;
     if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
+        let mut fields_to_create = vec![];
+        for field in named {
+            fields_to_create.push(TypedField {
+                identifier: field.ident.expect("field ident").to_string(),
+                typ: field_ty_to_type(&field.ty).node.to_sql(),
+            });
+        }
+        let create_query = format!("CREATE TABLE {table} ({fields})",
+            table = table_ident,
+            fields = fields_to_create.to_sql()
+        );
+        let drop_query = format!("DROP TABLE {table}", table = table_ident);
+
         let field_names = named.iter()
             .map(|field| field.ident.expect("field has name"));
 
@@ -396,14 +417,21 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
 
         quote! {
             impl #table_ident {
-                fn create() -> Result<(), Box<::std::error::Error + 'static + Sync + Send>> {
-                    Ok(())
+                #[allow(unused)]
+                fn create(connection: &::postgres::Connection) -> Result<(), ::postgres::Error> {
+                    connection.prepare(#create_query)
+                        .and_then(|result| result.execute(&[]))
+                        .map(|_| ())
                 }
 
-                fn drop() -> Result<(), Box<::std::error::Error + 'static + Sync + Send>> {
-                    Ok(())
+                #[allow(unused)]
+                fn drop(connection: &::postgres::Connection) -> Result<(), ::postgres::Error> {
+                    connection.prepare(#drop_query)
+                        .and_then(|result| result.execute(&[]))
+                        .map(|_| ())
                 }
 
+                #[allow(unused)]
                 fn from_row(row: ::postgres::rows::Row) -> Self {
                     Self {
                         #(#field_names: #columns,)*
@@ -419,11 +447,10 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
 
 /// Add the postgres::types::ToSql implementation on the struct.
 /// Its SQL representation is the same as the primary key SQL representation.
-fn tosql_impl(item_struct: &ItemStruct) -> Tokens {
+fn tosql_impl(item_struct: &ItemStruct, primary_key_field: &str) -> Tokens {
     let table_ident = &item_struct.ident;
     let debug_impl = create_debug_impl(item_struct);
     // TODO: fetch the primary key field from the struct.
-    let primary_key_field = "id";
     let primary_key_ident = Ident::from(primary_key_field);
     quote! {
         #debug_impl
@@ -547,12 +574,10 @@ fn gen_query_expr(ident: Ident, sql_query: String, args_expr: Tokens, struct_exp
                     .and_then(|result| {
                         // NOTE: The query is not supposed to fail, hence expect().
                         let rows = result.query(&#args_expr).expect("execute query");
-                        /* TODO:
                         // NOTE: There is always one result (the inserted id), hence unwrap().
                         let row = rows.iter().next().unwrap();
                         let count: i32 = row.get(0);
-                        Ok(count)*/
-                        Ok(0)
+                        Ok(count)
                     })
             }}
         },
@@ -616,7 +641,9 @@ fn get_query_arguments(arguments: Args) -> Tokens {
             },
         }
 
-        let name = arg.field_name.unwrap_or_else(|| rand_string().to_lowercase());
+        let name = arg.field_name
+            .map(|name| name.replace('.', ""))
+            .unwrap_or_else(|| rand_string().to_lowercase());
         idents.push(new_ident(&format!("__tql_{}", name)));
 
         let exp = &arg.expression;

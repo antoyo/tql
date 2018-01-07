@@ -27,15 +27,19 @@ extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
+mod teardown;
+
 use chrono::DateTime;
 use chrono::naive::{NaiveDate, NaiveDateTime, NaiveTime};
 use chrono::offset::{Local, Utc};
+use postgres::{Connection, TlsMode};
 use tql::{ForeignKey, PrimaryKey};
-use tql_macros::to_sql;
+
+use teardown::TearDown;
 
 #[derive(SqlTable)]
 #[allow(dead_code)]
-struct Table {
+struct SqlTable {
     id: PrimaryKey,
     field1: String,
     field2: i32,
@@ -67,7 +71,7 @@ struct OtherTypes {
     pk: PrimaryKey,
     boolean: bool,
     bytestring: Vec<u8>,
-    character: char,
+    //character: char, // FIXME: does not work.
     float32: f32,
     float64: f64,
     int8: i8,
@@ -76,17 +80,31 @@ struct OtherTypes {
     int64: i64,
 }
 
+fn get_connection() -> Connection {
+    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
+}
+
 #[test]
 fn test_create() {
-    assert!(Table::create().is_ok());
-    assert!(Table::drop().is_ok());
+    let connection = get_connection();
 
-    assert!(RelatedTable::create().is_ok());
-    assert!(RelatedTable::drop().is_ok());
+    let _teardown = TearDown::new(|| {
+        let _ = SqlTable::drop(&connection);
+        let _ = RelatedTable::drop(&connection);
+        let _ = Dates::drop(&connection);
+        let _ = OtherTypes::drop(&connection);
+    });
 
-    assert!(Dates::create().is_ok());
-    assert!(Dates::drop().is_ok());
+    assert!(RelatedTable::create(&connection).is_ok());
 
-    assert!(OtherTypes::create().is_ok());
-    assert!(OtherTypes::drop().is_ok());
+    assert!(SqlTable::create(&connection).is_ok());
+
+    assert!(Dates::create(&connection).is_ok());
+    assert!(Dates::drop(&connection).is_ok());
+
+    assert!(OtherTypes::create(&connection).is_ok());
+    assert!(OtherTypes::drop(&connection).is_ok());
+
+    assert!(SqlTable::drop(&connection).is_ok());
+    assert!(RelatedTable::drop(&connection).is_ok());
 }

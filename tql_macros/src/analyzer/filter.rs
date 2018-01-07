@@ -82,15 +82,17 @@ pub fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors:
 }
 
 /// Convert a Rust binary expression to a `FilterExpression`.
-fn binary_expression_to_filter_expression(expr1: &Expression, op: &BinOp, expr2: &Expression) -> Result<FilterExpression> {
+fn binary_expression_to_filter_expression(expr1: &Expression, op: &BinOp, expr2: &Expression, table_name: &str) ->
+    Result<FilterExpression>
+{
     // TODO: accumulate the errors instead of stopping when the first one is encountered.
-    let filter1 = expression_to_filter_expression(expr1)?;
+    let filter1 = expression_to_filter_expression(expr1, table_name)?;
     // TODO: return errors instead of dummy.
     let dummy = FilterExpression::NoFilters;
 
     let filter =
         if is_logical_operator(op) {
-            let filter2 = expression_to_filter_expression(expr2)?;
+            let filter2 = expression_to_filter_expression(expr2, table_name)?;
             FilterExpression::Filters(Filters {
                 operand1: Box::new(filter1),
                 operator: binop_to_logical_operator(op),
@@ -154,13 +156,13 @@ fn check_method_arguments(arguments: &[Expression], argument_types: &[Type], err
 }
 
 /// Convert a Rust expression to a `FilterExpression`.
-pub fn expression_to_filter_expression(arg: &Expression) -> Result<FilterExpression> {
+pub fn expression_to_filter_expression(arg: &Expression, table_name: &str) -> Result<FilterExpression> {
     let mut errors = vec![];
 
     let filter =
         match *arg {
             Expr::Binary(ref bin) => {
-                binary_expression_to_filter_expression(&bin.left, &bin.op, &bin.right)?
+                binary_expression_to_filter_expression(&bin.left, &bin.op, &bin.right, table_name)?
             },
             Expr::MethodCall(ref call) => {
                 FilterExpression::FilterValue(WithSpan {
@@ -173,16 +175,16 @@ pub fn expression_to_filter_expression(arg: &Expression) -> Result<FilterExpress
                 let identifier = path.path.segments.first().unwrap().into_item().ident;
                 check_field(&identifier, identifier.span, &mut errors);
                 FilterExpression::FilterValue(WithSpan {
-                    node: FilterValue::Identifier(identifier),
+                    node: FilterValue::Identifier(table_name.to_string(), identifier),
                     span: arg.span(),
                 })
             },
             Expr::Paren(ref paren) => {
-                let filter = expression_to_filter_expression(&paren.expr)?;
+                let filter = expression_to_filter_expression(&paren.expr, table_name)?;
                 FilterExpression::ParenFilter(Box::new(filter))
             },
             Expr::Unary(ExprUnary { op: UnOp::Not(_), ref expr, .. }) => {
-                let filter = expression_to_filter_expression(expr)?;
+                let filter = expression_to_filter_expression(expr, table_name)?;
                 FilterExpression::NegFilter(Box::new(filter))
             },
             _ => {

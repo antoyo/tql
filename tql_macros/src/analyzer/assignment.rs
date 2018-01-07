@@ -42,7 +42,8 @@ use super::{check_field, check_field_type, path_expr_to_identifier};
 /// Analyze the types of the `Assignment`s.
 pub fn analyze_assignments_types(assignments: &[Assignment], table_name: &str, errors: &mut Vec<Error>) {
     for assignment in assignments {
-        let filter_value = FilterValue::Identifier(assignment.identifier.expect("Assignment identifier").clone());
+        let filter_value = FilterValue::Identifier(table_name.to_string(),
+            assignment.identifier.expect("Assignment identifier").clone());
         check_field_type(table_name, &filter_value, &assignment.value, errors);
     }
 }

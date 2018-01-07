@@ -159,7 +159,7 @@ pub struct Filters {
 #[derive(Debug)]
 pub enum FilterValue {
     None,
-    Identifier(Ident),
+    Identifier(String, Ident),
     MethodCall(MethodCall),
 }
 
@@ -259,6 +259,7 @@ pub enum Query {
     },
     Select {
         filter: FilterExpression,
+        get: bool,
         joins: Vec<Join>,
         limit: Limit,
         order: Vec<Order>,
@@ -316,8 +317,11 @@ pub fn query_type(query: &Query) -> QueryType {
             }
         },
         Query::Insert { .. } => QueryType::InsertOne,
-        Query::Select { ref filter, ref limit, ref table, .. } => {
+        Query::Select { ref filter, get, ref limit, ref table, .. } => {
             let mut typ = QueryType::SelectMulti;
+            if get {
+                typ = QueryType::SelectOne;
+            }
             if let Limit::Index(_) = *limit {
                 typ = QueryType::SelectOne;
             }

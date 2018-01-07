@@ -52,15 +52,15 @@ fn test_drop() {
     let connection = get_connection();
 
     let _teardown = TearDown::new(|| {
-        let _ = TableDropExpr.drop();
+        let _ = TableDropExpr::drop(&connection);
     });
 
-    let _ = TableDropExpr::create();
+    let _ = TableDropExpr::create(&connection);
 
     let result = sql!(TableDropExpr.insert(field1 = "value1", field2 = 55));
     assert!(result.is_ok());
 
-    let _ = TableDropExpr.drop();
+    let _ = TableDropExpr::drop(&connection);
 
     let result = sql!(TableDropExpr.insert(field1 = "value1", field2 = 55));
     match result {

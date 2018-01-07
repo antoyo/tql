@@ -64,47 +64,47 @@ fn test_all() {
 #[test]
 fn test_filter() {
     assert_eq!(
-        format!("{} FROM Table WHERE field1 = 'value1'", SELECT),
+        format!("{} FROM Table WHERE Table.field1 = 'value1'", SELECT),
         to_sql!(Table.filter(field1 == "value1"))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE field2 >= 42 OR field1 = 'te''\"\\st'", SELECT),
+        format!("{} FROM Table WHERE Table.field2 >= 42 OR Table.field1 = 'te''\"\\st'", SELECT),
         to_sql!(Table.filter(field2 >= 42 || field1 == "te'\"\\st"))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE field1 = $1", SELECT),
+        format!("{} FROM Table WHERE Table.field1 = $1", SELECT),
         to_sql!(Table.filter(field1 == value1))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE field1 > $1", SELECT),
+        format!("{} FROM Table WHERE Table.field1 > $1", SELECT),
         to_sql!(Table.filter(field1 > value1))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE field1 > $1 AND field2 = $2", SELECT),
+        format!("{} FROM Table WHERE Table.field1 > $1 AND Table.field2 = $2", SELECT),
         to_sql!(Table.filter(field1 > value1 && field2 == value2))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE related_field = $1", SELECT),
+        format!("{} FROM Table WHERE Table.related_field = $1", SELECT),
         to_sql!(Table.filter(related_field == value1))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE field1 = 'value2' OR field2 < 100 AND field1 = 'value1'", SELECT),
+        format!("{} FROM Table WHERE Table.field1 = 'value2' OR Table.field2 < 100 AND Table.field1 = 'value1'", SELECT),
         to_sql!(Table.filter(field1 == "value2" || field2 < 100 && field1 == "value1"))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE (field1 = 'value2' OR field2 < 100) AND field1 = 'value1'", SELECT),
+        format!("{} FROM Table WHERE (Table.field1 = 'value2' OR Table.field2 < 100) AND Table.field1 = 'value1'", SELECT),
         to_sql!(Table.filter((field1 == "value2" || field2 < 100) && field1 == "value1"))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE (field1 = 'test' AND field2 = 24)", SELECT),
+        format!("{} FROM Table WHERE (Table.field1 = 'test' AND Table.field2 = 24)", SELECT),
         to_sql!(Table.filter((field1 == "test" && field2 == 24)))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE NOT (field1 = 'test' AND field2 = 24)", SELECT),
+        format!("{} FROM Table WHERE NOT (Table.field1 = 'test' AND Table.field2 = 24)", SELECT),
         to_sql!(Table.filter(!(field1 == "test" && field2 == 24)))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE NOT (field2 < 24)", SELECT),
+        format!("{} FROM Table WHERE NOT (Table.field2 < 24)", SELECT),
         to_sql!(Table.filter(!(field2 < 24)))
     );
 }
@@ -168,7 +168,7 @@ fn test_filter_method_call() {
 #[test]
 fn test_filter_get() {
     assert_eq!(
-        format!("{} FROM Table WHERE id = 2 OFFSET 0 LIMIT 1", SELECT),
+        format!("{} FROM Table WHERE Table.id = 2 OFFSET 0 LIMIT 1", SELECT),
         to_sql!(Table.filter(id == 2).get())
     );
 }
@@ -176,15 +176,15 @@ fn test_filter_get() {
 #[test]
 fn test_filter_sort() {
     assert_eq!(
-        format!("{} FROM Table WHERE field1 = 'value1' AND field2 < 100 ORDER BY field2 DESC", SELECT),
+        format!("{} FROM Table WHERE Table.field1 = 'value1' AND Table.field2 < 100 ORDER BY field2 DESC", SELECT),
         to_sql!(Table.filter(field1 == "value1" && field2 < 100).sort(-field2))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE field2 < 100 AND field1 = 'value1' ORDER BY field2 DESC", SELECT),
+        format!("{} FROM Table WHERE Table.field2 < 100 AND Table.field1 = 'value1' ORDER BY field2 DESC", SELECT),
         to_sql!(Table.filter(field2 < 100 && field1 == "value1").sort(-field2))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE field2 >= 42 ORDER BY field1", SELECT),
+        format!("{} FROM Table WHERE Table.field2 >= 42 ORDER BY field1", SELECT),
         to_sql!(Table.filter(field2 >= 42).sort(field1))
     );
 }
@@ -192,7 +192,7 @@ fn test_filter_sort() {
 #[test]
 fn test_filter_sort_limit() {
     assert_eq!(
-        format!("{} FROM Table WHERE field2 > 10 ORDER BY field2 OFFSET 1 LIMIT 2", SELECT),
+        format!("{} FROM Table WHERE Table.field2 > 10 ORDER BY field2 OFFSET 1 LIMIT 2", SELECT),
         to_sql!(Table.filter(field2 > 10).sort(field2)[1..3])
     );
 }
@@ -200,31 +200,31 @@ fn test_filter_sort_limit() {
 #[test]
 fn test_get() {
     assert_eq!(
-        format!("{} FROM Table WHERE id = 1", SELECT),
+        format!("{} FROM Table WHERE Table.id = 1", SELECT),
         to_sql!(Table.get(1))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE id = $1", SELECT),
+        format!("{} FROM Table WHERE Table.id = $1", SELECT),
         to_sql!(Table.get(id))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE field2 = 24 OFFSET 0 LIMIT 1", SELECT),
+        format!("{} FROM Table WHERE Table.field2 = 24 OFFSET 0 LIMIT 1", SELECT),
         to_sql!(Table.get(field2 == 24))
     ); // TODO: remove the "OFFSET 0" in the optimizer.
     assert_eq!(
-        format!("{} FROM Table WHERE field1 = 'test' AND field2 = 24 OFFSET 0 LIMIT 1", SELECT),
+        format!("{} FROM Table WHERE Table.field1 = 'test' AND Table.field2 = 24 OFFSET 0 LIMIT 1", SELECT),
         to_sql!(Table.get(field1 == "test" && field2 == 24))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE (field1 = 'test' AND field2 = 24) OFFSET 0 LIMIT 1", SELECT),
+        format!("{} FROM Table WHERE (Table.field1 = 'test' AND Table.field2 = 24) OFFSET 0 LIMIT 1", SELECT),
         to_sql!(Table.get((field1 == "test" && field2 == 24)))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE NOT (field1 = 'test' AND field2 = 24) OFFSET 0 LIMIT 1", SELECT),
+        format!("{} FROM Table WHERE NOT (Table.field1 = 'test' AND Table.field2 = 24) OFFSET 0 LIMIT 1", SELECT),
         to_sql!(Table.get(!(field1 == "test" && field2 == 24)))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE NOT (field2 < 24) OFFSET 0 LIMIT 1", SELECT),
+        format!("{} FROM Table WHERE NOT (Table.field2 < 24) OFFSET 0 LIMIT 1", SELECT),
         to_sql!(Table.get(!(field2 < 24)))
     );
 }
@@ -232,14 +232,14 @@ fn test_get() {
 #[test]
 fn test_join() {
     assert_eq!(
-        format!("{}, RelatedTable.field1, RelatedTable.id FROM Table INNER JOIN RelatedTable ON Table.related_field = RelatedTable.id", SELECT),
+        format!("{}, RelatedTable.field1 AS \"RelatedTable.field1\", RelatedTable.id AS \"RelatedTable.id\" FROM Table INNER JOIN RelatedTable ON Table.related_field = RelatedTable.id", SELECT),
         to_sql!(Table.join(related_field = RelatedTable {
             field1,
             id,
         }))
     );
     assert_eq!(
-        format!("{}, RelatedTable.field1, RelatedTable.id FROM Table INNER JOIN RelatedTable ON Table.related_field = RelatedTable.id", SELECT),
+        format!("{}, RelatedTable.field1 AS \"RelatedTable.field1\", RelatedTable.id AS \"RelatedTable.id\" FROM Table INNER JOIN RelatedTable ON Table.related_field = RelatedTable.id", SELECT),
         to_sql!(Table.all().join(related_field = RelatedTable {
             field1,
             id,

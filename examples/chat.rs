@@ -115,7 +115,7 @@ fn main() {
         let connection = pool.get().unwrap();
 
         // Create the Message table.
-        let _ = sql!(Message.create());
+        let _ = Message::create(&connection);
     }
 
     let mut chain = Chain::new(chat);
