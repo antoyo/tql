@@ -3,6 +3,9 @@
  * SQLite: ROWID
  *
  * TODO: test that get() does not work when the primary key is not named id.
+ * TODO: support recursive foreign key.
+ * TODO: use fully-qualified name everywhere in the query (aggregate, …).
+ * TODO: check errors for joined tables.
  * TODO: allow selecting only some fields.
  * TODO: remove allow_failure for beta when this issue is fixed:
  * https://github.com/rust-lang/rust/issues/46478
@@ -404,26 +407,17 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
 
         let field_names = named.iter()
             .map(|field| field.ident.expect("field has name"));
+        let field_names2 = named.iter()
+            .map(|field| field.ident.expect("field has name"));
 
         let field_idents = named.iter()
             .map(|field| (field.ident.expect("field has name"), field.ty.clone()));
-        let columns = field_idents
-            .map(|(ident, typ)| {
-                if let syn::Type::Path(TypePath { path: Path { ref segments, .. }, .. }) = typ {
-                    let segment = segments.first().expect("first segment").into_item();
-                    if segment.ident == "ForeignKey" {
-                        return quote! {
-                            // TODO: if fields from the foreign table are selected, create the
-                            // struct.
-                            None
-                        };
-                    }
-                }
-                let field_name = ident.to_string();
-                quote! {
-                    row.get(#field_name)
-                }
-            });
+        let columns = field_idents.map(|(ident, typ)| to_row_get(&ident, typ, ""));
+
+        let field_idents = named.iter()
+            .map(|field| (field.ident.expect("field has name"), field.ty.clone()));
+        let fully_qualified_columns = field_idents.map(|(ident, typ)|
+            to_row_get(&ident, typ, &format!("{}.", table_ident)));
 
         quote! {
             impl #table_ident {
@@ -432,9 +426,16 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
                 }
 
                 #[allow(unused)]
-                pub fn from_row(row: ::postgres::rows::Row) -> Self {
+                pub fn from_row(row: &::postgres::rows::Row) -> Self {
                     Self {
                         #(#field_names: #columns,)*
+                    }
+                }
+
+                #[allow(unused)]
+                pub fn from_joined_row(row: &::postgres::rows::Row) -> Self {
+                    Self {
+                        #(#field_names2: #fully_qualified_columns,)*
                     }
                 }
             }
@@ -688,55 +689,18 @@ fn create_struct(table_ident: &Ident, joins: Vec<Join>) -> Tokens {
     let mut field_idents: Vec<String> = vec![];
     let mut field_values: Vec<String> = vec![];
     let mut index = 0usize;
-    // TODO
-    /*for (name, types) in table {
-        match types.ty.node {
-            Type::Custom(ref foreign_table) => {
-                if let Some(foreign_table) = sql_tables.get(foreign_table) {
-                    if has_joins(&joins, name) {
-                        // If there is a join, fetch the joined fields.
-                        let mut foreign_field_idents = vec![];
-                        let mut foreign_field_values = vec![];
-                        for (field, types) in &foreign_table.fields {
-                            match types.ty.node {
-                                Type::Custom(_) | Type::UnsupportedType(_) => (), // Do not add foreign key recursively.
-                                _ => {
-                                    foreign_field_idents.push(field);
-                                    foreign_field_values.push(quote! { row.get(#index) });
-                                    index += 1;
-                                },
-                            }
-                        }
-                        let foreign_table_ident = &foreign_table.name;
-                        let related_struct =
-                            quote! {
-                                #foreign_table_ident {
-                                    #(#foreign_field_idents: #foreign_field_values),*
-                                }
-                            };
-                        field_idents.push(name.clone());
-                        field_values.push(quote! { Some(#related_struct) });
-                    }
-                    else {
-                        // Since a `ForeignKey` is an `Option`, we output `None` when the field
-                        // is not `join`ed.
-                        field_idents.push(name.clone());
-                        field_values.push(quote! { None });
-                    }
-                }
-                // NOTE: if the field type is not an SQL table, an error is thrown by the linter.
-            },
-            Type::UnsupportedType(_) => (), // TODO: should panic.
-            _ => {
-                field_idents.push(name.clone());
-                field_values.push(quote! { row.get(#index) });
-                index += 1;
-            },
-        }
-    }*/
-    let code = quote! {
-        #table_ident::from_row(row)
-    };
+    let joined_fields =
+        joins.iter()
+            .map(|join| Ident::new(&join.base_field, Span::default()));
+    let joined_tables =
+        joins.iter()
+            .map(|join| Ident::new(&join.joined_table, Span::default()));
+    let code = quote! {{
+        #[allow(unused_mut)]
+        let mut item = #table_ident::from_row(&row);
+        #(item.#joined_fields = Some(#joined_tables::from_joined_row(&row));)*
+        item
+    }};
     // TODO: when the private field issue is fixed, remove the call to respan.
     respan_tokens(code.into())
 }
@@ -824,6 +788,21 @@ fn add_error(error: Error, compiler_errors: &mut Tokens) {
         #old_errors
         #error
     };
+}
+
+fn to_row_get(ident: &Ident, typ: syn::Type, ident_prefix: &str) -> Tokens {
+    if let syn::Type::Path(TypePath { path: Path { ref segments, .. }, .. }) = typ {
+        let segment = segments.first().expect("first segment").into_item();
+        if segment.ident == "ForeignKey" {
+            return quote! {
+                None
+            };
+        }
+    }
+    let field_name = format!("{}{}", ident_prefix, ident);
+    quote! {
+        row.get(#field_name)
+    }
 }
 
 // Stable implementation.
