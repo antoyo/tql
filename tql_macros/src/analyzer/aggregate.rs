@@ -42,7 +42,7 @@ use ast::{
 };
 use error::{Error, Result, res};
 use new_ident;
-use state::{SqlTable, aggregates_singleton};
+use state::aggregates_singleton;
 use super::{
     check_argument_count,
     check_field,
@@ -53,7 +53,7 @@ use super::{
 use super::filter::{binop_to_logical_operator, binop_to_relational_operator, is_logical_operator, is_relational_operator};
 
 /// Convert an `Expression` to an `Aggregate`.
-pub fn argument_to_aggregate(arg: &Expression, _table: &SqlTable) -> Result<Aggregate> {
+pub fn argument_to_aggregate(arg: &Expression) -> Result<Aggregate> {
     let mut errors = vec![];
     let mut aggregate = Aggregate::default();
     let aggregates = aggregates_singleton();
@@ -109,12 +109,12 @@ pub fn argument_to_aggregate(arg: &Expression, _table: &SqlTable) -> Result<Aggr
 }
 
 /// Convert an `Expression` to a group `Identifier`.
-pub fn argument_to_group(arg: &Expression, table: &SqlTable) -> Result<Identifier> {
+pub fn argument_to_group(arg: &Expression) -> Result<Identifier> {
     let mut errors = vec![];
     let mut group = "".to_string();
 
     if let Some(identifier) = path_expr_to_identifier(arg, &mut errors) {
-        check_field(&identifier, arg.span(), table, &mut errors);
+        check_field(&identifier, arg.span(), &mut errors);
         group = identifier.to_string();
     }
 
@@ -122,15 +122,15 @@ pub fn argument_to_group(arg: &Expression, table: &SqlTable) -> Result<Identifie
 }
 
 /// Convert a Rust binary expression to an `AggregateFilterExpression` for an aggregate filter.
-fn binary_expression_to_aggregate_filter_expression(expr1: &Expression, op: &BinOp, expr2: &Expression, aggregates: &[Aggregate], table: &SqlTable) -> Result<AggregateFilterExpression> {
+fn binary_expression_to_aggregate_filter_expression(expr1: &Expression, op: &BinOp, expr2: &Expression, aggregates: &[Aggregate]) -> Result<AggregateFilterExpression> {
     // TODO: accumulate the errors instead of stopping at the first one.
-    let filter1 = expression_to_aggregate_filter_expression(expr1, aggregates, table)?;
+    let filter1 = expression_to_aggregate_filter_expression(expr1, aggregates)?;
     // TODO: return errors instead of dummy.
     let dummy = AggregateFilterExpression::NoFilters;
 
     let filter =
         if is_logical_operator(op) {
-            let filter2 = expression_to_aggregate_filter_expression(expr2, aggregates, table)?;
+            let filter2 = expression_to_aggregate_filter_expression(expr2, aggregates)?;
             AggregateFilterExpression::Filters(AggregateFilters {
                 operand1: Box::new(filter1),
                 operator: binop_to_logical_operator(op),
@@ -169,13 +169,13 @@ fn check_aggregate_field<'a>(identifier: &str, aggregates: &'a [Aggregate], posi
 }
 
 /// Convert a Rust expression to an `AggregateFilterExpression` for an aggregate filter.
-pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &[Aggregate], table: &SqlTable) -> Result<AggregateFilterExpression> {
+pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &[Aggregate]) -> Result<AggregateFilterExpression> {
     let mut errors = vec![];
 
     let filter =
         match *arg {
             Expr::Binary(ref bin) => {
-                binary_expression_to_aggregate_filter_expression(&bin.left, &bin.op, &bin.right, aggregates, table)?
+                binary_expression_to_aggregate_filter_expression(&bin.left, &bin.op, &bin.right, aggregates)?
             },
             Expr::Path(ref path) => {
                 let segment_ident = path.path.segments.first().unwrap().into_item().ident;
@@ -193,11 +193,11 @@ pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &
                 }
             },
             Expr::Paren(ref paren) => {
-                let filter = expression_to_aggregate_filter_expression(&paren.expr, aggregates, table)?;
+                let filter = expression_to_aggregate_filter_expression(&paren.expr, aggregates)?;
                 AggregateFilterExpression::ParenFilter(Box::new(filter))
             },
             Expr::Unary(ExprUnary { op: UnOp::Not(_), ref expr, .. }) => {
-                let filter = expression_to_aggregate_filter_expression(expr, aggregates, table)?;
+                let filter = expression_to_aggregate_filter_expression(expr, aggregates)?;
                 AggregateFilterExpression::NegFilter(Box::new(filter))
             },
             _ => {

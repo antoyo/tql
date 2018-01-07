@@ -50,7 +50,8 @@ struct RelatedTable {
     field1: String,
 }
 
-const SELECT: &str = "SELECT Table.date, Table.field1, Table.field2, Table.field3, Table.id";
+const SELECT: &str = "SELECT Table.*";
+//const SELECT: &str = "SELECT Table.date, Table.field1, Table.field2, Table.field3, Table.id";
 
 #[test]
 fn test_all() {
@@ -232,11 +233,17 @@ fn test_get() {
 fn test_join() {
     assert_eq!(
         format!("{}, RelatedTable.field1, RelatedTable.id FROM Table INNER JOIN RelatedTable ON Table.related_field = RelatedTable.id", SELECT),
-        to_sql!(Table.join(related_field))
+        to_sql!(Table.join(related_field = RelatedTable {
+            field1,
+            id,
+        }))
     );
     assert_eq!(
         format!("{}, RelatedTable.field1, RelatedTable.id FROM Table INNER JOIN RelatedTable ON Table.related_field = RelatedTable.id", SELECT),
-        to_sql!(Table.all().join(related_field))
+        to_sql!(Table.all().join(related_field = RelatedTable {
+            field1,
+            id,
+        }))
     );
 }
 

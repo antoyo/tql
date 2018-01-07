@@ -27,7 +27,6 @@ use proc_macro2::{Span, TokenStream};
 use quote::ToTokens;
 use syn::{Expr, Ident};
 
-use state::tables_singleton;
 use types::Type;
 
 pub type Expression = Expr;
@@ -210,7 +209,6 @@ pub struct MethodCall {
     pub arguments: Vec<Expression>,
     pub method_name: Identifier,
     pub object_name: Ident,
-    pub template: String,
 }
 
 /// An SQL ORDER BY clause.
@@ -260,11 +258,11 @@ pub enum Query {
         table: Identifier,
     },
     Select {
-        fields: FieldList,
         filter: FilterExpression,
         joins: Vec<Join>,
         limit: Limit,
         order: Vec<Order>,
+        selected_fields: Vec<String>,
         table: Identifier,
     },
     Update {
@@ -320,16 +318,6 @@ pub fn query_type(query: &Query) -> QueryType {
         Query::Insert { .. } => QueryType::InsertOne,
         Query::Select { ref filter, ref limit, ref table, .. } => {
             let mut typ = QueryType::SelectMulti;
-            if let FilterExpression::Filter(ref filter) = *filter {
-                let tables = tables_singleton();
-                // NOTE: At this stage (code generation), the table and the field exist, hence unwrap().
-                let table = tables.get(table).unwrap();
-                if let FilterValue::Identifier(ref identifier) = filter.operand1 {
-                    if table.fields.get(identifier).unwrap().ty.node == Type::Serial {
-                        typ = QueryType::SelectOne;
-                    }
-                }
-            }
             if let Limit::Index(_) = *limit {
                 typ = QueryType::SelectOne;
             }

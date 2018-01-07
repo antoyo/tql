@@ -30,21 +30,20 @@ use syn::spanned::Spanned;
 
 use ast::{Expression, Order};
 use error::{Error, Result, res};
-use state::SqlTable;
 use super::{check_field, path_expr_to_identifier};
 
 /// Convert an `Expression` to an `Order`.
-pub fn argument_to_order(arg: &Expression, table: &SqlTable) -> Result<Order> {
+pub fn argument_to_order(arg: &Expression) -> Result<Order> {
     let mut errors = vec![];
     let order =
         match *arg {
             Expr::Unary(ExprUnary { op: UnOp::Neg(_), ref expr, .. }) => {
-                let ident = get_identifier(expr, table)?;
+                let ident = get_identifier(expr)?;
                 Order::Descending(ident)
             }
             Expr::Path(ref path) => {
                 let identifier = path.path.segments.first().unwrap().into_item().ident;
-                check_field(&identifier, identifier.span, table, &mut errors);
+                check_field(&identifier, identifier.span, &mut errors);
                 Order::Ascending(identifier.to_string())
             }
             _ => {
@@ -59,10 +58,11 @@ pub fn argument_to_order(arg: &Expression, table: &SqlTable) -> Result<Order> {
 }
 
 /// Get the `String` indentifying the identifier from an `Expression`.
-fn get_identifier(identifier_expr: &Expression, table: &SqlTable) -> Result<String> {
+fn get_identifier(identifier_expr: &Expression) -> Result<String> {
     let mut errors = vec![];
     if let Some(identifier) = path_expr_to_identifier(identifier_expr, &mut errors) {
-        check_field(&identifier, identifier_expr.span(), table, &mut errors);
+        // TODO: check that the field is in the struct.
+        //check_field(&identifier, identifier_expr.span(), table, &mut errors);
         res(identifier.to_string(), errors)
     }
     else {

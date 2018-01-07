@@ -56,8 +56,8 @@ use ast::Limit::{
     Range,
     StartRange,
 };
+use state::methods_singleton;
 use sql::escape;
-use state::get_primary_key_field_by_table_name;
 
 /// Macro used to generate a ToSql implementation for a filter (for use in WHERE or HAVING).
 macro_rules! filter_to_sql {
@@ -216,10 +216,12 @@ impl ToSql for FilterValue {
     fn to_sql(&self) -> String {
         match *self {
             FilterValue::Identifier(ref identifier) => identifier.to_sql(),
-            FilterValue::MethodCall(MethodCall { ref arguments, ref object_name, ref template, ..  }) => {
+            FilterValue::MethodCall(MethodCall { ref arguments, ref object_name, ref method_name, ..  }) => {
+                let methods = methods_singleton();
+                let method = &methods[method_name];
                 // In the template, $0 represents the object identifier and $1, $2, ... the
                 // arguments.
-                let mut sql = template.replace("$0", &object_name.to_string());
+                let mut sql = method.template.replace("$0", &object_name.to_string());
                 let mut index = 1;
                 for argument in arguments {
                     sql = sql.replace(&format!("${}", index), &argument.to_sql());
@@ -344,16 +346,14 @@ impl ToSql for Query {
                 let values: Vec<_> = assignments.iter().map(|assign| assign.value.to_sql()).collect();
                 // Add the SQL code to get the inserted primary key.
                 // TODO: what to do when there is no primary key?
-                let return_value = get_primary_key_field_by_table_name(table)
-                    .map_or("".to_string(), |primary_key| " RETURNING ".to_string() + &primary_key);
-                replace_placeholder(format!("INSERT INTO {table}({fields}) VALUES({values}){return_value}",
+                // TODO: return the primary key somehow.
+                replace_placeholder(format!("INSERT INTO {table}({fields}) VALUES({values})",
                         table = table,
                         fields = fields.to_sql(),
                         values = values.to_sql(),
-                        return_value = return_value
                     ))
             },
-            Query::Select{ref fields, ref filter, ref joins, ref limit, ref order, ref table} => {
+            Query::Select{ ref filter, ref joins, ref limit, ref order, ref selected_fields, ref table } => {
                 let where_clause = filter_to_where_clause(filter);
                 let order_clause =
                     if !order.is_empty() {
@@ -362,8 +362,18 @@ impl ToSql for Query {
                     else {
                         ""
                     };
-                replace_placeholder(format!("SELECT {fields} FROM {table}{joins}{where_clause}{filter}{order_clause}{order}{limit}",
-                                            fields = fields.to_sql(),
+                let additional_fields =
+                    if selected_fields.is_empty() {
+                        "".to_string()
+                    }
+                    else {
+                        selected_fields.iter()
+                            .map(|field| format!(", {}", field))
+                            .collect::<Vec<_>>()
+                            .join("")
+                    };
+                replace_placeholder(format!("SELECT {table}.*{additional_fields} FROM {table}{joins}{where_clause}{filter}{order_clause}{order}{limit}",
+                                            additional_fields = additional_fields,
                                             table = table,
                                             joins = joins.to_sql(),
                                             where_clause = where_clause,

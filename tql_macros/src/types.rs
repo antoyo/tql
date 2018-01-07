@@ -38,7 +38,6 @@ use syn::{
 
 use ast::Expression;
 use gen::ToSql;
-use state::{get_primary_key_field, tables_singleton};
 
 /// A field type.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -122,15 +121,11 @@ fn type_to_sql(typ: &Type, mut nullable: bool) -> String {
             Type::ByteString => "BYTEA".to_string(),
             Type::I8 | Type::Char => "CHARACTER(1)".to_string(),
             Type::Custom(ref related_table_name) => {
-                let tables = tables_singleton();
-                if let Some(table) = tables.get(related_table_name) {
-                    let primary_key_field: String = get_primary_key_field(table).unwrap().to_string();
-                    "INTEGER REFERENCES ".to_string() + &related_table_name + "(" + &primary_key_field + ")"
-                }
-                else {
-                    "".to_string()
-                }
+                // TODO: allow specifying a different primary key.
+                let primary_key_field = "id";
+                "INTEGER REFERENCES ".to_string() + related_table_name + "(" + primary_key_field + ")"
                 // NOTE: if the field type is not an SQL table, an error is thrown by the linter.
+                // FIXME: previous comment.
             },
             Type::F32 => "REAL".to_string(),
             Type::F64 => "DOUBLE PRECISION".to_string(),

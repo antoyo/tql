@@ -119,7 +119,7 @@ fn main() {
     let connection = get_connection();
 
     // Create the table.
-    let _ = sql!(TodoItem.create());
+    let _ = TodoItem::create();
 
     let mut args = env::args();
     args.next();

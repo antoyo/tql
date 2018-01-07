@@ -1,4 +1,8 @@
 /*
+ * Primary key field
+ * SQLite: ROWID
+ *
+ * TODO: allow selecting only some fields.
  * TODO: remove allow_failure for beta when this issue is fixed:
  * https://github.com/rust-lang/rust/issues/46478
  * TODO: for the tests of the other backend, create a new crate and include!() the _expr test files
@@ -107,13 +111,7 @@ use gen::ToSql;
 use optimizer::optimize;
 use parser::Parser;
 use plugin::string_literal;
-use state::{
-    SqlFields,
-    SqlTable,
-    SqlTables,
-    get_primary_key_field_by_table_name,
-    tables_singleton,
-};
+use state::SqlFields;
 use types::Type;
 
 struct SqlQueryWithArgs {
@@ -172,11 +170,10 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
         };
     #[cfg(feature = "unstable")]
     let span = expr.span();
-    let sql_tables = tables_singleton();
     let parser = Parser::new();
     let method_calls = parser.parse(&expr)?;
     let table_name = method_calls.name.clone().expect("table name in method_calls");
-    let mut query = analyze(method_calls, sql_tables)?;
+    let mut query = analyze(method_calls)?;
     optimize(&mut query);
     query = analyze_types(query)?;
     let sql = query.to_sql();
@@ -208,9 +205,6 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
 /// This attribute must be used on structs to tell tql that it represents an SQL table.
 #[proc_macro_derive(SqlTable)]
 pub fn sql_table(input: TokenStream) -> TokenStream {
-    // Add to sql_tables.
-    let sql_tables = tables_singleton();
-
     let item: Item = parse(input).expect("parse expression in sql_table()");
 
     let gen =
@@ -218,47 +212,21 @@ pub fn sql_table(input: TokenStream) -> TokenStream {
             let table_name = item_struct.ident.to_string();
             let (fields, impls) = get_struct_fields(&item_struct);
             let mut compiler_errors = quote! {};
-            if !sql_tables.contains_key(&table_name) {
-                if let Ok(fields) = fields {
-                    sql_tables.insert(table_name.clone(), SqlTable {
-                        fields,
-                        name: item_struct.ident.clone(),
-                        position: item_struct.ident.span, // TODO: check if it is the right position.
-                    });
-
-                    // NOTE: Transform the span by dummy spans to workaround this issue:
-                    // https://github.com/rust-lang/rust/issues/42337
-                    // https://github.com/rust-lang/rust/issues/45934#issuecomment-344497531
-                    let code = tosql_impl(&item_struct).into();
-                    #[cfg(feature = "unstable")]
-                    let code = respan(code);
-                    return concat_token_stream(code, impls);
-                }
-            }
-            else {
-                // NOTE: This error is needed because the code could have two table structs in
-                // different modules.
-                let error = Error::new(&format!("duplicate definition of table `{}`", table_name),
-                    item_struct.ident.span);
+            if let Ok(fields) = fields {
+                // NOTE: Transform the span by dummy spans to workaround this issue:
+                // https://github.com/rust-lang/rust/issues/42337
+                // https://github.com/rust-lang/rust/issues/45934#issuecomment-344497531
+                let code = tosql_impl(&item_struct);
+                let methods = table_methods(&item_struct);
+                let code = quote! {
+                    #code
+                    #methods
+                }.into();
                 #[cfg(feature = "unstable")]
-                error.emit_diagnostic();
-                #[cfg(not(feature = "unstable"))]
-                {
-                    let error = compiler_error(&error);
-                    compiler_errors = quote! {
-                        #compiler_errors
-                        #error
-                    };
-                }
+                let code = respan(code);
+                return concat_token_stream(code, impls);
             }
             if let Err(errors) = fields {
-                // NOTE: insert dummy table to be able to show more errors.
-                sql_tables.insert(table_name.clone(), SqlTable {
-                    fields: BTreeMap::new(),
-                    name: item_struct.ident.clone(),
-                    position: item_struct.ident.span,
-                });
-
                 for error in errors {
                     add_error(error, &mut compiler_errors);
                 }
@@ -399,41 +367,88 @@ fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, TokenStrea
     (res(fields, errors), impls)
 }
 
+/// Create the create() and from_row() method for the table struct.
+fn table_methods(item_struct: &ItemStruct) -> Tokens {
+    let table_ident = &item_struct.ident;
+    if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
+        let field_names = named.iter()
+            .map(|field| field.ident.expect("field has name"));
+
+        let field_idents = named.iter()
+            .map(|field| (field.ident.expect("field has name"), field.ty.clone()));
+        let columns = field_idents
+            .map(|(ident, typ)| {
+                if let syn::Type::Path(TypePath { path: Path { ref segments, .. }, .. }) = typ {
+                    let segment = segments.first().expect("first segment").into_item();
+                    if segment.ident == "ForeignKey" {
+                        return quote! {
+                            // TODO: if fields from the foreign table are selected, create the
+                            // struct.
+                            None
+                        };
+                    }
+                }
+                let field_name = ident.to_string();
+                quote! {
+                    row.get(#field_name)
+                }
+            });
+
+        quote! {
+            impl #table_ident {
+                fn create() -> Result<(), Box<::std::error::Error + 'static + Sync + Send>> {
+                    Ok(())
+                }
+
+                fn drop() -> Result<(), Box<::std::error::Error + 'static + Sync + Send>> {
+                    Ok(())
+                }
+
+                fn from_row(row: ::postgres::rows::Row) -> Self {
+                    Self {
+                        #(#field_names: #columns,)*
+                    }
+                }
+            }
+        }
+    }
+    else {
+        unimplemented!()
+    }
+}
+
 /// Add the postgres::types::ToSql implementation on the struct.
 /// Its SQL representation is the same as the primary key SQL representation.
 fn tosql_impl(item_struct: &ItemStruct) -> Tokens {
     let table_ident = &item_struct.ident;
     let debug_impl = create_debug_impl(item_struct);
-    match get_primary_key_field_by_table_name(&table_ident.to_string()) {
-        Some(primary_key_field) => {
-            let primary_key_ident = Ident::from(primary_key_field.as_ref());
-            quote! {
-                #debug_impl
+    // TODO: fetch the primary key field from the struct.
+    let primary_key_field = "id";
+    let primary_key_ident = Ident::from(primary_key_field);
+    quote! {
+        #debug_impl
 
-                impl ::postgres::types::ToSql for #table_ident {
-                    fn to_sql(&self, ty: &::postgres::types::Type, out: &mut Vec<u8>) ->
-                        Result<::postgres::types::IsNull, Box<::std::error::Error + 'static + Sync + Send>>
-                    {
-                        self.#primary_key_ident.to_sql(ty, out)
-                    }
-
-                    fn accepts(ty: &::postgres::types::Type) -> bool {
-                        *ty == ::postgres::types::INT4
-                    }
-
-                    fn to_sql_checked(&self, ty: &::postgres::types::Type, out: &mut ::std::vec::Vec<u8>)
-                          -> ::std::result::Result<::postgres::types::IsNull,
-                                           Box<::std::error::Error + ::std::marker::Sync + ::std::marker::Send>>
-                    {
-                        ::postgres::types::__to_sql_checked(self, ty, out)
-                    }
+        impl ::postgres::types::ToSql for #table_ident {
+            fn to_sql(&self, ty: &::postgres::types::Type, out: &mut Vec<u8>) ->
+                Result<::postgres::types::IsNull, Box<::std::error::Error + 'static + Sync + Send>>
+                {
+                    self.#primary_key_ident.to_sql(ty, out)
                 }
 
-                unsafe impl ::tql::SqlTable for #table_ident {
-                }
+            fn accepts(ty: &::postgres::types::Type) -> bool {
+                *ty == ::postgres::types::INT4
             }
-        },
-        None => quote! {}, // NOTE: Do not add the implementation when there is no primary key.
+
+            fn to_sql_checked(&self, ty: &::postgres::types::Type, out: &mut ::std::vec::Vec<u8>)
+                -> ::std::result::Result<::postgres::types::IsNull,
+                Box<::std::error::Error + ::std::marker::Sync + ::std::marker::Send>>
+                {
+                    ::postgres::types::__to_sql_checked(self, ty, out)
+                }
+        }
+
+        unsafe impl ::tql::SqlTable for #table_ident {
+        }
     }
 }
 
@@ -487,18 +502,11 @@ fn generate_errors(errors: Vec<Error>) -> TokenStream {
 fn gen_query(args: SqlQueryWithArgs) -> TokenStream {
     let table_ident = &args.table_name;
     let ident = Ident::new("connection", table_ident.span);
-    let sql_tables = tables_singleton();
     let table_name = table_ident.to_string();
-    let tokens =
-        match sql_tables.get(&table_name) {
-            Some(table) => {
-                let struct_expr = create_struct(table_ident, &table.fields, sql_tables, args.joins);
-                let (aggregate_struct, aggregate_expr) = gen_aggregate_struct(&args.aggregates);
-                let args_expr = get_query_arguments(args.arguments);
-                gen_query_expr(ident, args.sql, args_expr, struct_expr, aggregate_struct, aggregate_expr, args.query_type)
-            },
-            None => quote! {},
-        };
+    let struct_expr = create_struct(table_ident, args.joins);
+    let (aggregate_struct, aggregate_expr) = gen_aggregate_struct(&args.aggregates);
+    let args_expr = get_query_arguments(args.arguments);
+    let tokens = gen_query_expr(ident, args.sql, args_expr, struct_expr, aggregate_struct, aggregate_expr, args.query_type);
     tokens.into()
 }
 
@@ -510,8 +518,8 @@ fn gen_query_expr(ident: Ident, sql_query: String, args_expr: Tokens, struct_exp
     match query_type {
         QueryType::AggregateMulti => {
             let result = quote! {{
-                let result = #ident.prepare(#sql_query).unwrap();
-                result.query(&#args_expr).unwrap().iter()
+                let result = #ident.prepare(#sql_query).expect("prepare query");
+                result.query(&#args_expr).expect("execute query").iter()
             }};
             let call = quote! {
                 .map(|row| {
@@ -527,8 +535,8 @@ fn gen_query_expr(ident: Ident, sql_query: String, args_expr: Tokens, struct_exp
         QueryType::AggregateOne => {
             quote! {{
                 #aggregate_struct
-                let result = #ident.prepare(#sql_query).unwrap();
-                result.query(&#args_expr).unwrap().iter().next().map(|row| {
+                let result = #ident.prepare(#sql_query).expect("prepare query");
+                result.query(&#args_expr).expect("execute query").iter().next().map(|row| {
                     #aggregate_expr
                 })
             }}
@@ -537,20 +545,22 @@ fn gen_query_expr(ident: Ident, sql_query: String, args_expr: Tokens, struct_exp
             quote! {{
                 #ident.prepare(#sql_query)
                     .and_then(|result| {
-                        // NOTE: The query is not supposed to fail, hence unwrap().
-                        let rows = result.query(&#args_expr).unwrap();
+                        // NOTE: The query is not supposed to fail, hence expect().
+                        let rows = result.query(&#args_expr).expect("execute query");
+                        /* TODO:
                         // NOTE: There is always one result (the inserted id), hence unwrap().
                         let row = rows.iter().next().unwrap();
                         let count: i32 = row.get(0);
-                        Ok(count)
+                        Ok(count)*/
+                        Ok(0)
                     })
             }}
         },
         QueryType::SelectMulti => {
             let result =
                 quote! {{
-                    let result = #ident.prepare(#sql_query).unwrap();
-                    result.query(&#args_expr).unwrap().iter()
+                    let result = #ident.prepare(#sql_query).expect("prepare query");
+                    result.query(&#args_expr).expect("execute query").iter()
                 }};
             let call = respan_tokens(quote! {
                 .map(|row| {
@@ -566,8 +576,8 @@ fn gen_query_expr(ident: Ident, sql_query: String, args_expr: Tokens, struct_exp
         QueryType::SelectOne => {
             let result =
                 quote! {{
-                    let result = #ident.prepare(#sql_query).unwrap();
-                    result.query(&#args_expr).unwrap().iter().next()
+                    let result = #ident.prepare(#sql_query).expect("prepare query");
+                    result.query(&#args_expr).expect("execute query").iter().next()
                 }};
             let call = respan_tokens(quote! {
                 .map(|row| {
@@ -593,7 +603,7 @@ fn get_query_arguments(arguments: Args) -> Tokens {
     let mut arg_refs = vec![];
     let mut qualifiers = vec![];
     let mut idents = vec![];
-    let mut types = vec![];
+    let mut types: Vec<String> = vec![];
     let mut exprs = vec![];
 
     for arg in arguments {
@@ -612,14 +622,15 @@ fn get_query_arguments(arguments: Args) -> Tokens {
         let exp = &arg.expression;
         exprs.push(quote! { #exp });
 
-        if is_string_type(&arg.typ) {
+        // TODO
+        /*if is_string_type(&arg.typ) {
             qualifiers.push(quote! {});
         }
-        else {
+        else {*/
             qualifiers.push(quote! { ref });
-        }
+        //}
 
-        if let Some(ty) = inner_type(&arg.typ) {
+        /*if let Some(ty) = inner_type(&arg.typ) {
             types.push(quote! { #ty });
         }
         else if is_string_type(&arg.typ) {
@@ -628,7 +639,7 @@ fn get_query_arguments(arguments: Args) -> Tokens {
         else {
             let ty = &arg.typ;
             types.push(quote! { #ty });
-        }
+        }*/
     }
 
     quote! {{
@@ -640,11 +651,12 @@ fn get_query_arguments(arguments: Args) -> Tokens {
 }
 
 /// Create the struct expression needed by the generated code.
-fn create_struct(table_ident: &Ident, table: &SqlFields, sql_tables: &SqlTables, joins: Vec<Join>) -> Tokens {
-    let mut field_idents = vec![];
-    let mut field_values = vec![];
+fn create_struct(table_ident: &Ident, joins: Vec<Join>) -> Tokens {
+    let mut field_idents: Vec<String> = vec![];
+    let mut field_values: Vec<String> = vec![];
     let mut index = 0usize;
-    for (name, types) in table {
+    // TODO
+    /*for (name, types) in table {
         match types.ty.node {
             Type::Custom(ref foreign_table) => {
                 if let Some(foreign_table) = sql_tables.get(foreign_table) {
@@ -688,11 +700,9 @@ fn create_struct(table_ident: &Ident, table: &SqlFields, sql_tables: &SqlTables,
                 index += 1;
             },
         }
-    }
+    }*/
     let code = quote! {
-        #table_ident {
-            #(#field_idents: #field_values),*
-        }
+        #table_ident::from_row(row)
     };
     // TODO: when the private field issue is fixed, remove the call to respan.
     respan_tokens(code.into())

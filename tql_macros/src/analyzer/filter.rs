@@ -46,7 +46,7 @@ use ast::{
     WithSpan,
 };
 use error::{Error, Result, res};
-use state::{SqlMethod, SqlMethodTypes, SqlTable, methods_singleton};
+use state::{SqlMethodTypes, methods_singleton};
 use super::{
     check_field,
     check_field_type,
@@ -82,15 +82,15 @@ pub fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors:
 }
 
 /// Convert a Rust binary expression to a `FilterExpression`.
-fn binary_expression_to_filter_expression(expr1: &Expression, op: &BinOp, expr2: &Expression, table: &SqlTable) -> Result<FilterExpression> {
+fn binary_expression_to_filter_expression(expr1: &Expression, op: &BinOp, expr2: &Expression) -> Result<FilterExpression> {
     // TODO: accumulate the errors instead of stopping when the first one is encountered.
-    let filter1 = expression_to_filter_expression(expr1, table)?;
+    let filter1 = expression_to_filter_expression(expr1)?;
     // TODO: return errors instead of dummy.
     let dummy = FilterExpression::NoFilters;
 
     let filter =
         if is_logical_operator(op) {
-            let filter2 = expression_to_filter_expression(expr2, table)?;
+            let filter2 = expression_to_filter_expression(expr2)?;
             FilterExpression::Filters(Filters {
                 operand1: Box::new(filter1),
                 operator: binop_to_logical_operator(op),
@@ -154,35 +154,35 @@ fn check_method_arguments(arguments: &[Expression], argument_types: &[Type], err
 }
 
 /// Convert a Rust expression to a `FilterExpression`.
-pub fn expression_to_filter_expression(arg: &Expression, table: &SqlTable) -> Result<FilterExpression> {
+pub fn expression_to_filter_expression(arg: &Expression) -> Result<FilterExpression> {
     let mut errors = vec![];
 
     let filter =
         match *arg {
             Expr::Binary(ref bin) => {
-                binary_expression_to_filter_expression(&bin.left, &bin.op, &bin.right, table)?
+                binary_expression_to_filter_expression(&bin.left, &bin.op, &bin.right)?
             },
             Expr::MethodCall(ref call) => {
                 FilterExpression::FilterValue(WithSpan {
-                    node: method_call_expression_to_filter_expression(call.method, &call.receiver, &call.args, table,
+                    node: method_call_expression_to_filter_expression(call.method, &call.receiver, &call.args,
                                                                       &mut errors),
                     span: arg.span(),
                 })
             },
             Expr::Path(ref path) => {
                 let identifier = path.path.segments.first().unwrap().into_item().ident;
-                check_field(&identifier, identifier.span, table, &mut errors);
+                check_field(&identifier, identifier.span, &mut errors);
                 FilterExpression::FilterValue(WithSpan {
                     node: FilterValue::Identifier(identifier),
                     span: arg.span(),
                 })
             },
             Expr::Paren(ref paren) => {
-                let filter = expression_to_filter_expression(&paren.expr, table)?;
+                let filter = expression_to_filter_expression(&paren.expr)?;
                 FilterExpression::ParenFilter(Box::new(filter))
             },
             Expr::Unary(ExprUnary { op: UnOp::Not(_), ref expr, .. }) => {
-                let filter = expression_to_filter_expression(expr, table)?;
+                let filter = expression_to_filter_expression(expr)?;
                 FilterExpression::NegFilter(Box::new(filter))
             },
             _ => {
@@ -195,39 +195,6 @@ pub fn expression_to_filter_expression(arg: &Expression, table: &SqlTable) -> Re
         };
 
     res(filter, errors)
-}
-
-/// Get an SQL method and arguments by type and name.
-fn get_method<'a>(object_type: &'a WithSpan<Type>, args: &Punctuated<Expr, Comma>, method_name: &str, identifier: Ident, errors: &mut Vec<Error>) -> Option<(&'a SqlMethodTypes, Vec<Expression>)> {
-    let methods = methods_singleton();
-    let type_methods =
-        if let Type::Nullable(_) = object_type.node {
-            methods.get(&Type::Nullable(Box::new(Type::Generic)))
-        }
-        else {
-            methods.get(&object_type.node)
-        };
-    match type_methods {
-        Some(type_methods) => {
-            match type_methods.get(method_name) {
-                Some(sql_method) => {
-                    let arguments: Vec<Expression> = args.iter()
-                        .cloned()
-                        .collect();
-                    check_method_arguments(&arguments, &sql_method.argument_types, errors);
-                    Some((sql_method, arguments))
-                },
-                None => {
-                    unknown_method(identifier.span, &object_type.node, method_name, Some(type_methods), errors);
-                    None
-                },
-            }
-        },
-        None => {
-            unknown_method(identifier.span, &object_type.node, method_name, None, errors);
-            None
-        },
-    }
 }
 
 /// Check if a `BinOp` is a `LogicalOperator`.
@@ -248,13 +215,13 @@ pub fn is_relational_operator(binop: &BinOp) -> bool {
 
 /// Convert a method call expression to a filter expression.
 fn method_call_expression_to_filter_expression(identifier: Ident, expr: &Expression, args: &Punctuated<Expr, Comma>,
-    table: &SqlTable, errors: &mut Vec<Error>) -> FilterValue
+    errors: &mut Vec<Error>) -> FilterValue
 {
     let method_name = identifier.to_string();
     let dummy = FilterValue::None;
     match *expr {
         Expr::Path(ref path) => {
-            path_method_call_to_filter(&path.path, identifier, &method_name, args, table, errors)
+            path_method_call_to_filter(&path.path, identifier, &method_name, args, errors)
         },
         _ => {
             errors.push(Error::new(
@@ -268,44 +235,20 @@ fn method_call_expression_to_filter_expression(identifier: Ident, expr: &Express
 
 /// Convert a method call where the object is an identifier to a filter expression.
 fn path_method_call_to_filter(path: &Path, identifier: Ident, method_name: &str, args: &Punctuated<Expr, Comma>,
-                              table: &SqlTable, errors: &mut Vec<Error>) -> FilterValue
+                              errors: &mut Vec<Error>) -> FilterValue
 {
     // TODO: return errors instead of dummy.
     let dummy = FilterValue::None;
+    // TODO: check the method call (types, arguments and if it exists).
+    // TODO: check if the field exists.
     let object_name = path.segments.first().unwrap().into_item().ident;
-    match table.fields.get(&object_name) {
-        Some(object_type) => {
-            let type_method = get_method(&object_type.ty, args, method_name, identifier, errors);
+    let arguments: Vec<Expression> = args.iter()
+        .cloned()
+        .collect();
 
-            if let Some((&SqlMethodTypes { ref template, .. }, ref arguments)) = type_method {
-                FilterValue::MethodCall(ast::MethodCall {
-                    arguments: arguments.clone(),
-                    method_name: method_name.to_string(),
-                    object_name,
-                    template: template.clone(),
-                })
-            }
-            else {
-                // NOTE: An error is emitted in the get_method() function.
-                dummy
-            }
-        },
-        None => {
-            check_field(&object_name, object_name.span, table, errors);
-            dummy
-        },
-    }
-}
-
-/// Add an error to the vector `errors` about an unknown SQL method.
-/// It suggests a similar name if there is one.
-fn unknown_method(position: Span, object_type: &Type, method_name: &str, type_methods: Option<&SqlMethod>, errors: &mut Vec<Error>) {
-    let mut error = Error::new(
-        &format!("no method named `{}` found for type `{}`", method_name, object_type),
-        position,
-    );
-    if let Some(type_methods) = type_methods {
-        propose_similar_name(method_name, type_methods.keys().map(String::as_ref), &mut error);
-    }
-    errors.push(error);
+    FilterValue::MethodCall(ast::MethodCall {
+        arguments: arguments.clone(),
+        method_name: method_name.to_string(),
+        object_name,
+    })
 }

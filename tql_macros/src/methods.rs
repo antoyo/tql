@@ -31,10 +31,10 @@ use types::Type;
 /// placeholders for the arguments.
 pub fn add_method(object_type: &Type, return_type: Type, argument_types: Vec<Type>, method: &str, template: &str) {
     let methods = methods_singleton();
-    let type_methods = methods.entry(object_type.clone()).or_insert(HashMap::new());
-    type_methods.insert(method.to_string(), SqlMethodTypes {
-        argument_types: argument_types,
-        return_type: return_type,
+    methods.insert(method.to_string(), SqlMethodTypes {
+        argument_types,
+        object_type: object_type.clone(),
+        return_type,
         template: template.to_string(),
     });
 }

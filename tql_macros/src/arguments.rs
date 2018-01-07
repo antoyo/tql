@@ -41,7 +41,6 @@ use ast::{
     Query,
     query_table,
 };
-use state::{get_field_syn_type, get_method_types};
 use types::Type;
 
 macro_rules! add_filter_arguments {
@@ -76,18 +75,16 @@ macro_rules! add_filter_arguments {
 pub struct Arg {
     pub expression: Expression,
     pub field_name: Option<Identifier>,
-    pub typ: syn::Type,
 }
 
 /// A collection of `Arg`s.
 pub type Args = Vec<Arg>;
 
 /// Create an argument from the parameters and add it to `arguments`.
-fn add(arguments: &mut Args, field_name: Option<Identifier>, typ: syn::Type, expr: Expression) {
+fn add(arguments: &mut Args, field_name: Option<Identifier>, expr: Expression) {
     add_expr(arguments, Arg {
         expression: expr,
         field_name,
-        typ,
     });
 }
 
@@ -96,8 +93,7 @@ fn add_assignments(assignments: Vec<Assignment>, arguments: &mut Args, table_nam
     for assign in assignments {
         let field_name = assign.identifier.expect("Assignment identifier");
         // NOTE: At this stage (code generation), the field exists, hence unwrap().
-        let field_type = get_field_syn_type(table_name, &field_name).unwrap();
-        add(arguments, Some(field_name.to_string()), field_type.clone(), assign.value);
+        add(arguments, Some(field_name.to_string()), assign.value);
     }
 }
 
@@ -117,22 +113,21 @@ add_filter_arguments!(add_aggregate_filter_arguments, AggregateFilterExpression,
 /// Create arguments from the `limit` and add them to `arguments`.
 fn add_limit_arguments(limit: Limit, arguments: &mut Args) {
     match limit {
-        Limit::EndRange(expression) => add(arguments, None, Type::I64.to_syn(), expression),
-        Limit::Index(expression) => add(arguments, None, Type::I64.to_syn(), expression),
+        Limit::EndRange(expression) => add(arguments, None, expression),
+        Limit::Index(expression) => add(arguments, None, expression),
         Limit::LimitOffset(_, _) => (), // NOTE: there are no arguments to add for a `LimitOffset` because it is always using literals.
         Limit::NoLimit => (),
         Limit::Range(expression1, expression2) => {
             let offset = expression1.clone();
-            add(arguments, None, Type::I64.to_syn(), expression1);
+            add(arguments, None, expression1);
             let expression = parse((quote! { #expression2 - #offset }).into())
                 .expect("Subtraction quoted expression");
             add_expr(arguments, Arg {
                 expression,
                 field_name: None,
-                typ: Type::I64.to_syn(),
             });
         },
-        Limit::StartRange(expression) => add(arguments, None, Type::I64.to_syn(), expression),
+        Limit::StartRange(expression) => add(arguments, None, expression),
     }
 }
 
@@ -140,18 +135,15 @@ fn add_limit_arguments(limit: Limit, arguments: &mut Args) {
 fn add_with_method(args: &mut Args, method_name: &str, object_name: &Ident, index: usize, expr: Expression,
                    table_name: &str)
 {
-    // NOTE: At this stage (code generation), the method exists, hence unwrap().
-    let method_types = get_method_types(table_name, object_name, method_name).unwrap();
     add_expr(args, Arg {
         expression: expr,
         field_name: None,
-        typ: method_types.argument_types[index].to_syn(),
     });
 }
 
 fn add_aggregate_filter_value_arguments(aggregate: &Aggregate, args: &mut Args, _table_name: &str, expression: Option<Expression>) {
     if let Some(expr) = expression {
-        add(args, aggregate.field.clone().map(|ident| ident.to_string()), Type::I32.to_syn(), expr); // TODO: use the right type.
+        add(args, aggregate.field.clone().map(|ident| ident.to_string()), expr); // TODO: use the right type.
     }
 }
 
@@ -162,8 +154,7 @@ fn add_filter_value_arguments(filter_value: &FilterValue, args: &mut Args, table
             // boolean field name, hence this condition.
             if let Some(expr) = expression {
                 // NOTE: At this stage (code generation), the field exists, hence unwrap().
-                let field_type = get_field_syn_type(table_name, identifier).unwrap();
-                add(args, Some(identifier.to_string()), field_type.clone(), expr);
+                add(args, Some(identifier.to_string()), expr);
             }
         },
         FilterValue::MethodCall(MethodCall { ref arguments, ref method_name, ref object_name, .. }) => {
