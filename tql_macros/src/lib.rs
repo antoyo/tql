@@ -117,6 +117,7 @@ use optimizer::optimize;
 use parser::Parser;
 use plugin::string_literal;
 use state::SqlFields;
+use string::token_to_string;
 use types::Type;
 
 struct SqlQueryWithArgs {
@@ -137,6 +138,7 @@ struct SqlQueryWithArgs {
 #[proc_macro]
 pub fn sql(input: TokenStream) -> TokenStream {
     // TODO: if the first parameter is not provided, use "connection".
+    // TODO: to do so, try to parse() to a Punctuated(Comma, syn::Expr).
     let sql_result = to_sql_query(input.into());
     match sql_result {
         Ok(sql_query_with_args) => gen_query(sql_query_with_args),
@@ -234,9 +236,11 @@ pub fn sql_table(input: TokenStream) -> TokenStream {
                 // https://github.com/rust-lang/rust/issues/45934#issuecomment-344497531
                 // NOTE: if there is no error, there is a primary key, hence expect().
                 let code = tosql_impl(&item_struct, &primary_key.expect("primary key"));
+                let new_structs = create_typecheck_structs(&item_struct);
                 let methods = table_methods(&item_struct);
                 let code = quote! {
                     #code
+                    #new_structs
                     #methods
                 }.into();
                 #[cfg(feature = "unstable")]
@@ -389,6 +393,64 @@ fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, Option<Str
     (res(fields, errors), primary_key_field, impls)
 }
 
+/// Create the structures used to type check the queries.
+fn create_typecheck_structs(item_struct: &ItemStruct) -> Tokens {
+    let table_ident = &item_struct.ident;
+    if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
+        let field_idents = named.iter().map(|field| &field.ident);
+        let field_idents2 = named.iter().map(|field| &field.ident);
+
+        let mut string_found = false;
+        let field_types: Vec<_> =
+            named.iter()
+                .map(|field| {
+                    if token_to_string(&field.ty) == "String" {
+                        string_found = true;
+                        quote! {
+                            &'a str
+                        }
+                    }
+                    else {
+                        let ty = &field.ty;
+                        quote! {
+                            #ty
+                        }
+                    }
+                })
+                .collect();
+        let module_name = Ident::new(&format!("__tql_{}", rand_string().to_lowercase()), Span::default());
+        let lifetime =
+            if string_found {
+                quote! {
+                    <'a>
+                }
+            }
+            else {
+                quote! {
+                }
+            };
+        quote! {
+            mod #module_name {
+                struct #table_ident#lifetime {
+                    #(#field_idents: #field_types,)*
+                }
+
+                impl#lifetime Default for #table_ident#lifetime {
+                    #[inline(always)]
+                    fn default() -> Self {
+                        #table_ident {
+                            #(#field_idents2: unsafe { ::std::mem::zeroed() },)*
+                        }
+                    }
+                }
+            }
+        }
+    }
+    else {
+        unreachable!("Check is done in get_struct_fields()")
+    }
+}
+
 /// Create the _create_query() and from_row() method for the table struct.
 fn table_methods(item_struct: &ItemStruct) -> Tokens {
     let table_ident = &item_struct.ident;
@@ -442,7 +504,7 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
         }
     }
     else {
-        unimplemented!()
+        unreachable!("Check is done in get_struct_fields()")
     }
 }
 
@@ -451,7 +513,6 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
 fn tosql_impl(item_struct: &ItemStruct, primary_key_field: &str) -> Tokens {
     let table_ident = &item_struct.ident;
     let debug_impl = create_debug_impl(item_struct);
-    // TODO: fetch the primary key field from the struct.
     let primary_key_ident = Ident::from(primary_key_field);
     quote! {
         #debug_impl
@@ -501,7 +562,7 @@ fn create_debug_impl(item_struct: &ItemStruct) -> Tokens {
         }
     }
     else {
-        unimplemented!();
+        unreachable!("Check is done in get_struct_fields()")
     }
 }
 
