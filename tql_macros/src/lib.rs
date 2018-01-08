@@ -184,7 +184,7 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
     let expr: Expr =
         match parse2(input) {
             Ok(expr) => expr,
-            Err(error) => return Err(vec![Error::new(&error.to_string(), Span::default())]),
+            Err(error) => return Err(vec![Error::new(&error.to_string(), Span::call_site())]),
         };
     #[cfg(feature = "unstable")]
     let span = expr.span();
@@ -358,7 +358,7 @@ fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, Option<Str
                     {
                         let field_pos =
                             if let syn::Type::Path(TypePath { path: Path { ref segments, .. }, ..}) = *field_type {
-                                let segment = segments.first().expect("first segment").into_item();
+                                let segment = segments.first().expect("first segment").into_value();
                                 if let AngleBracketed(AngleBracketedGenericArguments { ref args, .. }) =
                                     segment.arguments
                                 {
@@ -395,7 +395,8 @@ fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, Option<Str
 
 /// Create the structures used to type check the queries.
 fn create_typecheck_structs(item_struct: &ItemStruct) -> Tokens {
-    let table_ident = &item_struct.ident;
+    let real_table_ident = &item_struct.ident;
+    let table_ident = Ident::new(&format!("{}23", item_struct.ident), Span::call_site());
     if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
         let field_idents = named.iter().map(|field| &field.ident);
         let field_idents2 = named.iter().map(|field| &field.ident);
@@ -406,19 +407,30 @@ fn create_typecheck_structs(item_struct: &ItemStruct) -> Tokens {
                 .map(|field| {
                     if token_to_string(&field.ty) == "String" {
                         string_found = true;
-                        quote! {
+                        return quote! {
                             &'a str
-                        }
+                        };
                     }
                     else {
-                        let ty = &field.ty;
-                        quote! {
-                            #ty
+                        if let syn::Type::Path(TypePath { path: Path { ref segments, .. }, .. }) = field.ty {
+                            let segment = segments.first().expect("first segment of path");
+                            let segment = segment.value();
+                            if segment.ident == "ForeignKey" || segment.ident == "Option" {
+                                if let AngleBracketed(AngleBracketedGenericArguments { ref args, .. }) = segment.arguments {
+                                    let arg = args.first().expect("first generic argument");
+                                    let typ = arg.value();
+                                    return quote! { #typ };
+                                }
+                            }
                         }
+                    }
+                    let ty = &field.ty;
+                    quote! {
+                        #ty
                     }
                 })
                 .collect();
-        let module_name = Ident::new(&format!("__tql_{}", rand_string().to_lowercase()), Span::default());
+        let module_name = Ident::new(&format!("__tql_{}", rand_string().to_lowercase()), Span::call_site());
         let lifetime =
             if string_found {
                 quote! {
@@ -430,9 +442,9 @@ fn create_typecheck_structs(item_struct: &ItemStruct) -> Tokens {
                 }
             };
         quote! {
-            mod #module_name {
-                struct #table_ident#lifetime {
-                    #(#field_idents: #field_types,)*
+            pub mod #module_name {
+                pub(crate) struct #table_ident#lifetime {
+                    #(pub #field_idents: #field_types,)*
                 }
 
                 impl#lifetime Default for #table_ident#lifetime {
@@ -443,6 +455,10 @@ fn create_typecheck_structs(item_struct: &ItemStruct) -> Tokens {
                         }
                     }
                 }
+            }
+
+            impl<'a> ::tql::SqlTableTypeChecking<'a> for #real_table_ident {
+                type TypeStruct = #module_name::#table_ident#lifetime;
             }
         }
     }
@@ -579,7 +595,7 @@ fn generate_errors(errors: Vec<Error>) -> TokenStream {
     }
     #[cfg(feature = "unstable")]
     {
-        let expr = LitStr::new("", Span::default());
+        let expr = LitStr::new("", Span::call_site());
         let gen = quote! {
             #expr
         };
@@ -593,7 +609,7 @@ fn gen_query(args: SqlQueryWithArgs) -> TokenStream {
     let ident = Ident::new("connection", table_ident.span);
     let struct_expr = create_struct(table_ident, args.joins);
     let (aggregate_struct, aggregate_expr) = gen_aggregate_struct(&args.aggregates);
-    let args_expr = get_query_arguments(args.arguments);
+    let args_expr = get_query_arguments(table_ident, args.arguments);
     let tokens = gen_query_expr(ident, args.sql, args_expr, struct_expr, aggregate_struct, aggregate_expr,
                                 args.query_type, table_ident);
     tokens.into()
@@ -692,11 +708,11 @@ fn gen_query_expr(connection_ident: Ident, sql_query: String, args_expr: Tokens,
 
 /// Get the arguments to send to the `postgres::stmt::Statement::query` or
 /// `postgres::stmt::Statement::execute` method.
-fn get_query_arguments(arguments: Args) -> Tokens {
+fn get_query_arguments(table_ident: &Ident, arguments: Args) -> Tokens {
     let mut arg_refs = vec![];
-    let mut qualifiers = vec![];
-    let mut idents = vec![];
-    let mut types: Vec<String> = vec![];
+    let mut fields = vec![];
+    let mut field_values = vec![];
+    let mut names = vec![];
     let mut exprs = vec![];
 
     for arg in arguments {
@@ -709,40 +725,68 @@ fn get_query_arguments(arguments: Args) -> Tokens {
             },
         }
 
-        let name = arg.field_name
-            .map(|name| name.replace('.', ""))
-            .unwrap_or_else(|| rand_string().to_lowercase());
-        idents.push(new_ident(&format!("__tql_{}", name)));
+        if let Some(name) = arg.field_name
+            .map(|name| {
+                let index = name.find('.')
+                    .map(|index| index + 1)
+                    .unwrap_or(0);
+                Ident::new(&name[index..], Span::call_site())
+            })
+        {
+            let expr = &arg.expression;
+            // NOTE: hack to avoid moving the value.
+            // TODO: make sure it's safe (no double-free).
+            let expr = quote_spanned! { arg.expression.span() => fake_move(&#expr) };
 
-        let exp = &arg.expression;
-        exprs.push(quote! { #exp });
-
-        // TODO
-        /*if is_string_type(&arg.typ) {
-            qualifiers.push(quote! {});
+            if fields.contains(&name) {
+                names.push(quote! { _type_struct.#name });
+                exprs.push(expr);
+            }
+            else {
+                fields.push(name);
+                field_values.push(expr);
+            }
         }
-        else {*/
-            qualifiers.push(quote! { ref });
-        //}
-
-        /*if let Some(ty) = inner_type(&arg.typ) {
-            types.push(quote! { #ty });
-        }
-        else if is_string_type(&arg.typ) {
-            types.push(quote! { &str });
-        }
-        else {
-            let ty = &arg.typ;
-            types.push(quote! { #ty });
-        }*/
     }
 
-    quote! {{
-        // Add the arguments as let statements so that they can be type-checked.
+    let type_synonym = quote! {
+        type TypeStruct<'a> = <#table_ident as ::tql::SqlTableTypeChecking<'a>>::TypeStruct;
+    };
+    // NOTE: Transform the span by dummy spans to workaround the hygiene issue.
+    #[cfg(feature = "unstable")]
+    let type_synonym = respan_tokens(type_synonym);
+
+    let fake_move_fn = quote_spanned! { Span::call_site() =>
+        fn fake_move<T: ::std::ops::Deref>(value: T) -> T::Target
+        where T::Target: Sized
+        {
+            unsafe { std::ptr::read(&value as *const _ as *const _) }
+        }
+    };
+
+    let struct_type = quote_spanned! { Span::call_site() =>
+        TypeStruct
+    };
+
+    let code = quote! {{
+        // Type check the arguments by creating a dummy struct.
         // TODO: check that this let is not in the generated binary.
-        #(let #qualifiers #idents: #types = #exprs;)*
+        // TODO: check if we can only use the comparisons to avoid the unsafe code hack.
+        let _tql_closure = || {
+            #fake_move_fn
+
+            #type_synonym
+            let _type_struct = #struct_type {
+                #(#fields: #field_values,)*
+                ..#struct_type::default()
+            };
+            // FIXME: the next line is not going to work. Construct other structs instead.
+            #(#names == #exprs;)*
+        };
+
         [#(#arg_refs),*]
-    }}
+    }};
+    code
 }
 
 /// Create the struct expression needed by the generated code.
@@ -752,10 +796,10 @@ fn create_struct(table_ident: &Ident, joins: Vec<Join>) -> Tokens {
     let mut index = 0usize;
     let joined_fields =
         joins.iter()
-            .map(|join| Ident::new(&join.base_field, Span::default()));
+            .map(|join| Ident::new(&join.base_field, Span::call_site()));
     let joined_tables =
         joins.iter()
-            .map(|join| Ident::new(&join.joined_table, Span::default()));
+            .map(|join| Ident::new(&join.joined_table, Span::call_site()));
     let code = quote! {{
         #[allow(unused_mut)]
         let mut item = #table_ident::from_row(&row);
@@ -791,13 +835,13 @@ fn gen_aggregate_struct(aggregates: &[Aggregate]) -> (Tokens, Tokens) {
 }
 
 fn new_ident(string: &str) -> Ident {
-    Ident::new(string, Span::default())
+    Ident::new(string, Span::call_site())
 }
 
 fn is_string_type(typ: &syn::Type) -> bool {
     if let syn::Type::Path(TypePath { ref path, .. }) = *typ {
         let element = path.segments.first().expect("first segment of path");
-        let segment = element.item();
+        let segment = element.value();
         return segment.ident.as_ref() == "String";
     }
     false
@@ -806,12 +850,12 @@ fn is_string_type(typ: &syn::Type) -> bool {
 fn inner_type(typ: &syn::Type) -> Option<syn::Type> {
     if let syn::Type::Path(TypePath { ref path, .. }) = *typ {
         let element = path.segments.first().expect("first segment of path");
-        let segment = element.item();
+        let segment = element.value();
         match segment.ident.as_ref() {
             "Option" | "ForeignKey" => {
                 if let AngleBracketed(AngleBracketedGenericArguments { ref args, .. }) = segment.arguments {
                     let element = args.first().expect("first arg of args");
-                    let arg = element.item();
+                    let arg = element.value();
                     if let GenericArgument::Type(ref ty) = **arg {
                         return Some(ty.clone());
                     }
@@ -853,7 +897,7 @@ fn add_error(error: Error, compiler_errors: &mut Tokens) {
 
 fn to_row_get(ident: &Ident, typ: syn::Type, ident_prefix: &str) -> Tokens {
     if let syn::Type::Path(TypePath { path: Path { ref segments, .. }, .. }) = typ {
-        let segment = segments.first().expect("first segment").into_item();
+        let segment = segments.first().expect("first segment").into_value();
         if segment.ident == "ForeignKey" {
             return quote! {
                 None
@@ -873,10 +917,10 @@ fn to_row_get(ident: &Ident, typ: syn::Type, ident_prefix: &str) -> Tokens {
 pub fn stable_to_sql(input: TokenStream) -> TokenStream {
     let enumeration: Item = parse(input).unwrap();
     if let Item::Enum(ItemEnum { ref variants, .. }) = enumeration {
-        let variant = &variants.first().unwrap().item().discriminant;
+        let variant = &variants.first().unwrap().value().discriminant;
         if let Expr::Field(ref field) = variant.as_ref().unwrap().1 {
             if let Expr::Tuple(ref tuple) = *field.base {
-                if let Expr::Macro(ref macr) = **tuple.elems.first().unwrap().item() {
+                if let Expr::Macro(ref macr) = **tuple.elems.first().unwrap().value() {
                     let sql_result = to_sql_query(macr.mac.tts.clone());
                     let code = match sql_result {
                         Ok(sql_query_with_args) => gen_query(sql_query_with_args),

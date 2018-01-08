@@ -172,7 +172,7 @@ pub fn expression_to_filter_expression(arg: &Expression, table_name: &str) -> Re
                 })
             },
             Expr::Path(ref path) => {
-                let identifier = path.path.segments.first().unwrap().into_item().ident;
+                let identifier = path.path.segments.first().unwrap().into_value().ident;
                 check_field(&identifier, identifier.span, &mut errors);
                 FilterExpression::FilterValue(WithSpan {
                     node: FilterValue::Identifier(table_name.to_string(), identifier),
@@ -243,7 +243,7 @@ fn path_method_call_to_filter(path: &Path, identifier: Ident, method_name: &str,
     let dummy = FilterValue::None;
     // TODO: check the method call (types, arguments and if it exists).
     // TODO: check if the field exists.
-    let object_name = path.segments.first().unwrap().into_item().ident;
+    let object_name = path.segments.first().unwrap().into_value().ident;
     let arguments: Vec<Expression> = args.iter()
         .cloned()
         .collect();

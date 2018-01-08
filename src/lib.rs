@@ -37,6 +37,12 @@ pub type PrimaryKey = i32;
 pub unsafe trait SqlTable {
 }
 
+#[doc(hidden)]
+// Trait used to get the generated type struct used for type-checking.
+pub trait SqlTableTypeChecking<'a> {
+    type TypeStruct;
+}
+
 #[cfg(not(unstable))]
 #[macro_export]
 macro_rules! sql {

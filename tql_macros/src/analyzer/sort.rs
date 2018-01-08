@@ -42,7 +42,7 @@ pub fn argument_to_order(arg: &Expression) -> Result<Order> {
                 Order::Descending(ident)
             }
             Expr::Path(ref path) => {
-                let identifier = path.path.segments.first().unwrap().into_item().ident;
+                let identifier = path.path.segments.first().unwrap().into_value().ident;
                 check_field(&identifier, identifier.span, &mut errors);
                 Order::Ascending(identifier.to_string())
             }

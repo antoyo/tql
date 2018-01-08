@@ -210,7 +210,7 @@ impl<'a> From<&'a Path> for Type {
         let unsupported = Type::UnsupportedType("".to_string());
         if segments.len() == 1 {
             let element = segments.first().expect("first segment of path");
-            let first_segment = element.item();
+            let first_segment = element.value();
             let ident = first_segment.ident.to_string();
             match &ident[..] {
                 "bool" => Type::Bool,
@@ -276,7 +276,7 @@ impl<'a> From<&'a Path> for Type {
 /// Get the type between < and > as a String.
 fn get_type_parameter(parameters: &PathArguments) -> Option<String> {
     get_type_parameter_as_path(parameters).map(|path| path.segments.first()
-        .expect("first segment in path").item().ident.to_string())
+        .expect("first segment in path").value().ident.to_string())
 }
 
 /// Get the type between < and > as a Path.
@@ -284,7 +284,7 @@ fn get_type_parameter_as_path(parameters: &PathArguments) -> Option<&Path> {
     if let PathArguments::AngleBracketed(AngleBracketedGenericArguments { ref args, .. }) = *parameters {
         args.first()
             .and_then(|ty| {
-                if let GenericArgument::Type(syn::Type::Path(TypePath { ref path, .. })) = **ty.item() {
+                if let GenericArgument::Type(syn::Type::Path(TypePath { ref path, .. })) = **ty.value() {
                     Some(path)
                 }
                 else {

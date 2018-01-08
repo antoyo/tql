@@ -79,8 +79,8 @@ pub fn argument_to_aggregate(arg: &Expression) -> Result<Aggregate> {
         }
 
         if check_argument_count(&call.args, 1, arg.span(), &mut errors) {
-            if let Expr::Path(ref path) = **call.args.first().expect("first argument").item() {
-                let path_ident = path.path.segments.first().unwrap().into_item().ident;
+            if let Expr::Path(ref path) = **call.args.first().expect("first argument").value() {
+                let path_ident = path.path.segments.first().unwrap().into_value().ident;
                 aggregate.field = Some(path_ident);
 
                 if aggregate.result_name.is_none() {
@@ -178,7 +178,7 @@ pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &
                 binary_expression_to_aggregate_filter_expression(&bin.left, &bin.op, &bin.right, aggregates)?
             },
             Expr::Path(ref path) => {
-                let segment_ident = path.path.segments.first().unwrap().into_item().ident;
+                let segment_ident = path.path.segments.first().unwrap().into_value().ident;
                 let identifier = segment_ident.to_string();
                 let aggregate = check_aggregate_field(&identifier, aggregates, segment_ident.span, &mut errors);
                 if let Some(aggregate) = aggregate {

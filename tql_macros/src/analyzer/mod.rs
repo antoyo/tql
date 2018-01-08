@@ -520,7 +520,7 @@ pub fn no_primary_key(table_name: &str, position: Span) -> Error {
 /// It adds an error to `errors` if `expression` is not an `ExprPath`.
 fn path_expr_to_identifier(expression: &Expression, errors: &mut Vec<Error>) -> Option<Ident> {
     if let Expr::Path(ref path) = *expression {
-        let identifier = path.path.segments.first().unwrap().into_item().ident.clone();
+        let identifier = path.path.segments.first().unwrap().into_value().ident.clone();
         Some(identifier)
     }
     else {

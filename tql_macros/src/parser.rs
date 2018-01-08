@@ -95,7 +95,7 @@ impl Parser {
                 Expr::Path(ref path) => {
                     if path.path.segments.len() == 1 {
                         calls.name = Some(path.path.segments.first()
-                            .expect("first segment in path").into_item()
+                            .expect("first segment in path").into_value()
                             .ident);
                     }
                 },

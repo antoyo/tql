@@ -86,7 +86,7 @@ impl Error {
             children: vec![],
             kind: ErrorType::Help,
             message: message.to_string(),
-            position: Span::default(),
+            position: Span::call_site(),
         });
     }
 
@@ -97,7 +97,7 @@ impl Error {
             children: vec![],
             kind: ErrorType::Note,
             message: message.to_string(),
-            position: Span::default(),
+            position: Span::call_site(),
         });
     }
 

@@ -46,7 +46,7 @@ pub fn get_expression_to_filter_expression(arg: &Expression, table_name: &str) -
     match *arg {
         Expr::Lit(_) | Expr::Path(_) => {
             let filter = FilterExpression::Filter(Filter {
-                operand1: FilterValue::Identifier(table_name.to_string(), Ident::new(pk, Span::default())),
+                operand1: FilterValue::Identifier(table_name.to_string(), Ident::new(pk, Span::call_site())),
                 operator: RelationalOperator::Equal,
                 operand2: arg.clone(),
             });
