@@ -99,7 +99,7 @@ use syn::PathArguments::AngleBracketed;
 use syn::spanned::Spanned;
 
 use analyzer::{analyze, analyze_types, has_joins};
-use arguments::{Args, arguments};
+use arguments::{Arg, Args, arguments};
 use ast::{
     Aggregate,
     Join,
@@ -124,6 +124,7 @@ struct SqlQueryWithArgs {
     aggregates: Vec<Aggregate>,
     arguments: Args,
     joins: Vec<Join>,
+    literal_arguments: Args,
     query_type: QueryType,
     #[cfg(feature = "unstable")]
     span: Span,
@@ -206,11 +207,12 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
             _ => vec![],
         };
     let query_type = query_type(&query);
-    let arguments = arguments(query);
+    let (arguments, literal_arguments) = arguments(query);
     Ok(SqlQueryWithArgs {
         aggregates,
         arguments,
         joins,
+        literal_arguments,
         query_type,
         #[cfg(feature = "unstable")]
         span,
@@ -395,8 +397,7 @@ fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, Option<Str
 
 /// Create the structures used to type check the queries.
 fn create_typecheck_structs(item_struct: &ItemStruct) -> Tokens {
-    let real_table_ident = &item_struct.ident;
-    let table_ident = Ident::new(&format!("{}23", item_struct.ident), Span::call_site());
+    let table_ident = Ident::new(&format!("__{}", item_struct.ident), Span::call_site());
     if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
         let field_idents = named.iter().map(|field| &field.ident);
         let field_idents2 = named.iter().map(|field| &field.ident);
@@ -430,7 +431,6 @@ fn create_typecheck_structs(item_struct: &ItemStruct) -> Tokens {
                     }
                 })
                 .collect();
-        let module_name = Ident::new(&format!("__tql_{}", rand_string().to_lowercase()), Span::call_site());
         let lifetime =
             if string_found {
                 quote! {
@@ -442,23 +442,17 @@ fn create_typecheck_structs(item_struct: &ItemStruct) -> Tokens {
                 }
             };
         quote! {
-            pub mod #module_name {
-                pub(crate) struct #table_ident#lifetime {
-                    #(pub #field_idents: #field_types,)*
-                }
-
-                impl#lifetime Default for #table_ident#lifetime {
-                    #[inline(always)]
-                    fn default() -> Self {
-                        #table_ident {
-                            #(#field_idents2: unsafe { ::std::mem::zeroed() },)*
-                        }
-                    }
-                }
+            pub(crate) struct #table_ident#lifetime {
+                #(pub #field_idents: #field_types,)*
             }
 
-            impl<'a> ::tql::SqlTableTypeChecking<'a> for #real_table_ident {
-                type TypeStruct = #module_name::#table_ident#lifetime;
+            impl#lifetime Default for #table_ident#lifetime {
+                #[inline(always)]
+                fn default() -> Self {
+                    #table_ident {
+                        #(#field_idents2: unsafe { ::std::mem::zeroed() },)*
+                    }
+                }
             }
         }
     }
@@ -609,7 +603,7 @@ fn gen_query(args: SqlQueryWithArgs) -> TokenStream {
     let ident = Ident::new("connection", table_ident.span);
     let struct_expr = create_struct(table_ident, args.joins);
     let (aggregate_struct, aggregate_expr) = gen_aggregate_struct(&args.aggregates);
-    let args_expr = get_query_arguments(table_ident, args.arguments);
+    let args_expr = typecheck_arguments(table_ident, args.arguments, args.literal_arguments);
     let tokens = gen_query_expr(ident, args.sql, args_expr, struct_expr, aggregate_struct, aggregate_expr,
                                 args.query_type, table_ident);
     tokens.into()
@@ -708,53 +702,57 @@ fn gen_query_expr(connection_ident: Ident, sql_query: String, args_expr: Tokens,
 
 /// Get the arguments to send to the `postgres::stmt::Statement::query` or
 /// `postgres::stmt::Statement::execute` method.
-fn get_query_arguments(table_ident: &Ident, arguments: Args) -> Tokens {
+fn typecheck_arguments(table_ident: &Ident, arguments: Args, literal_arguments: Args) -> Tokens {
     let mut arg_refs = vec![];
     let mut fields = vec![];
     let mut field_values = vec![];
     let mut names = vec![];
     let mut exprs = vec![];
 
-    for arg in arguments {
-        match arg.expression {
-            // Do not add literal arguments as they are in the final string literal.
-            Expr::Lit(_) => (),
-            _ => {
+    {
+        let mut add_arg = |arg: &Arg| {
+            if let Some(name) = arg.field_name.as_ref()
+                .map(|name| {
+                    let index = name.find('.')
+                        .map(|index| index + 1)
+                        .unwrap_or(0);
+                    Ident::new(&name[index..], Span::call_site())
+                })
+            {
                 let expr = &arg.expression;
-                arg_refs.push(quote! { &(#expr) });
-            },
+                // NOTE: hack to avoid moving the value.
+                let expr = quote_spanned! { arg.expression.span() => fake_move(&#expr) };
+
+                if fields.contains(&name) {
+                    names.push(quote! { _type_struct.#name });
+                    exprs.push(expr);
+                }
+                else {
+                    fields.push(name);
+                    field_values.push(expr);
+                }
+            }
+        };
+
+        for arg in arguments {
+            match arg.expression {
+                // Do not add literal arguments as they are in the final string literal.
+                Expr::Lit(_) => (),
+                _ => {
+                    let expr = &arg.expression;
+                    arg_refs.push(quote! { &(#expr) });
+                },
+            }
+
+            add_arg(&arg);
         }
 
-        if let Some(name) = arg.field_name
-            .map(|name| {
-                let index = name.find('.')
-                    .map(|index| index + 1)
-                    .unwrap_or(0);
-                Ident::new(&name[index..], Span::call_site())
-            })
-        {
-            let expr = &arg.expression;
-            // NOTE: hack to avoid moving the value.
-            // TODO: make sure it's safe (no double-free).
-            let expr = quote_spanned! { arg.expression.span() => fake_move(&#expr) };
-
-            if fields.contains(&name) {
-                names.push(quote! { _type_struct.#name });
-                exprs.push(expr);
-            }
-            else {
-                fields.push(name);
-                field_values.push(expr);
-            }
+        for arg in literal_arguments {
+            add_arg(&arg);
         }
     }
 
-    let type_synonym = quote! {
-        type TypeStruct<'a> = <#table_ident as ::tql::SqlTableTypeChecking<'a>>::TypeStruct;
-    };
-    // NOTE: Transform the span by dummy spans to workaround the hygiene issue.
-    #[cfg(feature = "unstable")]
-    let type_synonym = respan_tokens(type_synonym);
+    let struct_type = Ident::new(&format!("__{}", table_ident), Span::call_site());
 
     let fake_move_fn = quote_spanned! { Span::call_site() =>
         fn fake_move<T: ::std::ops::Deref>(value: T) -> T::Target
@@ -764,10 +762,6 @@ fn get_query_arguments(table_ident: &Ident, arguments: Args) -> Tokens {
         }
     };
 
-    let struct_type = quote_spanned! { Span::call_site() =>
-        TypeStruct
-    };
-
     let code = quote! {{
         // Type check the arguments by creating a dummy struct.
         // TODO: check that this let is not in the generated binary.
@@ -775,7 +769,6 @@ fn get_query_arguments(table_ident: &Ident, arguments: Args) -> Tokens {
         let _tql_closure = || {
             #fake_move_fn
 
-            #type_synonym
             let _type_struct = #struct_type {
                 #(#fields: #field_values,)*
                 ..#struct_type::default()
