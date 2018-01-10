@@ -117,10 +117,10 @@ fn test_insert() {
     let new_field1 = "value3".to_string();
     let new_field2 = 24;
     let id = sql!(TableInsertExpr.insert(
-        field1 = &new_field1,
+        field1 = new_field1,
         field2 = new_field2,
         related_field = related_field,
-        optional_field = 12,
+        optional_field = Some(12),
     )).unwrap();
     assert_eq!(3, id);
 
@@ -138,17 +138,17 @@ fn test_insert() {
     let int16 = 42i16;
     let int64 = 42i64;
     let id = sql!(TableInsertExpr.insert(
-        field1 = &new_field1,
+        field1 = new_field1,
         field2 = new_field2,
         related_field = related_field,
-        optional_field = 12,
-        boolean = boolean_value,
+        optional_field = Some(12),
+        boolean = Some(boolean_value),
         /*character = character,*/
-        float32 = float32,
-        float64 = float64,
+        float32 = Some(float32),
+        float64 = Some(float64),
         /*int8 = int8,*/
-        int16 = int16,
-        int64 = int64
+        int16 = Some(int16),
+        int64 = Some(int64)
     )).unwrap();
     assert_eq!(4, id);
 }

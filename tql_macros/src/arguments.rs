@@ -27,6 +27,7 @@ use syn::{
     Ident,
     parse,
 };
+use syn::spanned::Spanned;
 
 use ast::{
     Aggregate,
@@ -35,9 +36,9 @@ use ast::{
     Expression,
     FilterExpression,
     FilterValue,
-    Identifier,
     Limit,
     MethodCall,
+    Order,
     Query,
     query_table,
 };
@@ -74,16 +75,20 @@ macro_rules! add_filter_arguments {
 #[derive(Clone, Debug)]
 pub struct Arg {
     pub expression: Expression,
-    pub field_name: Option<Identifier>,
+    pub field_name: Option<Ident>,
+    pub field_name_prefix: Option<String>,
 }
 
 /// A collection of `Arg`s.
 pub type Args = Vec<Arg>;
 
 /// Create an argument from the parameters and add it to `arguments`.
-fn add(arguments: &mut Args, literals: &mut Args, field_name: Option<Identifier>, expr: Expression) {
+fn add(arguments: &mut Args, literals: &mut Args, field_name: Option<Ident>, field_name_prefix: Option<String>,
+       expr: Expression)
+{
     add_expr(arguments, literals, Arg {
         expression: expr,
+        field_name_prefix,
         field_name,
     });
 }
@@ -93,7 +98,7 @@ fn add_assignments(assignments: Vec<Assignment>, arguments: &mut Args, literals:
     for assign in assignments {
         let field_name = assign.identifier.expect("Assignment identifier");
         // NOTE: At this stage (code generation), the field exists, hence unwrap().
-        add(arguments, literals, Some(field_name.to_string()), assign.value);
+        add(arguments, literals, Some(field_name), None, assign.value);
     }
 }
 
@@ -114,21 +119,22 @@ add_filter_arguments!(add_aggregate_filter_arguments, AggregateFilterExpression,
 /// Create arguments from the `limit` and add them to `arguments`.
 fn add_limit_arguments(limit: Limit, arguments: &mut Args, literals: &mut Args) {
     match limit {
-        Limit::EndRange(expression) => add(arguments, literals, None, expression),
-        Limit::Index(expression) => add(arguments, literals, None, expression),
+        Limit::EndRange(expression) => add(arguments, literals, None, None, expression),
+        Limit::Index(expression) => add(arguments, literals, None, None, expression),
         Limit::LimitOffset(_, _) => (), // NOTE: there are no arguments to add for a `LimitOffset` because it is always using literals.
         Limit::NoLimit => (),
         Limit::Range(expression1, expression2) => {
             let offset = expression1.clone();
-            add(arguments, literals, None, expression1);
+            add(arguments, literals, None, None, expression1);
             let expression = parse((quote! { #expression2 - #offset }).into())
                 .expect("Subtraction quoted expression");
             add_expr(arguments, literals, Arg {
                 expression,
                 field_name: None,
+                field_name_prefix: None,
             });
         },
-        Limit::StartRange(expression) => add(arguments, literals, None, expression),
+        Limit::StartRange(expression) => add(arguments, literals, None, None, expression),
     }
 }
 
@@ -139,6 +145,7 @@ fn add_with_method(args: &mut Args, literals: &mut Args, method_name: &str, obje
     add_expr(args, literals, Arg {
         expression: expr,
         field_name: None,
+        field_name_prefix: None,
     });
 }
 
@@ -146,7 +153,7 @@ fn add_aggregate_filter_value_arguments(aggregate: &Aggregate, args: &mut Args, 
                                         expression: Option<Expression>)
 {
     if let Some(expr) = expression {
-        add(args, literals, aggregate.field.clone().map(|ident| ident.to_string()), expr); // TODO: use the right type.
+        add(args, literals, aggregate.field.clone(), None, expr); // TODO: use the right type.
     }
 }
 
@@ -158,7 +165,7 @@ fn add_filter_value_arguments(filter_value: &FilterValue, args: &mut Args, liter
             // It is possible to have an identifier without expression, when the identifier is a
             // boolean field name, hence this condition.
             if let Some(expr) = expression {
-                add(args, literals, Some(format!("{}.{}", table, identifier)), expr);
+                add(args, literals, Some(identifier.clone()), Some(table.clone()), expr);
             }
         },
         FilterValue::MethodCall(MethodCall { ref arguments, ref method_name, ref object_name, .. }) => {
@@ -170,7 +177,10 @@ fn add_filter_value_arguments(filter_value: &FilterValue, args: &mut Args, liter
     }
 }
 
-/// Extract the Rust `Expression`s and the literal arguments from the `Query`.
+fn add_sort_idents(orders: &[Order], idents: &mut Vec<Ident>) {
+}
+
+/// Extract the Rust `Expression`s, the literal arguments and identifiers from the `Query`.
 pub fn arguments(query: Query) -> (Args, Args) {
     let mut arguments = vec![];
     let mut literals = vec![];

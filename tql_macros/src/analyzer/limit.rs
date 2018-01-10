@@ -24,7 +24,11 @@
 use syn::{Expr, ExprRange};
 use syn::spanned::Spanned;
 
-use ast::{Expression, Limit};
+use ast::{
+    Expression,
+    Limit,
+    Query,
+};
 use error::{Error, Result, res};
 use super::check_type;
 use types::Type;
@@ -80,4 +84,21 @@ pub fn argument_to_limit(expression: &Expression) -> Result<Limit> {
     // (optimization).
 
     res(limit, errors)
+}
+
+/// Get the expressions used in the limit clause to be able to check their type.
+pub fn get_limit_args(query: &Query) -> Vec<Expr> {
+    let mut exprs = vec![];
+    if let Query::Select { ref limit, ..} = *query {
+        match *limit {
+            Limit::EndRange(ref expr) | Limit::Index(ref expr) | Limit::StartRange(ref expr) =>
+                exprs.push(expr.clone()),
+            Limit::LimitOffset(ref expr1, ref expr2) | Limit::Range(ref expr1, ref expr2) => {
+                exprs.push(expr1.clone());
+                exprs.push(expr2.clone());
+            },
+            Limit::NoLimit => (),
+        }
+    }
+    exprs
 }

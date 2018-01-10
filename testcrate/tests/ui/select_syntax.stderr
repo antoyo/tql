@@ -1,0 +1,58 @@
+error: mismatched types:
+ expected `i64`,
+    found `String`
+  --> $DIR/select_syntax.rs:49:24
+   |
+49 |     sql!(Table.all()[.."auinesta"]);
+   |                        ^^^^^^^^^^
+   |
+   = note: in this expansion of sql! (defined in tql)
+
+error: mismatched types:
+ expected `i64`,
+    found `bool`
+  --> $DIR/select_syntax.rs:55:22
+   |
+55 |     sql!(Table.all()[true..false]);
+   |                      ^^^^
+   |
+   = note: in this expansion of sql! (defined in tql)
+
+error: mismatched types:
+ expected `i64`,
+    found `bool`
+  --> $DIR/select_syntax.rs:55:28
+   |
+55 |     sql!(Table.all()[true..false]);
+   |                            ^^^^^
+   |
+   = note: in this expansion of sql! (defined in tql)
+
+error: Expected - or identifier
+  --> $DIR/select_syntax.rs:66:67
+   |
+66 |     sql!(Table.filter(i32_field < 100 && field1 == "value1").sort(*i32_field, *field1));
+   |                                                                   ^
+
+error: Expected - or identifier
+  --> $DIR/select_syntax.rs:66:79
+   |
+66 |     sql!(Table.filter(i32_field < 100 && field1 == "value1").sort(*i32_field, *field1));
+   |                                                                               ^
+
+error: no method named `flter` found in tql
+  --> $DIR/select_syntax.rs:70:20
+   |
+70 |     sql!(TestTable.flter(field1 == "value"));
+   |                    ^^^^^
+   |
+   = help: did you mean filter?
+
+error: this method takes 0 parameters but 1 parameter was supplied
+  --> $DIR/select_syntax.rs:74:16
+   |
+74 |     sql!(Table.all(id == 1));
+   |                ^^^
+
+error: aborting due to 7 previous errors
+

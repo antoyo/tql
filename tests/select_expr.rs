@@ -88,7 +88,8 @@ fn test_select() {
     let new_field2 = 42;
     let id2 = sql!(TableSelectExpr.insert(field1 = "value2", field2 = new_field2, related_field = related_field, datetime = datetime2)).unwrap();
     let id3 = sql!(TableSelectExpr.insert(field1 = "value3", field2 = 12, related_field = related_field2, datetime = datetime2)).unwrap();
-    let id4 = sql!(TableSelectExpr.insert(field1 = "value4", field2 = 22, related_field = related_field2, optional_field = 42, datetime = datetime)).unwrap();
+    let id4 = sql!(TableSelectExpr.insert(field1 = "value4", field2 = 22, related_field = related_field2,
+                                          optional_field = Some(42), datetime = datetime)).unwrap();
     let id5 = sql!(TableSelectExpr.insert(field1 = "value5", field2 = 134, related_field = related_field2, datetime = datetime2)).unwrap();
 
     let mut tables = sql!(TableSelectExpr.all());

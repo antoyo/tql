@@ -26,6 +26,7 @@ use syn::{
     BinOp,
     Expr,
     ExprUnary,
+    Ident,
     UnOp,
 };
 use syn::spanned::Spanned;
@@ -37,6 +38,7 @@ use ast::{
     AggregateFilters,
     Expression,
     Identifier,
+    Query,
     WithSpan,
     first_token_span,
 };
@@ -109,13 +111,19 @@ pub fn argument_to_aggregate(arg: &Expression) -> Result<Aggregate> {
 }
 
 /// Convert an `Expression` to a group `Identifier`.
-pub fn argument_to_group(arg: &Expression) -> Result<Identifier> {
+pub fn argument_to_group(arg: &Expression) -> Result<Ident> {
     let mut errors = vec![];
-    let mut group = "".to_string();
+    let mut group = Ident::from("dummy_ident");
 
     if let Some(identifier) = path_expr_to_identifier(arg, &mut errors) {
         check_field(&identifier, arg.span(), &mut errors);
-        group = identifier.to_string();
+        group = identifier;
+    }
+    else {
+        errors.push(Error::new(
+            "Expected identifier", // TODO: improve this message.
+            arg.span(),
+        ));
     }
 
     res(group, errors)
@@ -224,4 +232,15 @@ fn get_call_from_aggregate<'a>(arg: &'a Expression, aggregate: &mut Aggregate, e
     else {
         arg
     }
+}
+
+/// Get the identifier in the group by clause to be able to check that they exist.
+pub fn get_values_idents(query: &Query) -> Vec<Ident> {
+    let mut idents = vec![];
+    if let Query::Aggregate { ref groups, ..} = *query {
+        for group in groups {
+            idents.push(group.clone());
+        }
+    }
+    idents
 }

@@ -19,7 +19,7 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-//! Tests of the syntax extension errors.
+//! Tests of the delete() method.
 
 #![feature(proc_macro)]
 
@@ -27,16 +27,17 @@ extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
+use tql::PrimaryKey;
+use tql_macros::sql;
+
 #[derive(SqlTable)]
 struct Table {
-    //~^ WARNING No primary key found
+    id: PrimaryKey,
     field1: String,
+    i32_field: i32,
 }
 
-mod inner {
-    #[derive(SqlTable)]
-    struct Table {
-        //~^ ERROR duplicate definition of table `Table`
-        //~| WARNING No primary key found
-    }
+fn main() {
+    let _ = sql!(Table.filter(id == 1).delete(id == 1));
+    //~^ ERROR this method takes 0 parameters but 1 parameter was supplied
 }

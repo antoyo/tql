@@ -212,6 +212,8 @@ impl ToSql for Ident {
     }
 }
 
+slice_to_sql!(Ident, ", ");
+
 impl ToSql for FilterValue {
     fn to_sql(&self) -> String {
         match *self {
@@ -236,9 +238,9 @@ impl ToSql for FilterValue {
 
 impl ToSql for Join {
     fn to_sql(&self) -> String {
-        " INNER JOIN ".to_string() + &self.joined_table +
-            " ON " + &self.base_table + "." + &self.base_field + " = "
-            + &self.joined_table + "." + &self.joined_field
+        " INNER JOIN ".to_string() + &self.joined_table.to_sql() +
+            " ON " + &self.base_table + "." + &self.base_field.to_sql() + " = "
+            + &self.joined_table.to_sql() + "." + &self.joined_field
     }
 }
 
@@ -284,6 +286,7 @@ impl ToSql for Order {
         match *self {
             Order::Ascending(ref field) => field.to_sql(),
             Order::Descending(ref field) => field.to_sql() + " DESC",
+            Order::NoOrder => String::new(),
         }
     }
 }
@@ -350,10 +353,10 @@ impl ToSql for Query {
                         values = values.to_sql(),
                     ))
             },
-            Query::Select{ ref filter, get: _get, ref joins, ref limit, ref order, ref selected_fields, ref table } => {
+            Query::Select { ref filter, get: _get, ref joins, ref limit, ref order, ref selected_fields, ref table } => {
                 let where_clause = filter_to_where_clause(filter);
                 let order_clause =
-                    if !order.is_empty() {
+                    if has_order_clauses(order) {
                         " ORDER BY "
                     }
                     else {
@@ -452,4 +455,14 @@ fn replace_placeholder(string: String) -> String {
         }
     }
     result
+}
+
+fn has_order_clauses(orders: &[Order]) -> bool {
+    for order in orders {
+        if let Order::NoOrder = *order {
+            continue;
+        }
+        return true;
+    }
+    false
 }

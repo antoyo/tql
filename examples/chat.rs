@@ -87,8 +87,8 @@ fn chat(req: &mut Request) -> IronResult<Response> {
 
                 // Insert a new message.
                 let _ = sql!(Message.insert(
-                            username = &username,
-                            message = &message,
+                            username = username,
+                            message = message,
                             date_added = Utc::now()
                         ));
             }

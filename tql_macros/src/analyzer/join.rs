@@ -37,34 +37,37 @@ pub struct JoinData {
 /// Convert an `Expression` to a `Join`
 pub fn argument_to_join(arg: &Expression, table_name: &str) -> Result<(Join, Vec<String>)> {
     let mut errors = vec![];
-    let mut join = Join::default();
+    let mut join = None;
     let mut selected_fields = vec![];
-    let mut related_table_name = String::new();
+    let mut related_table_name = None;
 
     if let Expr::Assign(ref assign) = *arg {
         if let Expr::Struct(ref structure) = *assign.right {
-            related_table_name = token_to_string(&structure.path);
+            // TODO: check that it is only an identifier (i.e. without Prefix::Module::).
+            let mut ident = structure.path.segments[0].ident;
             for field in &structure.fields {
-                selected_fields.push(format!("{}.{}", related_table_name, token_to_string(field)));
+                selected_fields.push(format!("{}.{}", ident, token_to_string(field)));
             }
+            // NOTE: adjust the span for better error reporting.
+            ident.span = assign.right.span();
+            related_table_name = Some(ident);
         }
         else {
             return Err(vec![Error::new("Expecting structure expression, but got", assign.right.span())]); // TODO: improve error message.
         }
 
         if let Some(identifier) = path_expr_to_identifier(&assign.left, &mut errors) {
-            let name = identifier.to_string();
             check_field(&identifier, arg.span(), &mut errors);
             // TODO: check that the field is a ForeignKey<_>.
             //mismatched_types("ForeignKey<_>", field_type, arg.span(), &mut errors);
             // TODO: check that the struct has the field id.
             // TODO: allow specifying an alternate primary key field.
-            join = Join {
-                base_field: name,
+            join = Some(Join {
+                base_field: identifier,
                 base_table: table_name.to_string(),
                 joined_field: "id".to_string(),
-                joined_table: related_table_name,
-            }
+                joined_table: related_table_name.expect("related table name"),
+            });
             // NOTE: if the field type is not an SQL table, an error is thrown by the
             // linter.
             // FIXME: update the previous comment since there's no more a linter.
@@ -73,5 +76,5 @@ pub fn argument_to_join(arg: &Expression, table_name: &str) -> Result<(Join, Vec
     else {
         return Err(vec![Error::new("Expecting assignment, but got", arg.span())]); // TODO: improve error message.
     }
-    res((join, selected_fields), errors)
+    res((join.expect("join"), selected_fields), errors)
 }

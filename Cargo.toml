@@ -6,12 +6,15 @@ version = "0.1.0"
 
 [dependencies]
 
+[dependencies.chrono]
+optional = true
+version = "^0.4.0"
+
 [dependencies.postgres]
 optional = true
 version = "^0.15.1"
 
 [dev-dependencies]
-chrono = "^0.4.0"
 handlebars-iron = "^0.26.0"
 iron = "^0.6.0"
 lazy_static = "^1.0.0"

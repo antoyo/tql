@@ -2,6 +2,8 @@
  * Primary key field
  * SQLite: ROWID
  *
+ * TODO: try to get the columns by OID from postgres to improve the syntax.
+ * TODO: try to hide Option in the mismatched type error message for ForeignKey.
  * TODO: test that get() does not work when the primary key is not named id.
  * TODO: support recursive foreign key.
  * TODO: use fully-qualified name everywhere in the query (aggregate, …).
@@ -98,7 +100,14 @@ use syn::{LitStr, Path};
 use syn::PathArguments::AngleBracketed;
 use syn::spanned::Spanned;
 
-use analyzer::{analyze, analyze_types, has_joins};
+use analyzer::{
+    analyze,
+    analyze_types,
+    get_limit_args,
+    get_sort_idents,
+    get_values_idents,
+    has_joins,
+};
 use arguments::{Arg, Args, arguments};
 use ast::{
     Aggregate,
@@ -123,7 +132,9 @@ use types::Type;
 struct SqlQueryWithArgs {
     aggregates: Vec<Aggregate>,
     arguments: Args,
+    idents: Vec<Ident>,
     joins: Vec<Join>,
+    limit_exprs: Vec<Expr>,
     literal_arguments: Args,
     query_type: QueryType,
     #[cfg(feature = "unstable")]
@@ -158,9 +169,13 @@ pub fn to_sql(input: TokenStream) -> TokenStream {
             let gen =
                 match args.query_type {
                     QueryType::Create => {
+                        let trait_ident = quote_spanned! { args.table_name.span() =>
+                            ::tql::SqlTable
+                        };
+
                         let table_name = args.table_name;
                         quote! {
-                            #table_name::_create_query()
+                            <#table_name as #trait_ident>::_create_query()
                         }
                     },
                     _ => {
@@ -207,11 +222,16 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
             _ => vec![],
         };
     let query_type = query_type(&query);
+    let mut idents = get_sort_idents(&query);
+    idents.extend(get_values_idents(&query));
+    let limit_exprs = get_limit_args(&query);
     let (arguments, literal_arguments) = arguments(query);
     Ok(SqlQueryWithArgs {
         aggregates,
         arguments,
+        idents,
         joins,
+        limit_exprs,
         literal_arguments,
         query_type,
         #[cfg(feature = "unstable")]
@@ -238,11 +258,9 @@ pub fn sql_table(input: TokenStream) -> TokenStream {
                 // https://github.com/rust-lang/rust/issues/45934#issuecomment-344497531
                 // NOTE: if there is no error, there is a primary key, hence expect().
                 let code = tosql_impl(&item_struct, &primary_key.expect("primary key"));
-                let new_structs = create_typecheck_structs(&item_struct);
                 let methods = table_methods(&item_struct);
                 let code = quote! {
                     #code
-                    #new_structs
                     #methods
                 }.into();
                 #[cfg(feature = "unstable")]
@@ -279,6 +297,17 @@ fn respan_tokens(tokens: Tokens) -> Tokens {
 
 #[cfg(not(feature = "unstable"))]
 fn respan_tokens(tokens: Tokens) -> Tokens {
+    tokens
+}
+
+#[cfg(feature = "unstable")]
+fn respan_tokens_with(tokens: Tokens, span: proc_macro::Span) -> Tokens {
+    let tokens: proc_macro2::TokenStream = respan_with(tokens.into(), span).into();
+    tokens.into_tokens()
+}
+
+#[cfg(not(feature = "unstable"))]
+fn respan_tokens_with(tokens: Tokens, span: proc_macro::Span) -> Tokens {
     tokens
 }
 
@@ -395,72 +424,6 @@ fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, Option<Str
     (res(fields, errors), primary_key_field, impls)
 }
 
-/// Create the structures used to type check the queries.
-fn create_typecheck_structs(item_struct: &ItemStruct) -> Tokens {
-    let table_ident = Ident::new(&format!("__{}", item_struct.ident), Span::call_site());
-    if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
-        let field_idents = named.iter().map(|field| &field.ident);
-        let field_idents2 = named.iter().map(|field| &field.ident);
-
-        let mut string_found = false;
-        let field_types: Vec<_> =
-            named.iter()
-                .map(|field| {
-                    if token_to_string(&field.ty) == "String" {
-                        string_found = true;
-                        return quote! {
-                            &'a str
-                        };
-                    }
-                    else {
-                        if let syn::Type::Path(TypePath { path: Path { ref segments, .. }, .. }) = field.ty {
-                            let segment = segments.first().expect("first segment of path");
-                            let segment = segment.value();
-                            if segment.ident == "ForeignKey" || segment.ident == "Option" {
-                                if let AngleBracketed(AngleBracketedGenericArguments { ref args, .. }) = segment.arguments {
-                                    let arg = args.first().expect("first generic argument");
-                                    let typ = arg.value();
-                                    return quote! { #typ };
-                                }
-                            }
-                        }
-                    }
-                    let ty = &field.ty;
-                    quote! {
-                        #ty
-                    }
-                })
-                .collect();
-        let lifetime =
-            if string_found {
-                quote! {
-                    <'a>
-                }
-            }
-            else {
-                quote! {
-                }
-            };
-        quote! {
-            pub(crate) struct #table_ident#lifetime {
-                #(pub #field_idents: #field_types,)*
-            }
-
-            impl#lifetime Default for #table_ident#lifetime {
-                #[inline(always)]
-                fn default() -> Self {
-                    #table_ident {
-                        #(#field_idents2: unsafe { ::std::mem::zeroed() },)*
-                    }
-                }
-            }
-        }
-    }
-    else {
-        unreachable!("Check is done in get_struct_fields()")
-    }
-}
-
 /// Create the _create_query() and from_row() method for the table struct.
 fn table_methods(item_struct: &ItemStruct) -> Tokens {
     let table_ident = &item_struct.ident;
@@ -492,20 +455,24 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
             to_row_get(&ident, typ, &format!("{}.", table_ident)));
 
         quote! {
-            impl #table_ident {
-                pub fn _create_query() -> &'static str {
+            unsafe impl ::tql::SqlTable for #table_ident {
+                fn _create_query() -> &'static str {
                     #create_query
                 }
 
+                fn default() -> Self {
+                    unimplemented!()
+                }
+
                 #[allow(unused)]
-                pub fn from_row(row: &::postgres::rows::Row) -> Self {
+                fn from_row(row: &::postgres::rows::Row) -> Self {
                     Self {
                         #(#field_names: #columns,)*
                     }
                 }
 
                 #[allow(unused)]
-                pub fn from_joined_row(row: &::postgres::rows::Row) -> Self {
+                fn from_joined_row(row: &::postgres::rows::Row) -> Self {
                     Self {
                         #(#field_names2: #fully_qualified_columns,)*
                     }
@@ -546,7 +513,10 @@ fn tosql_impl(item_struct: &ItemStruct, primary_key_field: &str) -> Tokens {
                 }
         }
 
-        unsafe impl ::tql::SqlTable for #table_ident {
+        impl #table_ident {
+            fn to_owned(&self) -> Option<Self> {
+                unimplemented!();
+            }
         }
     }
 }
@@ -603,7 +573,8 @@ fn gen_query(args: SqlQueryWithArgs) -> TokenStream {
     let ident = Ident::new("connection", table_ident.span);
     let struct_expr = create_struct(table_ident, args.joins);
     let (aggregate_struct, aggregate_expr) = gen_aggregate_struct(&args.aggregates);
-    let args_expr = typecheck_arguments(table_ident, args.arguments, args.literal_arguments);
+    let args_expr = typecheck_arguments(table_ident, args.arguments, args.literal_arguments, args.idents,
+                                        args.limit_exprs);
     let tokens = gen_query_expr(ident, args.sql, args_expr, struct_expr, aggregate_struct, aggregate_expr,
                                 args.query_type, table_ident);
     tokens.into()
@@ -641,8 +612,12 @@ fn gen_query_expr(connection_ident: Ident, sql_query: String, args_expr: Tokens,
             }}
         },
         QueryType::Create => {
+            let trait_ident = quote_spanned! { table_ident.span() =>
+                ::tql::SqlTable
+            };
+
             quote! {{
-                #connection_ident.prepare(#table_ident::_create_query())
+                #connection_ident.prepare(<#table_ident as #trait_ident>::_create_query())
                     .and_then(|result| result.execute(&[]))
             }}
         },
@@ -665,13 +640,13 @@ fn gen_query_expr(connection_ident: Ident, sql_query: String, args_expr: Tokens,
                     let result = #connection_ident.prepare(#sql_query).expect("prepare query");
                     result.query(&#args_expr).expect("execute query").iter()
                 }};
-            let call = respan_tokens(quote! {
+            let call = quote! {
                 .map(|row| {
                     #struct_expr
                 }).collect::<Vec<_>>()
                 // TODO: return an iterator instead of a vector.
 
-            });
+            };
             quote! {
                 #result#call
             }
@@ -682,11 +657,11 @@ fn gen_query_expr(connection_ident: Ident, sql_query: String, args_expr: Tokens,
                     let result = #connection_ident.prepare(#sql_query).expect("prepare query");
                     result.query(&#args_expr).expect("execute query").iter().next()
                 }};
-            let call = respan_tokens(quote! {
+            let call = quote! {
                 .map(|row| {
                     #struct_expr
                 })
-            });
+            };
             quote! {
                 #result#call
             }
@@ -702,35 +677,39 @@ fn gen_query_expr(connection_ident: Ident, sql_query: String, args_expr: Tokens,
 
 /// Get the arguments to send to the `postgres::stmt::Statement::query` or
 /// `postgres::stmt::Statement::execute` method.
-fn typecheck_arguments(table_ident: &Ident, arguments: Args, literal_arguments: Args) -> Tokens {
+fn typecheck_arguments(table_ident: &Ident, arguments: Args, literal_arguments: Args, idents: Vec<Ident>,
+                       limit_exprs: Vec<Expr>) -> Tokens {
     let mut arg_refs = vec![];
-    let mut fields = vec![];
-    let mut field_values = vec![];
-    let mut names = vec![];
-    let mut exprs = vec![];
+    let mut fns = vec![];
+    let mut assigns = vec![];
+    let mut typechecks = vec![];
 
+    let ident = Ident::new("_table", Span::call_site());
     {
         let mut add_arg = |arg: &Arg| {
             if let Some(name) = arg.field_name.as_ref()
                 .map(|name| {
+                    let pos = name.span();
+                    let name = name.to_string();
                     let index = name.find('.')
                         .map(|index| index + 1)
                         .unwrap_or(0);
-                    Ident::new(&name[index..], Span::call_site())
+                    Ident::new(&name[index..], pos)
                 })
             {
                 let expr = &arg.expression;
-                // NOTE: hack to avoid moving the value.
-                let expr = quote_spanned! { arg.expression.span() => fake_move(&#expr) };
-
-                if fields.contains(&name) {
-                    names.push(quote! { _type_struct.#name });
-                    exprs.push(expr);
-                }
-                else {
-                    fields.push(name);
-                    field_values.push(expr);
-                }
+                let convert_ident = Ident::new("convert", arg.expression.span());
+                assigns.push(quote_spanned! { arg.expression.span() =>
+                    #ident.#name = #convert_ident(&#expr.to_owned());
+                });
+                fns.push(quote_spanned! { arg.expression.span() =>
+                    // NOTE: hack to get the type required by the field struct.
+                    fn #convert_ident<T: ::std::ops::Deref>(_arg: T) -> T::Target
+                    where T::Target: Sized
+                    {
+                        unimplemented!()
+                    }
+                });
             }
         };
 
@@ -752,34 +731,38 @@ fn typecheck_arguments(table_ident: &Ident, arguments: Args, literal_arguments: 
         }
     }
 
-    let struct_type = Ident::new(&format!("__{}", table_ident), Span::call_site());
+    for name in idents {
+        typechecks.push(quote_spanned! { name.span() =>
+            #ident.#name = unsafe { ::std::mem::zeroed() };
+        });
+    }
 
-    let fake_move_fn = quote_spanned! { Span::call_site() =>
-        fn fake_move<T: ::std::ops::Deref>(value: T) -> T::Target
-        where T::Target: Sized
-        {
-            unsafe { std::ptr::read(&value as *const _ as *const _) }
-        }
+    for expr in limit_exprs {
+        typechecks.push(quote! {{
+            let var: i64 = #expr;
+        }});
+    }
+
+    let trait_ident = quote_spanned! { table_ident.span() =>
+        ::tql::SqlTable
     };
 
-    let code = quote! {{
+    quote_spanned! { table_ident.span() => {
         // Type check the arguments by creating a dummy struct.
         // TODO: check that this let is not in the generated binary.
-        // TODO: check if we can only use the comparisons to avoid the unsafe code hack.
-        let _tql_closure = || {
-            #fake_move_fn
-
-            let _type_struct = #struct_type {
-                #(#fields: #field_values,)*
-                ..#struct_type::default()
+        {
+            let _tql_closure = || {
+                let mut #ident = <#table_ident as #trait_ident>::default();
+                #({
+                    #fns
+                    #assigns
+                })*
+                #(#typechecks)*
             };
-            // FIXME: the next line is not going to work. Construct other structs instead.
-            #(#names == #exprs;)*
-        };
+        }
 
         [#(#arg_refs),*]
-    }};
-    code
+    }}
 }
 
 /// Create the struct expression needed by the generated code.
@@ -789,18 +772,25 @@ fn create_struct(table_ident: &Ident, joins: Vec<Join>) -> Tokens {
     let mut index = 0usize;
     let joined_fields =
         joins.iter()
-            .map(|join| Ident::new(&join.base_field, Span::call_site()));
-    let joined_tables =
+            .map(|join| &join.base_field);
+    let row_ident = quote! { row };
+    let exprs =
         joins.iter()
-            .map(|join| Ident::new(&join.joined_table, Span::call_site()));
-    let code = quote! {{
+            .map(|join| {
+                let ident = &join.joined_table;
+                quote_spanned! { ident.span() =>
+                    Some(<#ident as ::tql::SqlTable>::from_joined_row(&#row_ident))
+                }
+            });
+    let code = quote_spanned! { table_ident.span() => {
         #[allow(unused_mut)]
-        let mut item = #table_ident::from_row(&row);
-        #(item.#joined_fields = Some(#joined_tables::from_joined_row(&row));)*
+        let mut item = <#table_ident as ::tql::SqlTable>::from_row(&#row_ident);
+        #(item.#joined_fields = #exprs;)*
         item
     }};
+    code
     // TODO: when the private field issue is fixed, remove the call to respan.
-    respan_tokens(code.into())
+    //respan_tokens(code.into())
 }
 
 /// Generate the aggregate struct and struct expression.

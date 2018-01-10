@@ -1,24 +1,17 @@
-error: mismatched types:
- expected `String`,
-    found `integral variable`
-  --> $DIR/delete.rs:41:33
-   |
-41 |     sql!(Table.filter(field1 == 42).delete());
-   |                                 ^^
-   |
-   = note: in this expansion of sql! (defined in tql)
-
-error: this method takes 0 parameters but 1 parameter was supplied
-  --> $DIR/delete.rs:47:40
-   |
-47 |     let _ = sql!(Table.filter(id == 1).delete(id == 1));
-   |                                        ^^^^^^
-
 warning: delete() without filters
-  --> $DIR/delete.rs:50:16
+  --> $DIR/delete.rs:55:16
    |
-50 |     sql!(Table.delete());
+55 |     sql!(Table.delete());
    |                ^^^^^^
 
-error: aborting due to 2 previous errors
+error[E0308]: mismatched types
+  --> $DIR/delete.rs:49:33
+   |
+49 |     sql!(Table.filter(field1 == 42).delete());
+   |                                 ^^ expected struct `std::string::String`, found integral variable
+   |
+   = note: expected type `std::string::String`
+              found type `{integer}`
+
+error: aborting due to previous error
 

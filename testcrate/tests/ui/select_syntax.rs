@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ * Copyright (c) 2017-2018 Boucher, Antoni <bouanto@zoho.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -19,7 +19,7 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-//! Tests of the delete() method.
+//! Tests of the methods related to `Query::Select`.
 
 #![feature(proc_macro)]
 
@@ -46,12 +46,31 @@ fn get_connection() -> Connection {
 fn main() {
     let connection = get_connection();
 
-    sql!(Table.filter(field1 == 42).delete());
-    //~^ ERROR mismatched types:
-    //~| expected `String`,
-    //~| found `integral variable`
-    //~| NOTE in this expansion of sql! (defined in tql)
+    sql!(Table.all()[.."auinesta"]);
+    // ~^ ERROR mismatched types:
+    // ~| expected `i64`,
+    // ~| found `String`
+    // ~| NOTE in this expansion of sql! (defined in tql)
 
-    sql!(Table.delete());
-    //~^ WARNING delete() without filters
+    sql!(Table.all()[true..false]);
+    // ~^ ERROR mismatched types:
+    // ~| expected `i64`,
+    // ~| found `bool`
+    // ~| NOTE in this expansion of sql! (defined in tql)
+    // ~| ERROR mismatched types:
+    // ~| expected `i64`,
+    // ~| found `bool`
+    // ~| NOTE in this expansion of sql! (defined in tql)
+    // FIXME: the position should be on the star for the next sql!() query.
+
+    sql!(Table.filter(i32_field < 100 && field1 == "value1").sort(*i32_field, *field1));
+    //~^ ERROR Expected - or identifier
+    //~| ERROR Expected - or identifier
+
+    sql!(TestTable.flter(field1 == "value"));
+    //~| ERROR no method named `flter` found in tql
+    //~| HELP did you mean filter?
+
+    sql!(Table.all(id == 1));
+    //~^ ERROR this method takes 0 parameters but 1 parameter was supplied
 }

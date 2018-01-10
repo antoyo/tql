@@ -23,6 +23,10 @@
 //!
 //! It type check your expression at compile time and converts it to SQL.
 
+#[cfg(feature = "chrono")]
+extern crate chrono;
+extern crate postgres;
+
 /// The `ForeignKey` is optional.
 ///
 /// There is no value when the `join()` method is not called.
@@ -35,12 +39,13 @@ pub type PrimaryKey = i32;
 // Marker trait used for error reporting:
 // when a struct is used in a ForeignKey, but it is not annotated with #[derive(SqlTable)].
 pub unsafe trait SqlTable {
-}
+    fn _create_query() -> &'static str;
 
-#[doc(hidden)]
-// Trait used to get the generated type struct used for type-checking.
-pub trait SqlTableTypeChecking<'a> {
-    type TypeStruct;
+    fn default() -> Self;
+
+    fn from_row(row: &::postgres::rows::Row) -> Self;
+
+    fn from_joined_row(row: &::postgres::rows::Row) -> Self;
 }
 
 #[cfg(not(unstable))]

@@ -21,14 +21,21 @@
 
 /// Analyzer for the sort() method.
 
+use proc_macro2::Span;
 use syn::{
     Expr,
     ExprUnary,
+    Ident,
     UnOp,
 };
 use syn::spanned::Spanned;
 
-use ast::{Expression, Order};
+use ast::{
+    Expression,
+    Order,
+    Query,
+    first_token_span,
+};
 use error::{Error, Result, res};
 use super::{check_field, path_expr_to_identifier};
 
@@ -44,28 +51,43 @@ pub fn argument_to_order(arg: &Expression) -> Result<Order> {
             Expr::Path(ref path) => {
                 let identifier = path.path.segments.first().unwrap().into_value().ident;
                 check_field(&identifier, identifier.span, &mut errors);
-                Order::Ascending(identifier.to_string())
+                Order::Ascending(identifier)
             }
             _ => {
                 errors.push(Error::new(
                     "Expected - or identifier",
-                    arg.span(),
+                    first_token_span(arg),
                 ));
-                Order::Ascending("".to_string())
+                Order::NoOrder
             }
         };
     res(order, errors)
 }
 
-/// Get the `String` indentifying the identifier from an `Expression`.
-fn get_identifier(identifier_expr: &Expression) -> Result<String> {
+/// Get the identifier from an `Expression`.
+fn get_identifier(identifier_expr: &Expression) -> Result<Ident> {
     let mut errors = vec![];
     if let Some(identifier) = path_expr_to_identifier(identifier_expr, &mut errors) {
-        // TODO: check that the field is in the struct.
-        //check_field(&identifier, identifier_expr.span(), table, &mut errors);
-        res(identifier.to_string(), errors)
+        res(identifier, errors)
     }
     else {
         Err(errors)
     }
+}
+
+/// Get the identifier in the order by clause to be able to check that they exist.
+pub fn get_sort_idents(query: &Query) -> Vec<Ident> {
+    let mut idents = vec![];
+    if let Query::Select { ref order, ..} = *query {
+        for order in order {
+            let ident =
+                match *order {
+                    Order::Ascending(ref ident) => ident,
+                    Order::Descending(ref ident) => ident,
+                    Order::NoOrder => continue,
+                };
+            idents.push(ident.clone());
+        }
+    }
+    idents
 }

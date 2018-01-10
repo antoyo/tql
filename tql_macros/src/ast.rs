@@ -31,7 +31,7 @@ use types::Type;
 
 pub type Expression = Expr;
 pub type FieldList = Vec<Identifier>;
-pub type Groups = Vec<Identifier>;
+pub type Groups = Vec<Ident>;
 pub type Identifier = String;
 
 /// `Aggregate` for une in SQL Aggregate `Query`.
@@ -164,12 +164,12 @@ pub enum FilterValue {
 }
 
 /// A `Join` with another `joined_table` via a specific `joined_field`.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Join {
-    pub base_field: Identifier,
+    pub base_field: Ident,
     pub base_table: Identifier,
     pub joined_field: Identifier,
-    pub joined_table: Identifier,
+    pub joined_table: Ident,
 }
 
 /// An SQL LIMIT clause.
@@ -215,9 +215,10 @@ pub struct MethodCall {
 #[derive(Debug)]
 pub enum Order {
     /// Comes from `sort(field)`.
-    Ascending(Identifier),
+    Ascending(Ident),
     /// Comes from `sort(-field)`.
-    Descending(Identifier),
+    Descending(Ident),
+    NoOrder,
 }
 
 /// `RelationalOperator` to be used in a `Filter`.

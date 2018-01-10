@@ -23,16 +23,14 @@
 
 #![feature(proc_macro)]
 
+extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
+use postgres::{Connection, TlsMode};
 use tql::PrimaryKey;
 use tql_macros::sql;
-
-struct Connection {
-    value: String,
-}
 
 #[derive(SqlTable)]
 struct Table {
@@ -41,7 +39,18 @@ struct Table {
     i32_field: i32,
 }
 
+#[derive(SqlTable)]
+struct RelatedTable {
+    id: PrimaryKey,
+}
+
+fn get_connection() -> Connection {
+    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
+}
+
 fn main() {
+    let connection = get_connection();
+
     sql!(Table.filter(field1 == "value1" && field2 < 100).sort(-field2));
     //~^ ERROR attempted access of field `field2` on type `Table`, but no field with that name was found
     //~| HELP did you mean field1?
@@ -136,48 +145,18 @@ fn main() {
     //~| found `bool`
     //~| NOTE in this expansion of sql! (defined in tql)
 
-    sql!(Table.all()[.."auinesta"]);
-    // ~^ ERROR mismatched types:
-    // ~| expected `i64`,
-    // ~| found `String`
-    // ~| NOTE in this expansion of sql! (defined in tql)
-
-    sql!(Table.all()[true..false]);
-    // ~^ ERROR mismatched types:
-    // ~| expected `i64`,
-    // ~| found `bool`
-    // ~| NOTE in this expansion of sql! (defined in tql)
-    // ~| ERROR mismatched types:
-    // ~| expected `i64`,
-    // ~| found `bool`
-    // ~| NOTE in this expansion of sql! (defined in tql)
-    // FIXME: the position should be on the star for the next sql!() query.
-
-    sql!(Table.filter(i32_field < 100 && field1 == "value1").sort(*i32_field, *field1));
-    //~^ ERROR Expected - or identifier
-    //~| ERROR Expected - or identifier
-
     sql!(Tble.filter(field1 == "value"));
     //~^ ERROR `Tble` does not name an SQL table
     //~| HELP did you mean Table?
 
-    sql!(TestTable.flter(field1 == "value"));
-    //~^ ERROR `TestTable` does not name an SQL table
-    //~| HELP did you forget to add the #[derive(SqlTable)] attribute on the TestTable struct?
-    //~| ERROR no method named `flter` found in tql
-    //~| HELP did you mean filter?
-
-    sql!(Table.all(id == 1));
-    //~^ ERROR this method takes 0 parameters but 1 parameter was supplied
-
-    sql!(Table.all().join(test));
+    sql!(Table.all().join(test = RelatedTable { id }));
     //~^ ERROR attempted access of field `test` on type `Table`, but no field with that name was found
 
-    sql!(Table.all().join(field));
+    sql!(Table.all().join(field = RelatedTable { id }));
     //~^ ERROR attempted access of field `field` on type `Table`, but no field with that name was found
     //~| HELP did you mean field1?
 
-    sql!(Table.all().join(field1, i32_field));
+    sql!(Table.all().join(field1 = RelatedTable { id }, i32_field = RelatedTable {}));
     //~^ ERROR mismatched types:
     //~| expected `ForeignKey<_>`,
     //~| found `String`
