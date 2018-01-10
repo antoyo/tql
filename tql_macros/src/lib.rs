@@ -491,29 +491,115 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
     }
 }
 
+// FIXME: too slow. Probably caused by subset_perms or the clone().
+fn all_perms(elems: &[Ident]) -> Vec<Vec<Ident>> {
+    let mut result = vec![];
+    let subsets = subset_perms(elems);
+    for mut subset in subsets {
+        result.extend(permutations(&mut subset));
+    }
+    result
+}
+
+fn subset_perms(elems: &[Ident]) -> Vec<Vec<Ident>> {
+    let mut result = vec![vec![elems[0]]];
+    if elems.len() > 1 {
+        for perm in subset_perms(&elems[1..]) {
+            result.push(perm.clone());
+            let mut permu = vec![elems[0]];
+            permu.extend(perm);
+            result.push(permu);
+        }
+    }
+    result
+}
+
+fn permutations(elems: &mut [Ident]) -> Vec<Vec<Ident>> {
+    fn perms(n: usize, elems: &mut [Ident], result: &mut Vec<Vec<Ident>>) {
+        if n == 1 {
+            result.push(elems.to_vec());
+        }
+        else {
+            for i in 0 .. n - 1 {
+                perms(n - 1, elems, result);
+                if n % 2 == 0 {
+                    elems.swap(i, n - 1);
+                }
+                else {
+                    elems.swap(0, n - 1);
+                }
+            }
+            perms(n - 1, elems, result);
+        }
+    }
+
+    let mut result = vec![];
+    perms(elems.len(), elems, &mut result);
+    result
+}
+
+fn get_missing_fields(fields: &[Ident], mandatory_fields: &[Ident]) -> Option<Vec<String>> {
+    let mut missing_fields = vec![];
+
+    for field in mandatory_fields {
+        if !fields.contains(field) {
+            missing_fields.push(field.to_string());
+        }
+    }
+
+    if missing_fields.is_empty() {
+        None
+    }
+    else {
+        Some(missing_fields)
+    }
+}
+
 /// Create the insert macro for the table struct to check that all the mandatory fields are
 /// provided.
 fn insert_macro(item_struct: &ItemStruct) -> Tokens {
     let table_ident = &item_struct.ident;
-    let macro_name = Ident::new(&format!("tql_{}_insert", table_ident), Span::call_site());
+    let macro_name = Ident::new(&format!("tql_{}_check_missing_fields", table_ident), Span::call_site());
     if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
-        let mut optional_fields = vec![];
+        let mut mandatory_fields = vec![];
+        let mut all_fields = vec![];
         for field in named {
             let typ = token_to_string(&field.ty);
-            if typ.starts_with("Option") || typ == "PrimaryKey" {
-                optional_fields.push(field.ident);
+            if let Some(ident) = field.ident {
+                if !typ.starts_with("Option") && typ != "PrimaryKey" {
+                    mandatory_fields.push(ident);
+                }
+                all_fields.push(ident);
             }
         }
+
+        let permutations = all_perms(&all_fields);
+        let mut patterns = vec![];
+        let mut checks = vec![];
+        for permutation in &permutations {
+            patterns.push(quote! {
+                #(#permutation),*
+            });
+            if let Some(missing_fields) = get_missing_fields(permutation, &mandatory_fields) {
+                let missing_fields = missing_fields.join(", ");
+                let string = string_literal(&format!("missing fields: {}", missing_fields));
+                checks.push(quote! {
+                    { compile_error!(#string) }
+                });
+            }
+            else {
+                checks.push(quote! { {} });
+            }
+        }
+
+        // TODO: also duplicate all the permutations to include unknown fields.
+        // TODO: also create a method-macro 2.0 to avoid having to use #[macro_use] on stable.
+        // TODO: also move the error on the right position.
 
         quote_spanned! { table_ident.span() =>
             #[macro_export]
             macro_rules! #macro_name {
-                ($($fields:ident),*) => {
-                    #table_ident {
-                        #(#optional_fields: unsafe { ::std::mem::zeroed() },)*
-                        $($fields: unsafe { ::std::mem::zeroed() }),*
-                    }
-                };
+                #((#patterns) => #checks);*
             }
         }
     }
@@ -781,11 +867,12 @@ fn typecheck_arguments(table_ident: &Ident, arguments: Args, literal_arguments: 
         }});
     }
 
-    let macro_name = Ident::new(&format!("tql_{}_insert", table_ident), Span::call_site());
+    let macro_name = Ident::new(&format!("tql_{}_check_missing_fields", table_ident), Span::call_site());
     if let Some(insert_idents) = insert_idents {
-        typechecks.push(quote! {
+        let code = quote! {
             #macro_name!(#(#insert_idents),*);
-        });
+        };
+        typechecks.push(code);
     }
 
     let trait_ident = quote_spanned! { table_ident.span() =>
