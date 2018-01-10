@@ -1,60 +1,69 @@
-error: missing fields: `field2`, `related_field`
-  --> $DIR/insert.rs:48:16
+error[E0308]: mismatched types
+  --> $DIR/insert.rs:56:32
    |
-48 |     sql!(Table.insert(field1 = 42, i32_field = 91));
-   |                ^^^^^^
+56 |     sql!(Table.insert(field1 = 42, i32_field = 91));
+   |                                ^^ expected struct `std::string::String`, found integral variable
+   |
+   = note: expected type `std::string::String`
+              found type `{integer}`
 
-error: attempted access of field `i32_fild` on type `Table`, but no field with that name was found
-  --> $DIR/insert.rs:51:36
+error[E0063]: missing fields `field2`, `related_field` in initializer of `Table`
+  --> $DIR/insert.rs:36:8
    |
-51 |     sql!(Table.insert(field1 = 42, i32_fild = 91));
-   |                                    ^^^^^^^^
-   |
-   = help: did you mean i32_field?
+36 | struct Table {
+   |        ^^^^^ missing `field2`, `related_field`
+...
+56 |     sql!(Table.insert(field1 = 42, i32_field = 91));
+   |     ------------------------------------------------ in this macro invocation
 
-error: expected = but got +=
-  --> $DIR/insert.rs:55:33
+error[E0308]: mismatched types
+  --> $DIR/insert.rs:59:32
    |
-55 |     sql!(Table.insert(i32_field += 42, field1 = "Test"));
-   |                                 ^^
-
-error: missing fields: `field2`, `related_field`
-  --> $DIR/insert.rs:55:16
+59 |     sql!(Table.insert(field1 = 42, i32_fild = 91));
+   |                                ^^ expected struct `std::string::String`, found integral variable
    |
-55 |     sql!(Table.insert(i32_field += 42, field1 = "Test"));
-   |                ^^^^^^
+   = note: expected type `std::string::String`
+              found type `{integer}`
 
-error: expected = but got -=
-  --> $DIR/insert.rs:59:46
+error[E0609]: no field `i32_fild` on type `Table`
+  --> $DIR/insert.rs:59:36
    |
-59 |     sql!(Table.insert(i32_field = 42, field1 -= "Test"));
-   |                                              ^^
+59 |     sql!(Table.insert(field1 = 42, i32_fild = 91));
+   |                                    ^^^^^^^^ did you mean `i32_field`?
 
-error: missing fields: `field2`, `related_field`
-  --> $DIR/insert.rs:59:16
+error[E0560]: struct `Table` has no field named `i32_fild`
+  --> $DIR/insert.rs:36:8
    |
-59 |     sql!(Table.insert(i32_field = 42, field1 -= "Test"));
-   |                ^^^^^^
+36 |   struct Table {
+   |  ________^
+37 | |     id: PrimaryKey,
+38 | |     field1: String,
+39 | |     i32_field: i32,
+...  |
+58 | |
+59 | |     sql!(Table.insert(field1 = 42, i32_fild = 91));
+   | |     --------------------------------------^--------
+   | |_____|_____________________________________|
+   |       |                                     field does not exist - did you mean `i32_field`?
+   |       in this macro invocation
 
-error: mismatched types:
- expected `String`,
-    found `integral variable`
+error[E0308]: mismatched types
   --> $DIR/insert.rs:66:32
    |
 66 |     sql!(Table.insert(field1 = 42, i32_field = 91, field2 = "test", related_field = related_field));
-   |                                ^^
+   |                                ^^ expected struct `std::string::String`, found integral variable
    |
-   = note: in this expansion of sql! (defined in tql)
+   = note: expected type `std::string::String`
+              found type `{integer}`
 
-error: mismatched types:
- expected `RelatedTable`,
-    found `integral variable`
+error[E0308]: mismatched types
   --> $DIR/insert.rs:72:89
    |
 72 |     sql!(Table.insert(field1 = "test", i32_field = 91, field2 = "test", related_field = 1));
-   |                                                                                         ^
+   |                                                                                         ^ expected enum `std::option::Option`, found integral variable
    |
-   = note: in this expansion of sql! (defined in tql)
+   = note: expected type `std::option::Option<RelatedTable>`
+              found type `{integer}`
 
-error: aborting due to 8 previous errors
+error: aborting due to 7 previous errors
 

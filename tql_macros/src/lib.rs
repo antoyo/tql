@@ -15,9 +15,6 @@
  * and create a new test to check that all the files are included, so that the tests fail when we
  * forget to include!() a file.
  * TODO: write fail tests for stable using include!().
- * TODO: remove the internal state of the proc-macro and use dummy code generation to check the
- * identifiers (to make it work with models defined in external crates). Also, use the trait bound
- * SqlTable trick to check that it is a table.
  * TODO: allow using other fields in filter(), update(), … like F() expressions in Django
  ** Table.filter(field1 > Table.field2) may not work.
  ** Table.filter(field1 > $field2)
@@ -103,6 +100,7 @@ use syn::spanned::Spanned;
 use analyzer::{
     analyze,
     analyze_types,
+    get_insert_idents,
     get_limit_args,
     get_sort_idents,
     get_values_idents,
@@ -133,6 +131,7 @@ struct SqlQueryWithArgs {
     aggregates: Vec<Aggregate>,
     arguments: Args,
     idents: Vec<Ident>,
+    insert_idents: Option<Vec<Ident>>,
     joins: Vec<Join>,
     limit_exprs: Vec<Expr>,
     literal_arguments: Args,
@@ -224,12 +223,14 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
     let query_type = query_type(&query);
     let mut idents = get_sort_idents(&query);
     idents.extend(get_values_idents(&query));
+    let insert_idents = get_insert_idents(&query);
     let limit_exprs = get_limit_args(&query);
     let (arguments, literal_arguments) = arguments(query);
     Ok(SqlQueryWithArgs {
         aggregates,
         arguments,
         idents,
+        insert_idents,
         joins,
         limit_exprs,
         literal_arguments,
@@ -259,13 +260,18 @@ pub fn sql_table(input: TokenStream) -> TokenStream {
                 // NOTE: if there is no error, there is a primary key, hence expect().
                 let code = tosql_impl(&item_struct, &primary_key.expect("primary key"));
                 let methods = table_methods(&item_struct);
+                let insert_macro = insert_macro(&item_struct);
+                let code = quote! {
+                    #methods
+                    #code
+                };
+                #[cfg(feature = "unstable")]
+                let code = respan_tokens(code);
                 let code = quote! {
                     #code
-                    #methods
-                }.into();
-                #[cfg(feature = "unstable")]
-                let code = respan(code);
-                return concat_token_stream(code, impls);
+                    #insert_macro
+                };
+                return concat_token_stream(code.into(), impls);
             }
             if let Err(errors) = fields {
                 for error in errors {
@@ -485,6 +491,37 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
     }
 }
 
+/// Create the insert macro for the table struct to check that all the mandatory fields are
+/// provided.
+fn insert_macro(item_struct: &ItemStruct) -> Tokens {
+    let table_ident = &item_struct.ident;
+    let macro_name = Ident::new(&format!("tql_{}_insert", table_ident), Span::call_site());
+    if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
+        let mut optional_fields = vec![];
+        for field in named {
+            let typ = token_to_string(&field.ty);
+            if typ.starts_with("Option") || typ == "PrimaryKey" {
+                optional_fields.push(field.ident);
+            }
+        }
+
+        quote_spanned! { table_ident.span() =>
+            #[macro_export]
+            macro_rules! #macro_name {
+                ($($fields:ident),*) => {
+                    #table_ident {
+                        #(#optional_fields: unsafe { ::std::mem::zeroed() },)*
+                        $($fields: unsafe { ::std::mem::zeroed() }),*
+                    }
+                };
+            }
+        }
+    }
+    else {
+        unreachable!("Check is done in get_struct_fields()")
+    }
+}
+
 /// Add the postgres::types::ToSql implementation on the struct.
 /// Its SQL representation is the same as the primary key SQL representation.
 fn tosql_impl(item_struct: &ItemStruct, primary_key_field: &str) -> Tokens {
@@ -575,7 +612,7 @@ fn gen_query(args: SqlQueryWithArgs) -> TokenStream {
     let struct_expr = create_struct(table_ident, args.joins);
     let (aggregate_struct, aggregate_expr) = gen_aggregate_struct(&args.aggregates);
     let args_expr = typecheck_arguments(table_ident, args.arguments, args.literal_arguments, args.idents,
-                                        args.limit_exprs);
+                                        args.limit_exprs, args.insert_idents);
     let tokens = gen_query_expr(ident, args.sql, args_expr, struct_expr, aggregate_struct, aggregate_expr,
                                 args.query_type, table_ident);
     tokens.into()
@@ -679,7 +716,7 @@ fn gen_query_expr(connection_ident: Ident, sql_query: String, args_expr: Tokens,
 /// Get the arguments to send to the `postgres::stmt::Statement::query` or
 /// `postgres::stmt::Statement::execute` method.
 fn typecheck_arguments(table_ident: &Ident, arguments: Args, literal_arguments: Args, idents: Vec<Ident>,
-                       limit_exprs: Vec<Expr>) -> Tokens {
+                       limit_exprs: Vec<Expr>, insert_idents: Option<Vec<Ident>>) -> Tokens {
     let mut arg_refs = vec![];
     let mut fns = vec![];
     let mut assigns = vec![];
@@ -742,6 +779,13 @@ fn typecheck_arguments(table_ident: &Ident, arguments: Args, literal_arguments: 
         typechecks.push(quote! {{
             let _: i64 = #expr;
         }});
+    }
+
+    let macro_name = Ident::new(&format!("tql_{}_insert", table_ident), Span::call_site());
+    if let Some(insert_idents) = insert_idents {
+        typechecks.push(quote! {
+            #macro_name!(#(#insert_idents),*);
+        });
     }
 
     let trait_ident = quote_spanned! { table_ident.span() =>

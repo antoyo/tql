@@ -24,8 +24,14 @@
 use std::collections::HashSet;
 
 use proc_macro2::Span;
+use syn::Ident;
 
-use ast::{Assignment, AssignementOperator, WithSpan};
+use ast::{
+    Assignment,
+    AssignementOperator,
+    Query,
+    WithSpan,
+};
 use error::Error;
 use state::BothTypes;
 use types::Type;
@@ -65,4 +71,17 @@ pub fn check_insert_arguments(assignments: &[Assignment], position: Span, errors
     }
 
     // TODO: check if the primary key is not in the inserted field?
+}
+
+pub fn get_insert_idents(query: &Query) -> Option<Vec<Ident>> {
+    let mut idents = vec![];
+    if let Query::Insert { ref assignments, ..} = *query {
+        for assignment in assignments {
+            if let Some(ref ident) = assignment.identifier {
+                idents.push(ident.clone());
+            }
+        }
+        return Some(idents)
+    }
+    None
 }

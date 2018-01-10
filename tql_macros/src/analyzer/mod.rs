@@ -74,6 +74,7 @@ use self::assignment::{analyze_assignments_types, argument_to_assignment};
 use self::filter::{analyze_filter_types, expression_to_filter_expression};
 use self::get::get_expression_to_filter_expression;
 use self::insert::check_insert_arguments;
+pub use self::insert::get_insert_idents;
 use self::join::argument_to_join;
 use self::limit::{analyze_limit_types, argument_to_limit};
 pub use self::limit::get_limit_args;
