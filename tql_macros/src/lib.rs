@@ -514,6 +514,7 @@ fn tosql_impl(item_struct: &ItemStruct, primary_key_field: &str) -> Tokens {
         }
 
         impl #table_ident {
+            #[allow(dead_code)]
             fn to_owned(&self) -> Option<Self> {
                 unimplemented!();
             }
@@ -739,7 +740,7 @@ fn typecheck_arguments(table_ident: &Ident, arguments: Args, literal_arguments: 
 
     for expr in limit_exprs {
         typechecks.push(quote! {{
-            let var: i64 = #expr;
+            let _: i64 = #expr;
         }});
     }
 
