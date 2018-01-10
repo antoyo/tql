@@ -1,0 +1,14 @@
+error: expected = but got +=
+  --> $DIR/insert_syntax.rs:48:33
+   |
+48 |     sql!(Table.insert(i32_field += 42, field1 = "Test"));
+   |                                 ^^
+
+error: expected = but got -=
+  --> $DIR/insert_syntax.rs:51:46
+   |
+51 |     sql!(Table.insert(i32_field = 42, field1 -= "Test"));
+   |                                              ^^
+
+error: aborting due to 2 previous errors
+
