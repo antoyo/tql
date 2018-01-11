@@ -168,7 +168,7 @@ pub fn expression_to_filter_expression(arg: &Expression, table_name: &str) -> Re
             Expr::MethodCall(ref call) => {
                 FilterExpression::FilterValue(WithSpan {
                     node: method_call_expression_to_filter_expression(call.method, &call.receiver, &call.args,
-                                                                      &mut errors),
+                                                                      call.span(), &mut errors),
                     span: arg.span(),
                 })
             },
@@ -218,12 +218,12 @@ pub fn is_relational_operator(binop: &BinOp) -> bool {
 
 /// Convert a method call expression to a filter expression.
 fn method_call_expression_to_filter_expression(identifier: Ident, expr: &Expression, args: &Punctuated<Expr, Comma>,
-    errors: &mut Vec<Error>) -> FilterValue
+    position: Span, errors: &mut Vec<Error>) -> FilterValue
 {
     let dummy = FilterValue::None;
     match *expr {
         Expr::Path(ref path) => {
-            path_method_call_to_filter(&path.path, identifier, args, errors)
+            path_method_call_to_filter(&path.path, identifier, args, position, errors)
         },
         _ => {
             errors.push(Error::new(
@@ -236,7 +236,7 @@ fn method_call_expression_to_filter_expression(identifier: Ident, expr: &Express
 }
 
 /// Convert a method call where the object is an identifier to a filter expression.
-fn path_method_call_to_filter(path: &Path, identifier: Ident, args: &Punctuated<Expr, Comma>,
+fn path_method_call_to_filter(path: &Path, identifier: Ident, args: &Punctuated<Expr, Comma>, position: Span,
                               errors: &mut Vec<Error>) -> FilterValue
 {
     // TODO: return errors instead of dummy.
@@ -252,10 +252,11 @@ fn path_method_call_to_filter(path: &Path, identifier: Ident, args: &Punctuated<
         arguments: arguments.clone(),
         method_name: identifier,
         object_name,
+        position,
     })
 }
 
-pub fn get_method_calls(query: &Query) -> Vec<ast::MethodCall> {
+pub fn get_method_calls(query: &Query) -> Vec<(ast::MethodCall, Option<Expression>)> {
     match *query {
         Query::Aggregate { ref filter, .. } | Query::Delete { ref filter, .. } | Query::Select { ref filter, .. } |
             Query::Update { ref filter, .. } =>
@@ -265,12 +266,12 @@ pub fn get_method_calls(query: &Query) -> Vec<ast::MethodCall> {
     }
 }
 
-fn get_methods_from_filter(filter: &FilterExpression) -> Vec<ast::MethodCall> {
+fn get_methods_from_filter(filter: &FilterExpression) -> Vec<(ast::MethodCall, Option<Expression>)> {
     let mut calls = vec![];
     match *filter {
         FilterExpression::Filter(ref filter) => {
             if let FilterValue::MethodCall(ref call) = filter.operand1 {
-                calls.push(call.clone());
+                calls.push((call.clone(), Some(filter.operand2.clone())));
             }
         },
         FilterExpression::Filters(ref filters) => {
@@ -279,7 +280,7 @@ fn get_methods_from_filter(filter: &FilterExpression) -> Vec<ast::MethodCall> {
         },
         FilterExpression::FilterValue(ref filter_value) => {
             if let FilterValue::MethodCall(ref call) = filter_value.node {
-                calls.push(call.clone());
+                calls.push((call.clone(), None));
             }
         },
         FilterExpression::NegFilter(ref filter) => calls.extend(get_methods_from_filter(filter)),

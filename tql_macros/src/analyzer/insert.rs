@@ -53,20 +53,6 @@ pub fn check_insert_arguments(assignments: &[Assignment], position: Span, errors
         }
     }
 
-    // TODO: attempt to create the table struct to see the missing fields (what about nullable
-    // fields? => maybe create a dummy struct with only the mandatory fields in the derive? (what
-    // will happen when the optional fields are specified?)).
-    /*for field in table.fields.keys() {
-        if !fields.contains(field) && Some(field) != primary_key {
-            if let Some(&BothTypes { ty: WithSpan { node: Type::Nullable(_), .. }, ..}) = table.fields.get(field) {
-                // Do not err about missing nullable field.
-            }
-            else {
-                missing_fields.push(field.as_ref());
-            }
-        }
-    }*/
-
     if !missing_fields.is_empty() {
         let fields = "`".to_string() + &missing_fields.join("`, `") + "`";
         errors.push(Error::new_with_code(&format!("missing fields: {}", fields), position, "E0063"));

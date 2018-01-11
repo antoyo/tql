@@ -116,6 +116,7 @@ use analyzer::{
 use arguments::{Arg, Args, arguments};
 use ast::{
     Aggregate,
+    Expression,
     Join,
     MethodCall,
     Query,
@@ -144,7 +145,7 @@ struct SqlQueryWithArgs {
     joins: Vec<Join>,
     limit_exprs: Vec<Expr>,
     literal_arguments: Args,
-    method_calls: Vec<MethodCall>,
+    method_calls: Vec<(MethodCall, Option<Expression>)>,
     query_type: QueryType,
     #[cfg(feature = "unstable")]
     span: Span,
@@ -818,7 +819,8 @@ fn typecheck_arguments(table_ident: &Ident, args: &SqlQueryWithArgs) -> Tokens {
         typechecks.push(respan_tokens_with(code, span.unstable()));
     }
 
-    for call in &args.method_calls {
+    for data in &args.method_calls {
+        let call = &data.0;
         let field = &call.object_name;
         let method = &call.method_name;
         let arguments = &call.arguments;
@@ -828,10 +830,22 @@ fn typecheck_arguments(table_ident: &Ident, args: &SqlQueryWithArgs) -> Tokens {
         let method_name = quote_spanned! { table_ident.span() =>
             to_tql_type
         };
+        let comparison_expr =
+            if let Some(ref expr) = data.1 {
+                quote! {
+                    let mut data = #field.#method(#(#arguments),*);
+                    data = #expr;
+                }
+            }
+            else {
+                quote_spanned! { call.position =>
+                    true == #field.#method(#(#arguments),*);
+                }
+            };
         typechecks.push(quote! {{
             use #trait_ident;
             let #field = #ident.#field.#method_name();
-            #field.#method(#(#arguments),*);
+            #comparison_expr
         }});
     }
 

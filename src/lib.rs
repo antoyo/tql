@@ -30,7 +30,8 @@ extern crate postgres;
 mod methods;
 mod types;
 
-pub use types::ToTqlType;
+pub use types::{Date, DateTime, Time, ToTqlType};
+pub use types::numbers::{i16, i32, i64, i8, u16, u32, u64, u8};
 
 /// The `ForeignKey` is optional.
 ///
@@ -38,7 +39,7 @@ pub use types::ToTqlType;
 pub type ForeignKey<T> = Option<T>;
 
 /// A `PrimaryKey` is a 4-byte integer.
-pub type PrimaryKey = i32;
+pub type PrimaryKey = types::StdI32;
 
 #[doc(hidden)]
 // Marker trait used for error reporting:

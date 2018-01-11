@@ -209,6 +209,7 @@ pub struct MethodCall {
     pub arguments: Vec<Expression>,
     pub method_name: Ident,
     pub object_name: Ident,
+    pub position: Span,
 }
 
 /// An SQL ORDER BY clause.

@@ -22,64 +22,114 @@
 //! These types should not be used directly:
 //! they exist only for type checking.
 
+#![allow(dead_code, non_camel_case_types)]
+
 #[cfg(feature = "chrono")]
 use chrono::{self, Local, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 
-#[doc(hidden)]
-pub struct Int;
+type StdI8 = i8;
 
-impl ToTqlType for i8 {
-    type Target = Int;
-    fn to_tql_type(&self) -> Self::Target { Int }
+pub mod numbers {
+    use super::ToTqlType;
+
+    #[doc(hidden)]
+    pub struct i8;
+
+    impl ToTqlType for super::StdI8 {
+        type Target = i8;
+        fn to_tql_type(&self) -> Self::Target { i8 }
+    }
+
+    #[doc(hidden)]
+    pub struct i16;
+
+    impl ToTqlType for super::StdI16 {
+        type Target = i16;
+        fn to_tql_type(&self) -> Self::Target { i16 }
+    }
+
+    #[doc(hidden)]
+    pub struct i32;
+
+    impl ToTqlType for super::StdI32 {
+        type Target = i32;
+        fn to_tql_type(&self) -> Self::Target { i32 }
+    }
+
+    #[doc(hidden)]
+    pub struct i64;
+
+    impl ToTqlType for super::StdI64 {
+        type Target = i64;
+        fn to_tql_type(&self) -> Self::Target { i64 }
+    }
+
+    #[doc(hidden)]
+    pub struct u8;
+
+    impl ToTqlType for super::StdU8 {
+        type Target = u8;
+        fn to_tql_type(&self) -> Self::Target { u8 }
+    }
+
+    #[doc(hidden)]
+    pub struct u16;
+
+    impl ToTqlType for super::StdU16 {
+        type Target = u16;
+        fn to_tql_type(&self) -> Self::Target { u16 }
+    }
+
+    #[doc(hidden)]
+    pub struct u32;
+
+    impl ToTqlType for super::StdU32 {
+        type Target = u32;
+        fn to_tql_type(&self) -> Self::Target { u32 }
+    }
+
+    #[doc(hidden)]
+    pub struct u64;
+
+    impl ToTqlType for super::StdU64 {
+        type Target = u64;
+        fn to_tql_type(&self) -> Self::Target { u64 }
+    }
+
+    #[doc(hidden)]
+    pub struct f32;
+
+    impl ToTqlType for super::StdF32 {
+        type Target = f32;
+        fn to_tql_type(&self) -> Self::Target { f32 }
+    }
+
+    #[doc(hidden)]
+    pub struct f64;
+
+    impl ToTqlType for super::StdF64 {
+        type Target = f64;
+        fn to_tql_type(&self) -> Self::Target { f64 }
+    }
 }
 
-impl ToTqlType for i16 {
-    type Target = Int;
-    fn to_tql_type(&self) -> Self::Target { Int }
-}
+type StdI16 = i16;
 
-impl ToTqlType for i32 {
-    type Target = Int;
-    fn to_tql_type(&self) -> Self::Target { Int }
-}
+pub type StdI32 = i32;
 
-impl ToTqlType for i64 {
-    type Target = Int;
-    fn to_tql_type(&self) -> Self::Target { Int }
-}
+type StdI64 = i64;
 
-impl ToTqlType for u8 {
-    type Target = Int;
-    fn to_tql_type(&self) -> Self::Target { Int }
-}
+type StdU8 = u8;
 
-impl ToTqlType for u16 {
-    type Target = Int;
-    fn to_tql_type(&self) -> Self::Target { Int }
-}
+type StdU16 = u16;
 
-impl ToTqlType for u32 {
-    type Target = Int;
-    fn to_tql_type(&self) -> Self::Target { Int }
-}
+type StdU32 = u32;
 
-impl ToTqlType for u64 {
-    type Target = Int;
-    fn to_tql_type(&self) -> Self::Target { Int }
-}
+type StdU64 = u64;
 
-#[doc(hidden)]
-pub struct Float;
+type StdF32 = f32;
 
-impl ToTqlType for f32 {
-    type Target = Float;
-    fn to_tql_type(&self) -> Self::Target { Float }
-}
-
-impl ToTqlType for f64 {
-    type Target = Float;
-    fn to_tql_type(&self) -> Self::Target { Float }
-}
+type StdF64 = f64;
 
 #[doc(hidden)]
 pub struct Date;
