@@ -62,7 +62,7 @@ impl Key for AppDb {
 }
 
 // A Message is a table containing a username, a text and an added date.
-#[derive(Serialize, SqlTable)]
+#[derive(SqlTable, Serialize)]
 struct Message {
     #[serde(skip)]
     id: PrimaryKey,

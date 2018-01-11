@@ -2,6 +2,8 @@
  * Primary key field
  * SQLite: ROWID
  *
+ * FIXME: error (cannot find macro `tql_Message_check_missing_fields!` in this scope) when putting
+ * another custom derive (like Serialize in the chat example) before SqlTable.
  * TODO: try to get the columns by OID from postgres to improve the syntax.
  * TODO: try to hide Option in the mismatched type error message for ForeignKey.
  * TODO: test that get() does not work when the primary key is not named id.
