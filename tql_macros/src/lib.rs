@@ -47,6 +47,7 @@ extern crate proc_macro2;
 #[macro_use]
 extern crate quote;
 extern crate rand;
+#[macro_use]
 extern crate syn;
 
 #[macro_use]
@@ -80,6 +81,7 @@ use rand::Rng;
 use syn::{
     AngleBracketedGenericArguments,
     Expr,
+    ExprGroup,
     Field,
     Fields,
     FieldsNamed,
@@ -95,6 +97,7 @@ use syn::{
 #[cfg(feature = "unstable")]
 use syn::{LitStr, Path};
 use syn::PathArguments::AngleBracketed;
+use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 
 use analyzer::{
@@ -495,19 +498,6 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
     }
 }
 
-fn permutations(elems: &[Ident]) -> Vec<Vec<Ident>> {
-    let mut result = vec![vec![elems[0]]];
-    if elems.len() > 1 {
-        for perm in permutations(&elems[1..]) {
-            result.push(perm.clone());
-            let mut permu = vec![elems[0]];
-            permu.extend(perm);
-            result.push(permu);
-        }
-    }
-    result
-}
-
 fn get_missing_fields(fields: &[Ident], mandatory_fields: &[Ident]) -> Option<Vec<String>> {
     let mut missing_fields = vec![];
 
@@ -531,48 +521,24 @@ fn insert_macro(item_struct: &ItemStruct) -> Tokens {
     let table_ident = &item_struct.ident;
     if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
         let mut mandatory_fields = vec![];
-        let mut all_fields = vec![];
         for field in named {
             let typ = token_to_string(&field.ty);
             if let Some(ident) = field.ident {
                 if !typ.starts_with("Option") && typ != "PrimaryKey" {
                     mandatory_fields.push(ident);
                 }
-                all_fields.push(ident);
             }
         }
-
-        all_fields.sort();
-        let permutations = permutations(&all_fields);
-        let mut patterns = vec![];
-        let mut checks = vec![];
-        for permutation in &permutations {
-            patterns.push(quote! {
-                #(#permutation),*
-            });
-            if let Some(missing_fields) = get_missing_fields(permutation, &mandatory_fields) {
-                let missing_fields = missing_fields.join(", ");
-                let string = string_literal(&format!("missing fields: {}", missing_fields));
-                checks.push(quote! {
-                    { compile_error!(#string) }
-                });
-            }
-            else {
-                checks.push(quote! { {} });
-            }
-        }
-
-        // TODO: also duplicate all the permutations to include unknown fields.
-        // TODO: also create a method-macro 2.0 to avoid having to use #[macro_use] on nightly (not
-        // possible).
 
         let macro_name = Ident::new(&format!("tql_{}_check_missing_fields", table_ident), Span::call_site());
-        respan_tokens_with(quote_spanned! { table_ident.span() =>
+        quote_spanned! { table_ident.span() =>
             #[macro_export]
             macro_rules! #macro_name {
-                #((#patterns) => #checks);*
+                ($($insert_idents:ident),*) => {
+                    tql_macros::check_missing_fields!([#(#mandatory_fields),*], [$($insert_idents),*])
+                };
             }
-        }, table_ident.span().unstable())
+        }
     }
     else {
         unreachable!("Check is done in get_struct_fields()")
@@ -996,6 +962,62 @@ fn to_row_get(ident: &Ident, typ: syn::Type, ident_prefix: &str) -> Tokens {
     let field_name = format!("{}{}", ident_prefix, ident);
     quote! {
         row.get(#field_name)
+    }
+}
+
+struct Arguments(Punctuated<Expr, Token![,]>);
+
+impl syn::synom::Synom for Arguments {
+    // call!(Punctuated::parse_terminated) will parse a terminated sequence of
+    // Synom objects. Expr implements synom so we're good.
+    named!(parse -> Self, map!(call!(Punctuated::parse_terminated), Arguments));
+}
+
+#[proc_macro]
+pub fn check_missing_fields(input: TokenStream) -> TokenStream {
+    let args: Arguments = parse(input).expect("parse check_missing_fields!()");
+    let args = args.0;
+    let arg1 = &args[0];
+    let arg2 = &args[1];
+    let mut mandatory_fields = vec![];
+    let mut fields = vec![];
+
+    if let Expr::Array(ref array) = *arg1 {
+        for elem in &array.elems {
+            if let Expr::Path(ref path) = *elem {
+                mandatory_fields.push(path.path.segments[0].ident.clone());
+            }
+        }
+    }
+
+    if let Expr::Array(ref array) = *arg2 {
+        for elem in &array.elems {
+            if let Expr::Group(ref group) = *elem {
+                if let Expr::Path(ref path) = *group.expr {
+                    fields.push(path.path.segments[0].ident.clone());
+                }
+            }
+        }
+    }
+
+    let mut missing_fields = vec![];
+
+    for field in mandatory_fields {
+        if !fields.contains(&field) {
+            missing_fields.push(field.to_string());
+        }
+    }
+
+    if !missing_fields.is_empty() {
+        let missing_fields = missing_fields.join(", ");
+        let error = string_literal(&format!("missing fields: {}", missing_fields));
+
+        (quote! {
+            compile_error!(#error);
+        }).into()
+    }
+    else {
+        empty_token_stream()
     }
 }
 

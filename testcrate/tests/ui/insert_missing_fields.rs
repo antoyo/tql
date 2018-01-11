@@ -53,22 +53,9 @@ fn get_connection() -> Connection {
 fn main() {
     let connection = get_connection();
 
-    let related_field = RelatedTable {
-        id: 1,
-    };
-    sql!(Table.insert(field1 = 42, field2 = "", related_field = related_field, i32_field = 91, i32_fild = 91));
-    //~^ ERROR attempted access of field `i32_fild` on type `Table`, but no field with that name was found
-    //~| HELP did you mean i32_field?
+    sql!(Table.insert(field1 = 42, i32_field = 91));
+    //~^ ERROR missing fields: `field2`, `related_field`
 
-    sql!(Table.insert(field1 = 42, i32_field = 91, field2 = "test", related_field = related_field));
-    //~^ ERROR mismatched types:
-    //~| expected `String`,
-    //~| found `integral variable`
-    //~| NOTE in this expansion of sql! (defined in tql)
-
-    sql!(Table.insert(field1 = "test", i32_field = 91, field2 = "test", related_field = 1));
-    //~^ ERROR mismatched types:
-    //~| expected `RelatedTable`,
-    //~| found `integral variable`
-    //~| NOTE in this expansion of sql! (defined in tql)
+    sql!(Table.insert(field1 = 42, i32_fild = 91));
+    //~^ ERROR missing fields: `field2`, `related_field`
 }

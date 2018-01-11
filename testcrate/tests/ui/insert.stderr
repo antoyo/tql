@@ -1,69 +1,35 @@
 error[E0308]: mismatched types
-  --> $DIR/insert.rs:56:32
-   |
-56 |     sql!(Table.insert(field1 = 42, i32_field = 91));
-   |                                ^^ expected struct `std::string::String`, found integral variable
-   |
-   = note: expected type `std::string::String`
-              found type `{integer}`
-
-error[E0063]: missing fields `field2`, `related_field` in initializer of `Table`
-  --> $DIR/insert.rs:36:8
-   |
-36 | struct Table {
-   |        ^^^^^ missing `field2`, `related_field`
-...
-56 |     sql!(Table.insert(field1 = 42, i32_field = 91));
-   |     ------------------------------------------------ in this macro invocation
-
-error[E0308]: mismatched types
   --> $DIR/insert.rs:59:32
    |
-59 |     sql!(Table.insert(field1 = 42, i32_fild = 91));
+59 |     sql!(Table.insert(field1 = 42, field2 = "", related_field = related_field, i32_field = 91, i32_fild = 91));
    |                                ^^ expected struct `std::string::String`, found integral variable
    |
    = note: expected type `std::string::String`
               found type `{integer}`
 
 error[E0609]: no field `i32_fild` on type `Table`
-  --> $DIR/insert.rs:59:36
+  --> $DIR/insert.rs:59:96
    |
-59 |     sql!(Table.insert(field1 = 42, i32_fild = 91));
-   |                                    ^^^^^^^^ did you mean `i32_field`?
-
-error[E0560]: struct `Table` has no field named `i32_fild`
-  --> $DIR/insert.rs:36:8
-   |
-36 |   struct Table {
-   |  ________^
-37 | |     id: PrimaryKey,
-38 | |     field1: String,
-39 | |     i32_field: i32,
-...  |
-58 | |
-59 | |     sql!(Table.insert(field1 = 42, i32_fild = 91));
-   | |     --------------------------------------^--------
-   | |_____|_____________________________________|
-   |       |                                     field does not exist - did you mean `i32_field`?
-   |       in this macro invocation
+59 |     sql!(Table.insert(field1 = 42, field2 = "", related_field = related_field, i32_field = 91, i32_fild = 91));
+   |                                                                                                ^^^^^^^^ did you mean `i32_field`?
 
 error[E0308]: mismatched types
-  --> $DIR/insert.rs:66:32
+  --> $DIR/insert.rs:63:32
    |
-66 |     sql!(Table.insert(field1 = 42, i32_field = 91, field2 = "test", related_field = related_field));
+63 |     sql!(Table.insert(field1 = 42, i32_field = 91, field2 = "test", related_field = related_field));
    |                                ^^ expected struct `std::string::String`, found integral variable
    |
    = note: expected type `std::string::String`
               found type `{integer}`
 
 error[E0308]: mismatched types
-  --> $DIR/insert.rs:72:89
+  --> $DIR/insert.rs:69:89
    |
-72 |     sql!(Table.insert(field1 = "test", i32_field = 91, field2 = "test", related_field = 1));
+69 |     sql!(Table.insert(field1 = "test", i32_field = 91, field2 = "test", related_field = 1));
    |                                                                                         ^ expected enum `std::option::Option`, found integral variable
    |
    = note: expected type `std::option::Option<RelatedTable>`
               found type `{integer}`
 
-error: aborting due to 7 previous errors
+error: aborting due to 4 previous errors
 
