@@ -220,16 +220,21 @@ impl ToSql for FilterValue {
             FilterValue::Identifier(ref table, ref identifier) => format!("{}.{}", table, identifier.to_sql()),
             FilterValue::MethodCall(MethodCall { ref arguments, ref object_name, ref method_name, ..  }) => {
                 let methods = methods_singleton();
-                let method = &methods[method_name];
-                // In the template, $0 represents the object identifier and $1, $2, ... the
-                // arguments.
-                let mut sql = method.template.replace("$0", &object_name.to_string());
-                let mut index = 1;
-                for argument in arguments {
-                    sql = sql.replace(&format!("${}", index), &argument.to_sql());
-                    index += 1;
+                if let Some(method) = methods.get(&method_name.to_string()) {
+                    // In the template, $0 represents the object identifier and $1, $2, ... the
+                    // arguments.
+                    let mut sql = method.template.replace("$0", &object_name.to_string());
+                    let mut index = 1;
+                    for argument in arguments {
+                        sql = sql.replace(&format!("${}", index), &argument.to_sql());
+                        index += 1;
+                    }
+                    sql
                 }
-                sql
+                else {
+                    // NOTE: type checking will disallow this code to be executed.
+                    String::new()
+                }
             },
             FilterValue::None => unreachable!("FilterValue::None in FilterValue::to_sql()"),
         }

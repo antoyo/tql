@@ -108,6 +108,7 @@ use analyzer::{
     get_insert_idents,
     get_insert_position,
     get_limit_args,
+    get_method_calls,
     get_sort_idents,
     get_values_idents,
     has_joins,
@@ -116,6 +117,7 @@ use arguments::{Arg, Args, arguments};
 use ast::{
     Aggregate,
     Join,
+    MethodCall,
     Query,
     QueryType,
     TypedField,
@@ -142,6 +144,7 @@ struct SqlQueryWithArgs {
     joins: Vec<Join>,
     limit_exprs: Vec<Expr>,
     literal_arguments: Args,
+    method_calls: Vec<MethodCall>,
     query_type: QueryType,
     #[cfg(feature = "unstable")]
     span: Span,
@@ -233,6 +236,7 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
     idents.extend(get_values_idents(&query));
     let insert_idents = get_insert_idents(&query);
     let limit_exprs = get_limit_args(&query);
+    let method_calls = get_method_calls(&query);
     let (arguments, literal_arguments) = arguments(query);
     Ok(SqlQueryWithArgs {
         aggregates,
@@ -243,6 +247,7 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
         joins,
         limit_exprs,
         literal_arguments,
+        method_calls,
         query_type,
         #[cfg(feature = "unstable")]
         span,
@@ -634,10 +639,9 @@ fn generate_errors(errors: Vec<Error>) -> TokenStream {
 fn gen_query(args: SqlQueryWithArgs) -> TokenStream {
     let table_ident = &args.table_name;
     let ident = Ident::new("connection", table_ident.span);
-    let struct_expr = create_struct(table_ident, args.joins);
+    let struct_expr = create_struct(table_ident, &args.joins);
     let (aggregate_struct, aggregate_expr) = gen_aggregate_struct(&args.aggregates);
-    let args_expr = typecheck_arguments(table_ident, args.arguments, args.literal_arguments, args.idents,
-                                        args.limit_exprs, args.insert_idents, args.insert_call_span);
+    let args_expr = typecheck_arguments(table_ident, &args);
     let tokens = gen_query_expr(ident, args.sql, args_expr, struct_expr, aggregate_struct, aggregate_expr,
                                 args.query_type, table_ident);
     tokens.into()
@@ -740,10 +744,7 @@ fn gen_query_expr(connection_ident: Ident, sql_query: String, args_expr: Tokens,
 
 /// Get the arguments to send to the `postgres::stmt::Statement::query` or
 /// `postgres::stmt::Statement::execute` method.
-fn typecheck_arguments(table_ident: &Ident, arguments: Args, literal_arguments: Args, idents: Vec<Ident>,
-                       limit_exprs: Vec<Expr>, insert_idents: Option<Vec<Ident>>, insert_call_span: Option<Span>)
-    -> Tokens
-{
+fn typecheck_arguments(table_ident: &Ident, args: &SqlQueryWithArgs) -> Tokens {
     let mut arg_refs = vec![];
     let mut fns = vec![];
     let mut assigns = vec![];
@@ -778,7 +779,7 @@ fn typecheck_arguments(table_ident: &Ident, arguments: Args, literal_arguments: 
             }
         };
 
-        for arg in arguments {
+        for arg in &args.arguments {
             match arg.expression {
                 // Do not add literal arguments as they are in the final string literal.
                 Expr::Lit(_) => (),
@@ -791,30 +792,47 @@ fn typecheck_arguments(table_ident: &Ident, arguments: Args, literal_arguments: 
             add_arg(&arg);
         }
 
-        for arg in literal_arguments {
+        for arg in &args.literal_arguments {
             add_arg(&arg);
         }
     }
 
-    for name in idents {
+    for name in &args.idents {
         typechecks.push(quote_spanned! { name.span() =>
             #ident.#name = unsafe { ::std::mem::zeroed() };
         });
     }
 
-    for expr in limit_exprs {
+    for expr in &args.limit_exprs {
         typechecks.push(quote! {{
             let _: i64 = #expr;
         }});
     }
 
     let macro_name = Ident::new(&format!("tql_{}_check_missing_fields", table_ident), Span::call_site());
-    if let Some(insert_idents) = insert_idents {
+    if let Some(ref insert_idents) = args.insert_idents {
         let code = quote! {
             #macro_name!(#(#insert_idents),*);
         };
-        let span = insert_call_span.expect("insert() span");
+        let span = args.insert_call_span.expect("insert() span");
         typechecks.push(respan_tokens_with(code, span.unstable()));
+    }
+
+    for call in &args.method_calls {
+        let field = &call.object_name;
+        let method = &call.method_name;
+        let arguments = &call.arguments;
+        let trait_ident = quote_spanned! { table_ident.span() =>
+            tql::ToTqlType;
+        };
+        let method_name = quote_spanned! { table_ident.span() =>
+            to_tql_type
+        };
+        typechecks.push(quote! {{
+            use #trait_ident;
+            let #field = #ident.#field.#method_name();
+            #field.#method(#(#arguments),*);
+        }});
     }
 
     let trait_ident = quote_spanned! { table_ident.span() =>
@@ -840,7 +858,7 @@ fn typecheck_arguments(table_ident: &Ident, arguments: Args, literal_arguments: 
 }
 
 /// Create the struct expression needed by the generated code.
-fn create_struct(table_ident: &Ident, joins: Vec<Join>) -> Tokens {
+fn create_struct(table_ident: &Ident, joins: &[Join]) -> Tokens {
     let mut field_idents: Vec<String> = vec![];
     let mut field_values: Vec<String> = vec![];
     let mut index = 0usize;

@@ -72,6 +72,7 @@ use self::aggregate::{argument_to_aggregate, argument_to_group, expression_to_ag
 pub use self::aggregate::get_values_idents;
 use self::assignment::{analyze_assignments_types, argument_to_assignment};
 use self::filter::{analyze_filter_types, expression_to_filter_expression};
+pub use self::filter::get_method_calls;
 use self::get::get_expression_to_filter_expression;
 use self::insert::check_insert_arguments;
 pub use self::insert::{get_insert_idents, get_insert_position};

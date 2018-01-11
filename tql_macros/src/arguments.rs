@@ -139,7 +139,7 @@ fn add_limit_arguments(limit: Limit, arguments: &mut Args, literals: &mut Args) 
 }
 
 /// Construct an argument from the method and add it to `args`.
-fn add_with_method(args: &mut Args, literals: &mut Args, method_name: &str, object_name: &Ident, index: usize,
+fn add_with_method(args: &mut Args, literals: &mut Args, object_name: &Ident, index: usize,
                    expr: Expression)
 {
     add_expr(args, literals, Arg {
@@ -168,9 +168,9 @@ fn add_filter_value_arguments(filter_value: &FilterValue, args: &mut Args, liter
                 add(args, literals, Some(identifier.clone()), Some(table.clone()), expr);
             }
         },
-        FilterValue::MethodCall(MethodCall { ref arguments, ref method_name, ref object_name, .. }) => {
+        FilterValue::MethodCall(MethodCall { ref arguments, ref object_name, .. }) => {
             for (index, arg) in arguments.iter().enumerate() {
-                add_with_method(args, literals, method_name, object_name, index, arg.clone());
+                add_with_method(args, literals, object_name, index, arg.clone());
             }
         },
         FilterValue::None => unreachable!("FilterValue::None in add_filter_value_arguments()"),

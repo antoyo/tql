@@ -204,10 +204,10 @@ pub enum LogicalOperator {
 }
 
 /// A method call is an abstraction of SQL function call.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MethodCall {
     pub arguments: Vec<Expression>,
-    pub method_name: Identifier,
+    pub method_name: Ident,
     pub object_name: Ident,
 }
 

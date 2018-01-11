@@ -27,6 +27,11 @@
 extern crate chrono;
 extern crate postgres;
 
+mod methods;
+mod types;
+
+pub use types::ToTqlType;
+
 /// The `ForeignKey` is optional.
 ///
 /// There is no value when the `join()` method is not called.
