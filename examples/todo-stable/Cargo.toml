@@ -5,7 +5,7 @@ version = "0.1.0"
 
 [dependencies]
 chrono = "^0.4.0"
-tql = { path = "../..", default-features = false }
+tql = { path = "../..", default-features = false, features = ["chrono", "postgres"] }
 tql_macros = { path = "../../tql_macros" }
 
 [dependencies.postgres]

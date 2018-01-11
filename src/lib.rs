@@ -56,6 +56,19 @@ pub unsafe trait SqlTable {
 
 #[cfg(not(unstable))]
 #[macro_export]
+macro_rules! check_missing_fields {
+    ($($tt:tt)*) => {{
+        #[derive(StableCheckMissingFields)]
+        enum __TqlStableCheckMissingFieldEnum {
+            Input = (stringify!($($tt)*), 0).1,
+        }
+
+        __tql_call_macro_missing_fields!()
+    }};
+}
+
+#[cfg(not(unstable))]
+#[macro_export]
 macro_rules! sql {
     ($($tt:tt)*) => {{
         #[derive(StableToSql)]

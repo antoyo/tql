@@ -327,11 +327,6 @@ fn respan_tokens_with(tokens: Tokens, span: proc_macro::Span) -> Tokens {
     tokens.into_tokens()
 }
 
-#[cfg(not(feature = "unstable"))]
-fn respan_tokens_with(tokens: Tokens, span: proc_macro::Span) -> Tokens {
-    tokens
-}
-
 #[cfg(feature = "unstable")]
 fn respan_with(tokens: TokenStream, span: proc_macro::Span) -> TokenStream {
     let mut result = vec![];
@@ -539,11 +534,19 @@ fn insert_macro(item_struct: &ItemStruct) -> Tokens {
         }
 
         let macro_name = Ident::new(&format!("tql_{}_check_missing_fields", table_ident), Span::call_site());
+        #[cfg(feature = "unstable")]
+        let macro_call = quote_spanned! { table_ident.span() =>
+            tql_macros::check_missing_fields!
+        };
+        #[cfg(not(feature = "unstable"))]
+        let macro_call = quote! {
+            check_missing_fields!
+        };
         quote_spanned! { table_ident.span() =>
             #[macro_export]
             macro_rules! #macro_name {
                 ($($insert_idents:ident),*) => {
-                    tql_macros::check_missing_fields!([#(#mandatory_fields),*], [$($insert_idents),*])
+                    #macro_call([#(#mandatory_fields),*], [$($insert_idents),*])
                 };
             }
         }
@@ -815,8 +818,12 @@ fn typecheck_arguments(table_ident: &Ident, args: &SqlQueryWithArgs) -> Tokens {
         let code = quote! {
             #macro_name!(#(#insert_idents),*);
         };
-        let span = args.insert_call_span.expect("insert() span");
-        typechecks.push(respan_tokens_with(code, span.unstable()));
+        #[cfg(feature = "unstable")]
+        let code = {
+            let span = args.insert_call_span.expect("insert() span");
+            respan_tokens_with(code, span.unstable())
+        };
+        typechecks.push(code);
     }
 
     for data in &args.method_calls {
@@ -833,8 +840,8 @@ fn typecheck_arguments(table_ident: &Ident, args: &SqlQueryWithArgs) -> Tokens {
         let comparison_expr =
             if let Some(ref expr) = data.1 {
                 quote! {
-                    let mut data = #field.#method(#(#arguments),*);
-                    data = #expr;
+                    let mut _data = #field.#method(#(#arguments),*);
+                    _data = #expr;
                 }
             }
             else {
@@ -985,8 +992,8 @@ fn add_error(error: Error, compiler_errors: &mut Tokens) {
 }
 
 fn to_row_get(ident: &Ident, typ: syn::Type, ident_prefix: &str) -> Tokens {
-    if let syn::Type::Path(TypePath { path: Path { ref segments, .. }, .. }) = typ {
-        let segment = segments.first().expect("first segment").into_value();
+    if let syn::Type::Path(path) = typ {
+        let segment = path.path.segments.first().expect("first segment").into_value();
         if segment.ident == "ForeignKey" {
             return quote! {
                 None
@@ -1007,8 +1014,13 @@ impl syn::synom::Synom for Arguments {
     named!(parse -> Self, map!(call!(Punctuated::parse_terminated), Arguments));
 }
 
+#[cfg(feature = "unstable")]
 #[proc_macro]
 pub fn check_missing_fields(input: TokenStream) -> TokenStream {
+    gen_check_missing_fields(input)
+}
+
+fn gen_check_missing_fields(input: TokenStream) -> TokenStream {
     let args: Arguments = parse(input).expect("parse check_missing_fields!()");
     let args = args.0;
     let arg1 = &args[0];
@@ -1026,11 +1038,23 @@ pub fn check_missing_fields(input: TokenStream) -> TokenStream {
 
     if let Expr::Array(ref array) = *arg2 {
         for elem in &array.elems {
-            if let Expr::Group(ref group) = *elem {
-                if let Expr::Path(ref path) = *group.expr {
-                    fields.push(path.path.segments[0].ident.clone());
+            let path =
+                if let Expr::Group(ref group) = *elem {
+                    if let Expr::Path(ref path) = *group.expr {
+                        path
+                    }
+                    else {
+                        panic!("Expecting path");
+                    }
                 }
-            }
+                // NOTE: need this condition on stable.
+                else if let Expr::Path(ref path) = *elem {
+                    path
+                }
+                else {
+                    panic!("Expecting path");
+                };
+            fields.push(path.path.segments[0].ident.clone());
         }
     }
 
@@ -1056,6 +1080,33 @@ pub fn check_missing_fields(input: TokenStream) -> TokenStream {
 }
 
 // Stable implementation.
+
+#[proc_macro_derive(StableCheckMissingFields)]
+pub fn stable_check_missing_fieds(input: TokenStream) -> TokenStream {
+    let enumeration: Item = parse(input).unwrap();
+    if let Item::Enum(ItemEnum { ref variants, .. }) = enumeration {
+        let variant = &variants.first().unwrap().value().discriminant;
+        if let Expr::Field(ref field) = variant.as_ref().unwrap().1 {
+            if let Expr::Tuple(ref tuple) = *field.base {
+                if let Expr::Macro(ref macr) = **tuple.elems.first().unwrap().value() {
+                    let code = gen_check_missing_fields(macr.mac.tts.clone().into());
+                    let code = proc_macro2::TokenStream::from(code);
+
+                    let gen = quote! {
+                        macro_rules! __tql_call_macro_missing_fields {
+                            () => {{
+                                #code
+                            }};
+                        }
+                    };
+                    return gen.into();
+                }
+            }
+        }
+    }
+
+    empty_token_stream()
+}
 
 // TODO: make this function more robust.
 #[proc_macro_derive(StableToSql)]
