@@ -101,6 +101,7 @@ use analyzer::{
     analyze,
     analyze_types,
     get_insert_idents,
+    get_insert_position,
     get_limit_args,
     get_sort_idents,
     get_values_idents,
@@ -131,6 +132,7 @@ struct SqlQueryWithArgs {
     aggregates: Vec<Aggregate>,
     arguments: Args,
     idents: Vec<Ident>,
+    insert_call_span: Option<Span>,
     insert_idents: Option<Vec<Ident>>,
     joins: Vec<Join>,
     limit_exprs: Vec<Expr>,
@@ -206,6 +208,7 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
     let parser = Parser::new();
     let method_calls = parser.parse(&expr)?;
     let table_name = method_calls.name.clone().expect("table name in method_calls");
+    let insert_call_span = get_insert_position(&method_calls);
     let mut query = analyze(method_calls)?;
     optimize(&mut query);
     query = analyze_types(query)?;
@@ -230,6 +233,7 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
         aggregates,
         arguments,
         idents,
+        insert_call_span,
         insert_idents,
         joins,
         limit_exprs,
@@ -491,50 +495,16 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
     }
 }
 
-// FIXME: too slow. Probably caused by subset_perms or the clone().
-fn all_perms(elems: &[Ident]) -> Vec<Vec<Ident>> {
-    let mut result = vec![];
-    let subsets = subset_perms(elems);
-    for mut subset in subsets {
-        result.extend(permutations(&mut subset));
-    }
-    result
-}
-
-fn subset_perms(elems: &[Ident]) -> Vec<Vec<Ident>> {
+fn permutations(elems: &[Ident]) -> Vec<Vec<Ident>> {
     let mut result = vec![vec![elems[0]]];
     if elems.len() > 1 {
-        for perm in subset_perms(&elems[1..]) {
+        for perm in permutations(&elems[1..]) {
             result.push(perm.clone());
             let mut permu = vec![elems[0]];
             permu.extend(perm);
             result.push(permu);
         }
     }
-    result
-}
-
-fn permutations(elems: &mut [Ident]) -> Vec<Vec<Ident>> {
-    fn perms(n: usize, elems: &mut [Ident], result: &mut Vec<Vec<Ident>>) {
-        if n == 1 {
-            result.push(elems.to_vec());
-        }
-        else {
-            for i in 0 .. n - 1 {
-                perms(n - 1, elems, result);
-                if n % 2 == 0 {
-                    elems.swap(i, n - 1);
-                }
-                else {
-                    elems.swap(0, n - 1);
-                }
-            }
-            perms(n - 1, elems, result);
-        }
-    }
-
-    let mut result = vec![];
-    perms(elems.len(), elems, &mut result);
     result
 }
 
@@ -559,7 +529,6 @@ fn get_missing_fields(fields: &[Ident], mandatory_fields: &[Ident]) -> Option<Ve
 /// provided.
 fn insert_macro(item_struct: &ItemStruct) -> Tokens {
     let table_ident = &item_struct.ident;
-    let macro_name = Ident::new(&format!("tql_{}_check_missing_fields", table_ident), Span::call_site());
     if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
         let mut mandatory_fields = vec![];
         let mut all_fields = vec![];
@@ -573,7 +542,8 @@ fn insert_macro(item_struct: &ItemStruct) -> Tokens {
             }
         }
 
-        let permutations = all_perms(&all_fields);
+        all_fields.sort();
+        let permutations = permutations(&all_fields);
         let mut patterns = vec![];
         let mut checks = vec![];
         for permutation in &permutations {
@@ -593,15 +563,16 @@ fn insert_macro(item_struct: &ItemStruct) -> Tokens {
         }
 
         // TODO: also duplicate all the permutations to include unknown fields.
-        // TODO: also create a method-macro 2.0 to avoid having to use #[macro_use] on stable.
-        // TODO: also move the error on the right position.
+        // TODO: also create a method-macro 2.0 to avoid having to use #[macro_use] on nightly (not
+        // possible).
 
-        quote_spanned! { table_ident.span() =>
+        let macro_name = Ident::new(&format!("tql_{}_check_missing_fields", table_ident), Span::call_site());
+        respan_tokens_with(quote_spanned! { table_ident.span() =>
             #[macro_export]
             macro_rules! #macro_name {
                 #((#patterns) => #checks);*
             }
-        }
+        }, table_ident.span().unstable())
     }
     else {
         unreachable!("Check is done in get_struct_fields()")
@@ -698,7 +669,7 @@ fn gen_query(args: SqlQueryWithArgs) -> TokenStream {
     let struct_expr = create_struct(table_ident, args.joins);
     let (aggregate_struct, aggregate_expr) = gen_aggregate_struct(&args.aggregates);
     let args_expr = typecheck_arguments(table_ident, args.arguments, args.literal_arguments, args.idents,
-                                        args.limit_exprs, args.insert_idents);
+                                        args.limit_exprs, args.insert_idents, args.insert_call_span);
     let tokens = gen_query_expr(ident, args.sql, args_expr, struct_expr, aggregate_struct, aggregate_expr,
                                 args.query_type, table_ident);
     tokens.into()
@@ -802,7 +773,9 @@ fn gen_query_expr(connection_ident: Ident, sql_query: String, args_expr: Tokens,
 /// Get the arguments to send to the `postgres::stmt::Statement::query` or
 /// `postgres::stmt::Statement::execute` method.
 fn typecheck_arguments(table_ident: &Ident, arguments: Args, literal_arguments: Args, idents: Vec<Ident>,
-                       limit_exprs: Vec<Expr>, insert_idents: Option<Vec<Ident>>) -> Tokens {
+                       limit_exprs: Vec<Expr>, insert_idents: Option<Vec<Ident>>, insert_call_span: Option<Span>)
+    -> Tokens
+{
     let mut arg_refs = vec![];
     let mut fns = vec![];
     let mut assigns = vec![];
@@ -872,7 +845,8 @@ fn typecheck_arguments(table_ident: &Ident, arguments: Args, literal_arguments: 
         let code = quote! {
             #macro_name!(#(#insert_idents),*);
         };
-        typechecks.push(code);
+        let span = insert_call_span.expect("insert() span");
+        typechecks.push(respan_tokens_with(code, span.unstable()));
     }
 
     let trait_ident = quote_spanned! { table_ident.span() =>

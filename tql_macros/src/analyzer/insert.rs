@@ -25,6 +25,7 @@ use std::collections::HashSet;
 
 use proc_macro2::Span;
 use syn::Ident;
+use syn::spanned::Spanned;
 
 use ast::{
     Assignment,
@@ -33,6 +34,7 @@ use ast::{
     WithSpan,
 };
 use error::Error;
+use parser::MethodCalls;
 use state::BothTypes;
 use types::Type;
 
@@ -81,7 +83,17 @@ pub fn get_insert_idents(query: &Query) -> Option<Vec<Ident>> {
                 idents.push(ident.clone());
             }
         }
+        idents.sort();
         return Some(idents)
+    }
+    None
+}
+
+pub fn get_insert_position(method_calls: &MethodCalls) -> Option<Span> {
+    for call in &method_calls.calls {
+        if call.name == "insert" {
+            return Some(call.position);
+        }
     }
     None
 }

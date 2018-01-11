@@ -74,7 +74,7 @@ use self::assignment::{analyze_assignments_types, argument_to_assignment};
 use self::filter::{analyze_filter_types, expression_to_filter_expression};
 use self::get::get_expression_to_filter_expression;
 use self::insert::check_insert_arguments;
-pub use self::insert::get_insert_idents;
+pub use self::insert::{get_insert_idents, get_insert_position};
 use self::join::argument_to_join;
 use self::limit::{analyze_limit_types, argument_to_limit};
 pub use self::limit::get_limit_args;
@@ -250,9 +250,9 @@ fn check_method_calls_validity(method_calls: &MethodCalls, errors: &mut Vec<Erro
         };
 
     let main_method = method_calls.calls.iter()
-        .filter(|call| method_map.contains_key(&*call.name) )
+        .filter(|call| method_map.contains_key(&call.name.as_ref()) )
         .next()
-        .map_or("all", |call| call.name.as_str());
+        .map_or("all", |call| call.name.as_ref());
 
     // TODO: check that the insert, update or delete methods are not called more than once.
     let mut valid_methods = vec![main_method];
@@ -260,7 +260,7 @@ fn check_method_calls_validity(method_calls: &MethodCalls, errors: &mut Vec<Erro
 
     let methods = get_methods();
     let invalid_methods = method_calls.calls.iter()
-        .filter(|call| methods.contains(&call.name) && !valid_methods.contains(&&*call.name));
+        .filter(|call| methods.contains(&call.name.to_string()) && !valid_methods.contains(&call.name.as_ref()));
 
     for method in invalid_methods {
         errors.push(Error::new(
@@ -268,7 +268,7 @@ fn check_method_calls_validity(method_calls: &MethodCalls, errors: &mut Vec<Erro
                 method = method.name,
                 main_method = main_method
             ),
-            method.position,
+            method.name.span(),
         ));
     }
 }
@@ -277,12 +277,12 @@ fn check_method_calls_validity(method_calls: &MethodCalls, errors: &mut Vec<Erro
 fn check_methods(method_calls: &MethodCalls, errors: &mut Vec<Error>) {
     let methods = get_methods();
     for method_call in &method_calls.calls {
-        if !methods.contains(&method_call.name) {
+        if !methods.contains(&method_call.name.to_string()) {
             let mut error = Error::new(
                 &format!("no method named `{}` found in tql", method_call.name),
-                method_call.position,
+                method_call.name.span(),
             );
-            propose_similar_name(&method_call.name, methods.iter().map(String::as_ref), &mut error);
+            propose_similar_name(method_call.name.as_ref(), methods.iter().map(String::as_ref), &mut error);
             errors.push(error);
         }
     }
@@ -310,7 +310,7 @@ fn check_no_arguments(method_call: &MethodCall, errors: &mut Vec<Error>) {
                     param_count = length,
                     plural = plural_verb(length)
                    ),
-            method_call.position, "E0061"
+            method_call.name.span(), "E0061"
        ));
     }
 }
@@ -550,7 +550,7 @@ fn process_methods(calls: &[MethodCall], table_name: &str, delete_position: &mut
     let mut query_data = QueryData::default();
 
     for method_call in calls {
-        match &method_call.name[..] {
+        match method_call.name.as_ref() {
             "aggregate" => {
                 try(convert_arguments(&method_call.args, argument_to_aggregate), &mut errors, |aggrs| {
                     query_data.aggregates = aggrs;
@@ -567,7 +567,7 @@ fn process_methods(calls: &[MethodCall], table_name: &str, delete_position: &mut
             "delete" => {
                 check_no_arguments(&method_call, &mut errors);
                 query_data.query_type = SqlQueryType::Delete;
-                *delete_position = Some(method_call.position);
+                *delete_position = Some(method_call.name.span());
             },
             "drop" => {
                 check_no_arguments(&method_call, &mut errors);
@@ -607,7 +607,7 @@ fn process_methods(calls: &[MethodCall], table_name: &str, delete_position: &mut
                 });
                 if !query_data.assignments.is_empty() {
                     // TODO: check even if there are errors in the assignation types.
-                    check_insert_arguments(&query_data.assignments, method_call.position, &mut errors);
+                    check_insert_arguments(&query_data.assignments, method_call.name.span(), &mut errors);
                 }
                 query_data.query_type = SqlQueryType::Insert;
             },
