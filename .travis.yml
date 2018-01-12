@@ -32,7 +32,7 @@ matrix:
           script:
               - cargo build
               - cargo test --features chrono,postgres
-              - cargo test --features tql/postgres --manifest-path testcrate/Cargo.toml
+              - cargo test --features tql/postgres,tql/chrono --manifest-path testcrate/Cargo.toml
           env: RUSTFLAGS="--cfg procmacro2_semver_exempt"
     allow_failures:
         - rust: beta

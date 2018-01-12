@@ -2,43 +2,48 @@
  * Primary key field
  * SQLite: ROWID
  *
- * FIXME: error (cannot find macro `tql_Message_check_missing_fields!` in this scope) when putting
- * another custom derive (like Serialize in the chat example) before SqlTable.
+ * TODO: document the management of the connection.
+ * TODO: improve the error handling of the generated code.
+ * TODO: test that get() does not work when the primary key is not named id.
+ * TODO: use as_ref() for Ident instead of &ident.to_string().
+ * TODO: support recursive foreign key.
+ * TODO: write fail tests for stable using include!().
  * TODO: try to get the columns by OID from postgres to improve the syntax.
  * TODO: try to hide Option in the mismatched type error message for ForeignKey.
- * TODO: test that get() does not work when the primary key is not named id.
- * TODO: support recursive foreign key.
  * TODO: use fully-qualified name everywhere in the query (aggregate, …).
  * TODO: check errors for joined tables.
- * TODO: allow selecting only some fields.
- * TODO: remove allow_failure for beta when this issue is fixed:
- * https://github.com/rust-lang/rust/issues/46478
  * TODO: for the tests of the other backend, create a new crate and include!() the _expr test files
  * and create a new test to check that all the files are included, so that the tests fail when we
  * forget to include!() a file.
- * TODO: write fail tests for stable using include!().
+ *
+ * TODO: ManyToMany.
+ * TODO: support the missing types
+ * (https://docs.rs/postgres/0.15.1/postgres/types/trait.ToSql.html).
+ * TODO: support other types (uuid, string) for the primary key, possibly by making it generic.
  * TODO: allow using other fields in filter(), update(), … like F() expressions in Django
  ** Table.filter(field1 > Table.field2) may not work.
  ** Table.filter(field1 > $field2)
- * TODO: ManyToMany.
- * TODO: support other types (uuid, string) for the primary key, possibly by making it generic.
- * TODO: support the missing types
- * (https://docs.rs/postgres/0.15.1/postgres/types/trait.ToSql.html).
- * TODO: join on non foreign key.
  * TODO: unique constraints.
  * TODO: support primary key with multiple columns.
+ * TODO: allow selecting only some fields.
+ * TODO: join on non foreign key.
  * TODO: allow user-defined functions (maybe with partial query?) and types.
- * TODO: document the management of the connection.
  * TODO: add table_name attribute to allow changing the table name.
- * TODO: improve the error handling of the generated code.
- * TODO: use as_ref() for Ident instead of &ident.to_string().
+ *
+ * TODO: remove allow_failure for beta when this issue is fixed:
+ * https://github.com/rust-lang/rust/issues/46478
+ *
+ * TODO: use synom instead of parsing manually?
+ * FIXME: error (cannot find macro `tql_Message_check_missing_fields!` in this scope) when putting
+ * another custom derive (like Serialize in the chat example) before SqlTable.
+ *
  * TODO: improve formatting of the README table.
  * TODO: the error message sometimes show String instead of &str.
  * FIXME: warning should not be errors on stable.
  *
  * TODO: switch to a binding to a C postgresql library for better performance?
- * FIXME: postgres crate might be using dynamic dispatch (ToSql), we might get better performance
- * if we avoid this.
+ * FIXME: postgres crate seems to be doing too much communication with the server, which might
+ * explain why it is slow.
  */
 
 #![cfg_attr(feature = "unstable", feature(proc_macro))]

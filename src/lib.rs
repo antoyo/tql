@@ -25,6 +25,7 @@
 
 #[cfg(feature = "chrono")]
 extern crate chrono;
+#[cfg(feature = "postgres")]
 extern crate postgres;
 
 mod methods;
@@ -49,8 +50,10 @@ pub unsafe trait SqlTable {
 
     fn default() -> Self;
 
+    #[cfg(feature = "postgres")]
     fn from_row(row: &::postgres::rows::Row) -> Self;
 
+    #[cfg(feature = "postgres")]
     fn from_joined_row(row: &::postgres::rows::Row) -> Self;
 }
 

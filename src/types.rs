@@ -185,7 +185,6 @@ impl ToTqlType for NaiveTime {
 #[doc(hidden)]
 pub struct TqlOption;
 
-#[cfg(feature = "chrono")]
 impl<T> ToTqlType for Option<T> {
     type Target = TqlOption;
     fn to_tql_type(&self) -> Self::Target { TqlOption }
@@ -194,7 +193,6 @@ impl<T> ToTqlType for Option<T> {
 #[doc(hidden)]
 pub struct TqlString;
 
-#[cfg(feature = "chrono")]
 impl ToTqlType for String {
     type Target = TqlString;
     fn to_tql_type(&self) -> Self::Target { TqlString }
