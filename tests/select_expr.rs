@@ -77,6 +77,8 @@ fn test_select() {
     let _ = sql!(RelatedTableSelectExpr.create());
     let _ = sql!(TableSelectExpr.create());
 
+    tql::init(&connection);
+
     let datetime: DateTime<Utc> = FromStr::from_str("2015-11-16T15:51:12-05:00").unwrap();
     let datetime2: DateTime<Utc> = FromStr::from_str("2013-11-15T15:51:12-05:00").unwrap();
 
@@ -356,10 +358,7 @@ fn test_select() {
     let table = sql!(TableSelectExpr.get(!(field2 < 24))).unwrap();
     assert_eq!(id1, table.id);
 
-    let mut tables = sql!(TableSelectExpr.all().join(related_field = RelatedTableSelectExpr {
-        field1,
-        id,
-    }));
+    let mut tables = sql!(TableSelectExpr.all().join(related_field = RelatedTableSelectExpr));
     assert_eq!(5, tables.len());
     let_vec!(table1, table2, table3, table4, table5 = tables);
     assert_eq!(id1, table1.id);
@@ -373,10 +372,7 @@ fn test_select() {
     assert_eq!(id5, table5.id);
     assert_eq!(related_field2.id, table5.related_field.unwrap().id);
 
-    let mut tables = sql!(TableSelectExpr.join(related_field = RelatedTableSelectExpr {
-        field1,
-        id,
-    }));
+    let mut tables = sql!(TableSelectExpr.join(related_field = RelatedTableSelectExpr));
     assert_eq!(5, tables.len());
     let_vec!(table1, table2, table3, table4, table5 = tables);
     assert_eq!(id1, table1.id);

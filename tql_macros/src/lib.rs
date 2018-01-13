@@ -2,6 +2,8 @@
  * Primary key field
  * SQLite: ROWID
  *
+ * TODO: try to get the table of a foreign key field so that it's not necessary to specify in the
+ * query.
  * TODO: document the management of the connection.
  * TODO: improve the error handling of the generated code.
  * TODO: test that get() does not work when the primary key is not named id.
@@ -468,12 +470,7 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
 
         let field_idents = named.iter()
             .map(|field| (field.ident.expect("field has name"), field.ty.clone()));
-        let columns = field_idents.map(|(ident, typ)| to_row_get(&ident, typ, ""));
-
-        let field_idents = named.iter()
-            .map(|field| (field.ident.expect("field has name"), field.ty.clone()));
-        let fully_qualified_columns = field_idents.map(|(ident, typ)|
-            to_row_get(&ident, typ, &format!("{}.", table_ident)));
+        let columns = field_idents.map(|(ident, typ)| to_row_get(&table_ident, &ident, typ));
 
         quote! {
             unsafe impl ::tql::SqlTable for #table_ident {
@@ -486,16 +483,9 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
                 }
 
                 #[allow(unused)]
-                fn from_row(row: &::postgres::rows::Row) -> Self {
+                fn from_row(row: &::postgres::rows::Row, columns: &[::postgres::stmt::Column]) -> Self {
                     Self {
                         #(#field_names: #columns,)*
-                    }
-                }
-
-                #[allow(unused)]
-                fn from_joined_row(row: &::postgres::rows::Row) -> Self {
-                    Self {
-                        #(#field_names2: #fully_qualified_columns,)*
                     }
                 }
             }
@@ -660,6 +650,7 @@ fn gen_query(args: SqlQueryWithArgs) -> TokenStream {
 fn gen_query_expr(connection_ident: Ident, sql_query: String, args_expr: Tokens, struct_expr: Tokens,
                   aggregate_struct: Tokens, aggregate_expr: Tokens, query_type: QueryType, table_ident: &Ident) -> Tokens
 {
+    let result_ident = Ident::from("result");
     let sql_query = string_literal(&sql_query);
     match query_type {
         QueryType::AggregateMulti => {
@@ -712,10 +703,11 @@ fn gen_query_expr(connection_ident: Ident, sql_query: String, args_expr: Tokens,
         },
         QueryType::SelectMulti => {
             let result =
-                quote! {{
-                    let result = #connection_ident.prepare(#sql_query).expect("prepare query");
-                    result.query(&#args_expr).expect("execute query").iter()
-                }};
+                quote! {
+                    let #result_ident = #connection_ident.prepare(#sql_query).expect("prepare query");
+                    let #result_ident = #result_ident.query(&#args_expr).expect("execute query");
+                    let results = #result_ident.iter();
+                };
             let call = quote! {
                 .map(|row| {
                     #struct_expr
@@ -723,24 +715,27 @@ fn gen_query_expr(connection_ident: Ident, sql_query: String, args_expr: Tokens,
                 // TODO: return an iterator instead of a vector.
 
             };
-            quote! {
-                #result#call
-            }
+            quote! {{
+                #result
+                results#call
+            }}
         },
         QueryType::SelectOne => {
             let result =
-                quote! {{
-                    let result = #connection_ident.prepare(#sql_query).expect("prepare query");
-                    result.query(&#args_expr).expect("execute query").iter().next()
-                }};
+                quote! {
+                    let #result_ident = #connection_ident.prepare(#sql_query).expect("prepare query");
+                    let #result_ident = #result_ident.query(&#args_expr).expect("execute query");
+                    let results = #result_ident.iter().next();
+                };
             let call = quote! {
                 .map(|row| {
                     #struct_expr
                 })
             };
-            quote! {
-                #result#call
-            }
+            quote! {{
+                #result
+                results#call
+            }}
         },
         QueryType::Exec => {
             quote! {{
@@ -892,17 +887,18 @@ fn create_struct(table_ident: &Ident, joins: &[Join]) -> Tokens {
         joins.iter()
             .map(|join| &join.base_field);
     let row_ident = quote! { row };
+    let result_ident = Ident::from("result");
     let exprs =
         joins.iter()
             .map(|join| {
                 let ident = &join.joined_table;
                 quote_spanned! { ident.span() =>
-                    Some(<#ident as ::tql::SqlTable>::from_joined_row(&#row_ident))
+                    Some(<#ident as ::tql::SqlTable>::from_row(&#row_ident, #result_ident.columns()))
                 }
             });
     let code = quote_spanned! { table_ident.span() => {
         #[allow(unused_mut)]
-        let mut item = <#table_ident as ::tql::SqlTable>::from_row(&#row_ident);
+        let mut item = <#table_ident as ::tql::SqlTable>::from_row(&#row_ident, #result_ident.columns());
         #(item.#joined_fields = #exprs;)*
         item
     }};
@@ -996,7 +992,7 @@ fn add_error(error: Error, compiler_errors: &mut Tokens) {
     };
 }
 
-fn to_row_get(ident: &Ident, typ: syn::Type, ident_prefix: &str) -> Tokens {
+fn to_row_get(table_name: &Ident, column_name: &Ident, typ: syn::Type) -> Tokens {
     if let syn::Type::Path(path) = typ {
         let segment = path.path.segments.first().expect("first segment").into_value();
         if segment.ident == "ForeignKey" {
@@ -1005,9 +1001,10 @@ fn to_row_get(ident: &Ident, typ: syn::Type, ident_prefix: &str) -> Tokens {
             };
         }
     }
-    let field_name = format!("{}{}", ident_prefix, ident);
+    let table_name = table_name.to_string().to_lowercase();
+    let column_name = column_name.to_string();
     quote! {
-        row.get(#field_name)
+        row.get(::tql::index_from_table_column(#table_name, #column_name, columns))
     }
 }
 

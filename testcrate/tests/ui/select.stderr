@@ -127,7 +127,7 @@ error[E0308]: mismatched types
 error[E0609]: no field `test` on type `Table`
    --> $DIR/select.rs:152:27
     |
-152 |     sql!(Table.all().join(test = RelatedTable { id }));
+152 |     sql!(Table.all().join(test = RelatedTable));
     |                           ^^^^ unknown field
     |
     = note: available fields are: `id`, `field1`, `i32_field`
@@ -135,14 +135,14 @@ error[E0609]: no field `test` on type `Table`
 error[E0609]: no field `field` on type `Table`
    --> $DIR/select.rs:155:27
     |
-155 |     sql!(Table.all().join(field = RelatedTable { id }));
+155 |     sql!(Table.all().join(field = RelatedTable));
     |                           ^^^^^ did you mean `field1`?
 
 error[E0308]: mismatched types
    --> $DIR/select.rs:159:36
     |
-159 |     sql!(Table.all().join(field1 = RelatedTable { id }, i32_field = RelatedTable {}));
-    |                                    ^^^^^^^^^^^^^^^^^^^ expected struct `std::string::String`, found enum `std::option::Option`
+159 |     sql!(Table.all().join(field1 = RelatedTable, i32_field = RelatedTable));
+    |                                    ^^^^^^^^^^^^ expected struct `std::string::String`, found enum `std::option::Option`
     |
     = note: expected type `std::string::String`
                found type `std::option::Option<RelatedTable>`
@@ -151,10 +151,10 @@ error[E0308]: mismatched types
             - .map_or_else(...)
 
 error[E0308]: mismatched types
-   --> $DIR/select.rs:159:69
+   --> $DIR/select.rs:159:62
     |
-159 |     sql!(Table.all().join(field1 = RelatedTable { id }, i32_field = RelatedTable {}));
-    |                                                                     ^^^^^^^^^^^^^^^ expected i32, found enum `std::option::Option`
+159 |     sql!(Table.all().join(field1 = RelatedTable, i32_field = RelatedTable));
+    |                                                              ^^^^^^^^^^^^ expected i32, found enum `std::option::Option`
     |
     = note: expected type `i32`
                found type `std::option::Option<RelatedTable>`

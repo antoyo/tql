@@ -149,14 +149,14 @@ fn main() {
     //~^ ERROR `Tble` does not name an SQL table
     //~| HELP did you mean Table?
 
-    sql!(Table.all().join(test = RelatedTable { id }));
+    sql!(Table.all().join(test = RelatedTable));
     //~^ ERROR attempted access of field `test` on type `Table`, but no field with that name was found
 
-    sql!(Table.all().join(field = RelatedTable { id }));
+    sql!(Table.all().join(field = RelatedTable));
     //~^ ERROR attempted access of field `field` on type `Table`, but no field with that name was found
     //~| HELP did you mean field1?
 
-    sql!(Table.all().join(field1 = RelatedTable { id }, i32_field = RelatedTable {}));
+    sql!(Table.all().join(field1 = RelatedTable, i32_field = RelatedTable));
     //~^ ERROR mismatched types:
     //~| expected `ForeignKey<_>`,
     //~| found `String`

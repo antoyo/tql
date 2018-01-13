@@ -12,7 +12,8 @@ version = "^0.4.0"
 
 [dependencies.postgres]
 optional = true
-version = "^0.15.1"
+git = "https://github.com/antoyo/rust-postgres"
+#version = "^0.15.1"
 
 [dev-dependencies]
 handlebars-iron = "^0.26.0"
@@ -27,7 +28,8 @@ urlencoded = "^0.6.0"
 
 [dev-dependencies.postgres]
 features = ["with-chrono"]
-version = "^0.15.1"
+#version = "^0.15.1"
+git = "https://github.com/antoyo/rust-postgres"
 
 [dependencies.tql_macros]
 path = "./tql_macros"

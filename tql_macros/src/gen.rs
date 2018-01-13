@@ -358,7 +358,7 @@ impl ToSql for Query {
                         values = values.to_sql(),
                     ))
             },
-            Query::Select { ref filter, get: _get, ref joins, ref limit, ref order, ref selected_fields, ref table } => {
+            Query::Select { ref filter, get: _get, ref joins, ref limit, ref order, ref table } => {
                 let where_clause = filter_to_where_clause(filter);
                 let order_clause =
                     if has_order_clauses(order) {
@@ -367,18 +367,7 @@ impl ToSql for Query {
                     else {
                         ""
                     };
-                let additional_fields =
-                    if selected_fields.is_empty() {
-                        "".to_string()
-                    }
-                    else {
-                        selected_fields.iter()
-                            .map(|field| format!(", {field} AS \"{field}\"", field = field))
-                            .collect::<Vec<_>>()
-                            .join("")
-                    };
-                replace_placeholder(format!("SELECT {table}.*{additional_fields} FROM {table}{joins}{where_clause}{filter}{order_clause}{order}{limit}",
-                                            additional_fields = additional_fields,
+                replace_placeholder(format!("SELECT * FROM {table}{joins}{where_clause}{filter}{order_clause}{order}{limit}",
                                             table = table,
                                             joins = joins.to_sql(),
                                             where_clause = where_clause,

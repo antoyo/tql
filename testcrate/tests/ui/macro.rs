@@ -67,7 +67,7 @@ fn main() {
     sql!(Table.update(i32_field = 10).filter(i32_field == 10).delete());
     //~^ ERROR cannot call the delete() method with the update() method
 
-    sql!(Table.join(field2 = Table { id, field1, i32_field, field2 }).filter(i32_field == 10).delete());
+    sql!(Table.join(field2 = Table).filter(i32_field == 10).delete());
     //~^ ERROR cannot call the join() method with the delete() method
 
     sql!(Table.create().insert().filter(i32_field == 10).delete());

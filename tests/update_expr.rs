@@ -75,6 +75,8 @@ fn test_update() {
     let _ = sql!(RelatedTable.create());
     let _ = sql!(TableUpdateExpr.create());
 
+    tql::init(&connection);
+
     let id = sql!(RelatedTable.insert(field1 = "")).unwrap();
     let related_field = sql!(RelatedTable.get(id)).unwrap();
 
@@ -134,6 +136,8 @@ fn test_update_operation() {
 
     let _ = sql!(RelatedTable.create());
     let _ = sql!(TableUpdateExpr.create());
+
+    tql::init(&connection);
 
     let id = sql!(RelatedTable.insert(field1 = "")).unwrap();
     let related_field = sql!(RelatedTable.get(id)).unwrap();

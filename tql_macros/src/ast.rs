@@ -264,7 +264,6 @@ pub enum Query {
         joins: Vec<Join>,
         limit: Limit,
         order: Vec<Order>,
-        selected_fields: Vec<String>,
         table: Identifier,
     },
     Update {

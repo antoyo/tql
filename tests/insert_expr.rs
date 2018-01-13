@@ -73,6 +73,8 @@ fn test_insert() {
     let _ = sql!(RelatedTableInsertExpr.create());
     let _ = sql!(TableInsertExpr.drop());
 
+    tql::init(&connection);
+
     let related_id = sql!(RelatedTableInsertExpr.insert(field1 = 42)).unwrap();
     let related_field = sql!(RelatedTableInsertExpr.get(related_id)).unwrap();
 
@@ -84,6 +86,8 @@ fn test_insert() {
 
     let _ = sql!(TableInsertExpr.create());
 
+    tql::init(&connection);
+
     let id = sql!(TableInsertExpr.insert(field1 = "value1", field2 = 55, related_field = related_field)).unwrap();
     assert_eq!(1, id);
 
@@ -93,10 +97,7 @@ fn test_insert() {
     assert!(table.related_field.is_none());
     assert!(table.optional_field.is_none());
 
-    let table = sql!(TableInsertExpr.get(id).join(related_field = RelatedTableInsertExpr {
-        field1,
-        id,
-    })).unwrap();
+    let table = sql!(TableInsertExpr.get(id).join(related_field = RelatedTableInsertExpr)).unwrap();
     assert_eq!("value1", table.field1);
     assert_eq!(55, table.field2);
     let related_table = table.related_field.unwrap();

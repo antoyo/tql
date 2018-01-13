@@ -123,7 +123,6 @@ struct QueryData {
     // Select
     limit: Limit,
     order: Vec<Order>,
-    selected_fields: Vec<String>,
     // All
     query_type: SqlQueryType,
 }
@@ -460,7 +459,7 @@ fn mismatched_types<S: Display, T: Display>(expected_type: S, actual_type: &T, p
 }
 
 /// Create a new query from all the data gathered by the method calls.
-fn new_query(QueryData { selected_fields, filter, joins, limit, order, assignments, aggregates, groups,
+fn new_query(QueryData { filter, joins, limit, order, assignments, aggregates, groups,
     aggregate_filter, query_type }: QueryData, table_name: String) -> Query
 {
     match query_type {
@@ -498,7 +497,6 @@ fn new_query(QueryData { selected_fields, filter, joins, limit, order, assignmen
                 joins,
                 limit,
                 order,
-                selected_fields,
                 table: table_name,
             }
         },
@@ -615,8 +613,7 @@ fn process_methods(calls: &[MethodCall], table_name: &str, delete_position: &mut
             "join" => {
                 try(convert_arguments(&method_call.args, |expr| argument_to_join(expr, table_name)), &mut errors,
                     |result| {
-                        for (new_join, selected_field) in result {
-                            query_data.selected_fields.extend(selected_field);
+                        for new_join in result {
                             query_data.joins.push(new_join);
                         }
                     });

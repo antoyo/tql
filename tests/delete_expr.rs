@@ -56,6 +56,8 @@ fn test_delete() {
 
     let _ = sql!(TableDeleteExpr.create());
 
+    tql::init(&connection);
+
     let id = sql!(TableDeleteExpr.insert(field1 = "", field2 = 0)).unwrap();
 
     let table = sql!(TableDeleteExpr.get(id));

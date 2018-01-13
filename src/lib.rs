@@ -31,6 +31,17 @@ extern crate postgres;
 mod methods;
 mod types;
 
+use std::collections::HashMap;
+use std::mem;
+use std::sync::{Arc, Mutex, Once, ONCE_INIT};
+
+#[cfg(feature = "postgres")]
+use postgres::Connection;
+#[cfg(feature = "postgres")]
+use postgres::stmt::Column;
+#[cfg(feature = "postgres")]
+use postgres::types::Oid;
+
 pub use types::{Date, DateTime, Time, ToTqlType};
 pub use types::numbers::{i16, i32, i64, i8, u16, u32, u64, u8};
 
@@ -51,10 +62,7 @@ pub unsafe trait SqlTable {
     fn default() -> Self;
 
     #[cfg(feature = "postgres")]
-    fn from_row(row: &::postgres::rows::Row) -> Self;
-
-    #[cfg(feature = "postgres")]
-    fn from_joined_row(row: &::postgres::rows::Row) -> Self;
+    fn from_row(row: &::postgres::rows::Row, columns: &[::postgres::stmt::Column]) -> Self;
 }
 
 #[cfg(not(unstable))]
@@ -81,4 +89,62 @@ macro_rules! sql {
 
         __tql_call_macro!()
     }};
+}
+
+#[cfg(feature = "postgres")]
+#[doc(hidden)]
+pub fn index_from_table_column(table: &str, column_name: &str, columns: &[Column]) -> usize {
+    let table_state = table_singleton();
+    if let Ok(table_state) = table_state.inner.lock() {
+        if let Some(&table_oid) = table_state.get(table) {
+            for (index, column) in columns.iter().enumerate() {
+                if column.table() == table_oid && column.name() == column_name {
+                    return index;
+                }
+            }
+        }
+    }
+    panic!("Make sure you called tql::init() first");
+}
+
+#[cfg(feature = "postgres")]
+#[derive(Clone)]
+struct TableState {
+    inner: Arc<Mutex<HashMap<String, Oid>>>,
+}
+
+#[cfg(feature = "postgres")]
+/// Initialize the state required to use the sql!() macro.
+pub fn init(connection: &Connection) {
+    let query = "SELECT relname, oid
+     FROM pg_class
+     WHERE relkind = 'r'
+        AND relowner = (
+            SELECT usesysid
+            FROM pg_user
+            WHERE usename = CURRENT_USER
+        )";
+    let tables = table_singleton().inner;
+    let mut tables = tables.lock().expect("table state");
+    for row in &connection.query(query, &[]).unwrap() {
+        tables.insert(row.get::<_, String>(0).to_lowercase(), row.get(1));
+    }
+}
+
+#[cfg(feature = "postgres")]
+fn table_singleton() -> TableState {
+    // Initialize it to a null value
+    static mut SINGLETON: *const TableState = 0 as *const TableState;
+    static ONCE: Once = ONCE_INIT;
+
+    unsafe {
+        ONCE.call_once(|| {
+            let singleton = TableState {
+                inner: Arc::new(Mutex::new(HashMap::new())),
+            };
+            SINGLETON = mem::transmute(Box::new(singleton));
+        });
+
+        (*SINGLETON).clone()
+    }
 }
