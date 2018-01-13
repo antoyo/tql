@@ -87,7 +87,6 @@ use quote::Tokens;
 use quote::ToTokens;
 use rand::Rng;
 use syn::{
-    AngleBracketedGenericArguments,
     Expr,
     Field,
     Fields,
@@ -96,12 +95,12 @@ use syn::{
     Item,
     ItemEnum,
     ItemStruct,
-    TypePath,
     parse,
     parse2,
 };
 #[cfg(feature = "unstable")]
-use syn::{LitStr, Path};
+use syn::{AngleBracketedGenericArguments, LitStr, Path, TypePath};
+#[cfg(feature = "unstable")]
 use syn::PathArguments::AngleBracketed;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
@@ -110,12 +109,13 @@ use analyzer::{
     analyze,
     analyze_types,
     get_insert_idents,
-    get_insert_position,
     get_limit_args,
     get_method_calls,
     get_sort_idents,
     get_values_idents,
 };
+#[cfg(feature = "unstable")]
+use analyzer::get_insert_position;
 use arguments::{Arg, Args, arguments};
 use ast::{
     Aggregate,
@@ -143,6 +143,7 @@ struct SqlQueryWithArgs {
     aggregates: Vec<Aggregate>,
     arguments: Args,
     idents: Vec<Ident>,
+    #[cfg(feature = "unstable")]
     insert_call_span: Option<Span>,
     insert_idents: Option<Vec<Ident>>,
     joins: Vec<Join>,
@@ -220,6 +221,7 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
     let parser = Parser::new();
     let method_calls = parser.parse(&expr)?;
     let table_name = method_calls.name.clone().expect("table name in method_calls");
+    #[cfg(feature = "unstable")]
     let insert_call_span = get_insert_position(&method_calls);
     let mut query = analyze(method_calls)?;
     optimize(&mut query);
@@ -246,6 +248,7 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
         aggregates,
         arguments,
         idents,
+        #[cfg(feature = "unstable")]
         insert_call_span,
         insert_idents,
         joins,
@@ -316,11 +319,6 @@ fn respan(tokens: TokenStream) -> TokenStream {
 fn respan_tokens(tokens: Tokens) -> Tokens {
     let tokens: proc_macro2::TokenStream = respan(tokens.into()).into();
     tokens.into_tokens()
-}
-
-#[cfg(not(feature = "unstable"))]
-fn respan_tokens(tokens: Tokens) -> Tokens {
-    tokens
 }
 
 #[cfg(feature = "unstable")]

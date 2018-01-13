@@ -23,6 +23,7 @@
 
 use std::collections::HashSet;
 
+#[cfg(feature = "unstable")]
 use proc_macro2::Span;
 use syn::Ident;
 
@@ -32,6 +33,7 @@ use ast::{
     Query,
 };
 use error::Error;
+#[cfg(feature = "unstable")]
 use parser::MethodCalls;
 
 /// Check that the method call contains all the fields from the `table` and that all assignments
@@ -65,6 +67,7 @@ pub fn get_insert_idents(query: &Query) -> Option<Vec<Ident>> {
     None
 }
 
+#[cfg(feature = "unstable")]
 pub fn get_insert_position(method_calls: &MethodCalls) -> Option<Span> {
     for call in &method_calls.calls {
         if call.name == "insert" {

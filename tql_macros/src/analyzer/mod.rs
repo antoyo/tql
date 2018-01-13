@@ -67,7 +67,9 @@ use self::filter::{analyze_filter_types, expression_to_filter_expression};
 pub use self::filter::get_method_calls;
 use self::get::get_expression_to_filter_expression;
 use self::insert::check_insert_arguments;
-pub use self::insert::{get_insert_idents, get_insert_position};
+pub use self::insert::get_insert_idents;
+#[cfg(feature = "unstable")]
+pub use self::insert::get_insert_position;
 use self::join::argument_to_join;
 use self::limit::{analyze_limit_types, argument_to_limit};
 pub use self::limit::get_limit_args;
