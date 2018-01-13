@@ -30,7 +30,6 @@ mod join;
 mod limit;
 mod sort;
 
-use std::borrow::Cow;
 use std::fmt::Display;
 use std::result;
 
@@ -47,30 +46,23 @@ use syn::spanned::Spanned;
 use syn::token::Comma;
 
 use ast::{
-    self,
     Aggregate,
     AggregateFilterExpression,
     Assignment,
     Expression,
-    FieldList,
     FilterExpression,
-    FilterValue,
     Groups,
-    Identifier,
     Join,
     Limit,
     Order,
     Query,
-    TypedField,
-    WithSpan,
 };
 use error::{Error, Result, res};
-use gen::ToSql;
 use parser::{MethodCall, MethodCalls};
 use plugin::number_literal;
 use self::aggregate::{argument_to_aggregate, argument_to_group, expression_to_aggregate_filter_expression};
 pub use self::aggregate::get_values_idents;
-use self::assignment::{analyze_assignments_types, argument_to_assignment};
+use self::assignment::argument_to_assignment;
 use self::filter::{analyze_filter_types, expression_to_filter_expression};
 pub use self::filter::get_method_calls;
 use self::get::get_expression_to_filter_expression;
@@ -81,7 +73,6 @@ use self::limit::{analyze_limit_types, argument_to_limit};
 pub use self::limit::get_limit_args;
 use self::sort::argument_to_order;
 pub use self::sort::get_sort_idents;
-use state::methods_singleton;
 use string::{find_near, plural_verb};
 use types::Type;
 
@@ -165,16 +156,13 @@ pub fn analyze_types(query: Query) -> Result<Query> {
             analyze_filter_types(filter, &table, &mut errors);
         },
         Query::Drop { .. } => (), // Nothing to analyze.
-        Query::Insert { ref assignments, ref table } => {
-            analyze_assignments_types(assignments, &table, &mut errors);
-        },
+        Query::Insert { .. } => (),
         Query::Select { ref filter, ref limit, ref table, .. } => {
             analyze_filter_types(filter, &table, &mut errors);
             analyze_limit_types(limit, &mut errors);
         },
-        Query::Update { ref assignments, ref filter, ref table } => {
+        Query::Update { ref filter, ref table, .. } => {
             analyze_filter_types(filter, &table, &mut errors);
-            analyze_assignments_types(assignments, &table, &mut errors);
         },
     }
     res(query, errors)
@@ -207,32 +195,6 @@ fn check_delete_without_filters(query: &Query, delete_position: Option<Span>, er
             ));
         }
     }
-}
-
-/// Check if the `identifier` is a field in the struct `table_name`.
-pub fn check_field(identifier: &Ident, position: Span, errors: &mut Vec<Error>) {
-    // TODO: replace with code generation to check the field.
-
-    /*if !table.fields.contains_key(identifier) {
-        let field_names = table.fields.keys()
-            .map(|ident| ident.as_ref());
-        let mut error = Error::new(
-            &format!("attempted access of field `{field}` on type `{table}`, but no field with that name was found",
-                field = identifier,
-                table = table.name
-            ),
-            position
-        );
-        propose_similar_name(identifier.as_ref(), field_names, &mut error);
-        errors.push(error);
-    }*/
-}
-
-/// Check if the type of `identifier` matches the type of the `value` expression.
-fn check_field_type(table_name: &str, filter_value: &FilterValue, value: &Expression, errors: &mut Vec<Error>) {
-    // TODO:
-    /*let field_type = get_field_type_by_filter_value(table_name, filter_value);
-    check_type(field_type, value, errors);*/
 }
 
 /// Check if the method calls sequence is valid.
@@ -323,15 +285,6 @@ pub fn check_type(field_type: &Type, expression: &Expression, errors: &mut Vec<E
     }
 }
 
-/// Check if the `field_type` is compatible with the `filter_value`'s type.
-fn check_type_filter_value(expected_type: &Type, filter_value: &WithSpan<FilterValue>, table_name: &str, errors: &mut Vec<Error>) {
-    // TODO
-    /*let field_type = get_field_type_by_filter_value(table_name, &filter_value.node);
-    if *field_type != *expected_type {
-        mismatched_types(expected_type, &field_type, filter_value.span, errors);
-    }*/
-}
-
 /// Convert the `arguments` to the `Type`.
 fn convert_arguments<F, Type>(arguments: &[Expression], convert_argument: F) -> Result<Vec<Type>>
     where F: Fn(&Expression) -> Result<Type>
@@ -347,34 +300,6 @@ fn convert_arguments<F, Type>(arguments: &[Expression], convert_argument: F) -> 
 
     res(items, errors)
 }
-
-/*
-/// Get the type of the field if it exists from an `FilterValue`.
-fn get_field_type_by_filter_value<'a>(table_name: &'a str, filter_value: &FilterValue) -> &'a Type {
-    // NOTE: At this stage (type analysis), the field exists, hence unwrap().
-    match *filter_value {
-        FilterValue::Identifier(ref identifier) => {
-            get_field_type(table_name, identifier).unwrap()
-        },
-        FilterValue::MethodCall(ast::MethodCall { ref method_name, ref object_name, .. }) => {
-            let table = tables.get(table_name).unwrap();
-            let methods = methods_singleton();
-            let types = table.fields.get(object_name).unwrap();
-            let typ =
-                match types.ty.node {
-                    // NOTE: return a Generic Type because Option methods work independently from
-                    // the nullable type (for instance, is_some()).
-                    Type::Nullable(_) => Cow::Owned(Type::Nullable(Box::new(Type::Generic))),
-                    ref typ => Cow::Borrowed(typ),
-                };
-            let type_methods = methods.get(&typ).unwrap();
-            let method = type_methods.get(method_name).unwrap();
-            &method.return_type
-        },
-        FilterValue::None => unreachable!("FilterValue::None in get_field_type_by_filter_value()"),
-    }
-}
-*/
 
 /// Get all the existing methods.
 // TODO: return Vec<&'static str> instead?
@@ -434,13 +359,6 @@ fn get_type(expression: &Expression) -> &str {
         }
         _ => panic!("expression needs to be a literal"),
     }
-}
-
-/// Check if there is a join in `joins` on a field named `name`.
-pub fn has_joins(joins: &[Join], name: &Ident) -> bool {
-    joins.iter()
-        .map(|join| &join.base_field)
-        .any(|field_name| field_name == name.as_ref())
 }
 
 /// Add a mismatched types error to `errors`.
@@ -507,16 +425,6 @@ fn new_query(QueryData { filter, joins, limit, order, assignments, aggregates, g
                 table: table_name,
             },
     }
-}
-
-/// Create an error about a table not having a primary key.
-pub fn no_primary_key(table_name: &str, position: Span) -> Error {
-    Error::new(
-        &format!("Table {table} does not have a primary key", // TODO: improve this message.
-            table = table_name
-        ),
-        position
-    )
 }
 
 /// Convert an `Expression` to an `Ident` if `expression` is an `ExprPath`.
@@ -606,7 +514,7 @@ fn process_methods(calls: &[MethodCall], table_name: &str, delete_position: &mut
                 });
                 if !query_data.assignments.is_empty() {
                     // TODO: check even if there are errors in the assignation types.
-                    check_insert_arguments(&query_data.assignments, method_call.name.span(), &mut errors);
+                    check_insert_arguments(&query_data.assignments, &mut errors);
                 }
                 query_data.query_type = SqlQueryType::Insert;
             },

@@ -21,8 +21,6 @@
 
 //! Methods definition for use in filters.
 
-use std::collections::HashMap;
-
 use state::{SqlMethodTypes, aggregates_singleton, methods_singleton};
 use types::Type;
 

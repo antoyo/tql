@@ -34,7 +34,6 @@ use ast::{
 };
 use error::{Result, res};
 use plugin::number_literal;
-use super::no_primary_key;
 use super::filter::expression_to_filter_expression;
 
 /// Convert an expression from a `get()` method to a FilterExpression and a Limit.

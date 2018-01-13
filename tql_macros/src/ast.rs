@@ -27,10 +27,7 @@ use proc_macro2::{Span, TokenStream};
 use quote::ToTokens;
 use syn::{Expr, Ident};
 
-use types::Type;
-
 pub type Expression = Expr;
-pub type FieldList = Vec<Identifier>;
 pub type Groups = Vec<Ident>;
 pub type Identifier = String;
 
@@ -291,21 +288,6 @@ pub struct TypedField {
     pub typ: String,
 }
 
-/// Get the query table name.
-pub fn query_table(query: &Query) -> Identifier {
-    let table_name =
-        match *query {
-            Query::Aggregate { ref table, .. } => table,
-            Query::CreateTable { ref table, .. } => table,
-            Query::Delete { ref table, .. } => table,
-            Query::Drop { ref table, .. } => table,
-            Query::Insert { ref table, .. } => table,
-            Query::Select { ref table, .. } => table,
-            Query::Update { ref table, .. } => table,
-        };
-    table_name.clone()
-}
-
 /// Get the query type.
 pub fn query_type(query: &Query) -> QueryType {
     match *query {
@@ -318,7 +300,7 @@ pub fn query_type(query: &Query) -> QueryType {
             }
         },
         Query::Insert { .. } => QueryType::InsertOne,
-        Query::Select { ref filter, get, ref limit, ref table, .. } => {
+        Query::Select { get, ref limit, .. } => {
             let mut typ = QueryType::SelectMulti;
             if get {
                 typ = QueryType::SelectOne;

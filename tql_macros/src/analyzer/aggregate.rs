@@ -37,7 +37,6 @@ use ast::{
     AggregateFilterExpression,
     AggregateFilters,
     Expression,
-    Identifier,
     Query,
     WithSpan,
     first_token_span,
@@ -47,7 +46,6 @@ use new_ident;
 use state::aggregates_singleton;
 use super::{
     check_argument_count,
-    check_field,
     path_expr_to_identifier,
     path_expr_to_string,
     propose_similar_name,
@@ -110,13 +108,12 @@ pub fn argument_to_aggregate(arg: &Expression) -> Result<Aggregate> {
     res(aggregate, errors)
 }
 
-/// Convert an `Expression` to a group `Identifier`.
+/// Convert an `Expression` to a group `Ident`.
 pub fn argument_to_group(arg: &Expression) -> Result<Ident> {
     let mut errors = vec![];
     let mut group = Ident::from("dummy_ident");
 
     if let Some(identifier) = path_expr_to_identifier(arg, &mut errors) {
-        check_field(&identifier, arg.span(), &mut errors);
         group = identifier;
     }
     else {

@@ -47,24 +47,13 @@ use ast::{
     WithSpan,
 };
 use error::{Error, Result, res};
-use state::{SqlMethodTypes, methods_singleton};
-use super::{
-    check_field,
-    check_field_type,
-    check_type,
-    check_type_filter_value,
-    propose_similar_name,
-};
-use types::Type;
 
 /// Analyze the types of the `FilterExpression`.
 pub fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors: &mut Vec<Error>) {
     // TODO: check that operators are used with the good types (perhaps not necessary because all
     // types may support all operators)?
     match *filter {
-        FilterExpression::Filter(ref filter) => {
-            check_field_type(table_name, &filter.operand1, &filter.operand2, errors);
-        },
+        FilterExpression::Filter(_) => (),
         FilterExpression::Filters(ref filters) => {
             analyze_filter_types(&*filters.operand1, table_name, errors);
             analyze_filter_types(&*filters.operand2, table_name, errors);
@@ -76,9 +65,7 @@ pub fn analyze_filter_types(filter: &FilterExpression, table_name: &str, errors:
         FilterExpression::ParenFilter(ref filter) => {
             analyze_filter_types(filter, table_name, errors);
         },
-        FilterExpression::FilterValue(ref filter_value) => {
-            check_type_filter_value(&Type::Bool, filter_value, table_name, errors);
-        },
+        FilterExpression::FilterValue(_) => (),
     }
 }
 
@@ -149,13 +136,6 @@ pub fn binop_to_relational_operator(binop: &BinOp) -> RelationalOperator {
     }
 }
 
-/// Check the type of the arguments of the method.
-fn check_method_arguments(arguments: &[Expression], argument_types: &[Type], errors: &mut Vec<Error>) {
-    for (argument, argument_type) in arguments.iter().zip(argument_types) {
-        check_type(argument_type, argument, errors)
-    }
-}
-
 /// Convert a Rust expression to a `FilterExpression`.
 pub fn expression_to_filter_expression(arg: &Expression, table_name: &str) -> Result<FilterExpression> {
     let mut errors = vec![];
@@ -174,7 +154,6 @@ pub fn expression_to_filter_expression(arg: &Expression, table_name: &str) -> Re
             },
             Expr::Path(ref path) => {
                 let identifier = path.path.segments.first().unwrap().into_value().ident;
-                check_field(&identifier, identifier.span, &mut errors);
                 FilterExpression::FilterValue(WithSpan {
                     node: FilterValue::Identifier(table_name.to_string(), identifier),
                     span: arg.span(),
@@ -223,7 +202,7 @@ fn method_call_expression_to_filter_expression(identifier: Ident, expr: &Express
     let dummy = FilterValue::None;
     match *expr {
         Expr::Path(ref path) => {
-            path_method_call_to_filter(&path.path, identifier, args, position, errors)
+            path_method_call_to_filter(&path.path, identifier, args, position)
         },
         _ => {
             errors.push(Error::new(
@@ -236,11 +215,8 @@ fn method_call_expression_to_filter_expression(identifier: Ident, expr: &Express
 }
 
 /// Convert a method call where the object is an identifier to a filter expression.
-fn path_method_call_to_filter(path: &Path, identifier: Ident, args: &Punctuated<Expr, Comma>, position: Span,
-                              errors: &mut Vec<Error>) -> FilterValue
+fn path_method_call_to_filter(path: &Path, identifier: Ident, args: &Punctuated<Expr, Comma>, position: Span) -> FilterValue
 {
-    // TODO: return errors instead of dummy.
-    let dummy = FilterValue::None;
     // TODO: check the method call (types, arguments and if it exists).
     // TODO: check if the field exists.
     let object_name = path.segments.first().unwrap().into_value().ident;

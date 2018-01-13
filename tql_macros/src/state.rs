@@ -31,7 +31,6 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::mem;
 
-use proc_macro2::Span;
 use syn::{self, Ident};
 
 use ast::WithSpan;

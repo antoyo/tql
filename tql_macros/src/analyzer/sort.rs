@@ -21,14 +21,12 @@
 
 /// Analyzer for the sort() method.
 
-use proc_macro2::Span;
 use syn::{
     Expr,
     ExprUnary,
     Ident,
     UnOp,
 };
-use syn::spanned::Spanned;
 
 use ast::{
     Expression,
@@ -37,7 +35,7 @@ use ast::{
     first_token_span,
 };
 use error::{Error, Result, res};
-use super::{check_field, path_expr_to_identifier};
+use super::path_expr_to_identifier;
 
 /// Convert an `Expression` to an `Order`.
 pub fn argument_to_order(arg: &Expression) -> Result<Order> {
@@ -50,7 +48,6 @@ pub fn argument_to_order(arg: &Expression) -> Result<Order> {
             }
             Expr::Path(ref path) => {
                 let identifier = path.path.segments.first().unwrap().into_value().ident;
-                check_field(&identifier, identifier.span, &mut errors);
                 Order::Ascending(identifier)
             }
             _ => {

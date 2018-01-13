@@ -26,19 +26,13 @@ use syn::spanned::Spanned;
 
 use ast::{Expression, Join};
 use error::{Error, Result, res};
-use string::token_to_string;
-use super::{check_field, mismatched_types, no_primary_key, path_expr_to_identifier};
-use types::Type;
-
-pub struct JoinData {
-    join: Join,
-}
+use super::path_expr_to_identifier;
 
 /// Convert an `Expression` to a `Join`
 pub fn argument_to_join(arg: &Expression, table_name: &str) -> Result<Join> {
     let mut errors = vec![];
     let mut join = None;
-    let mut related_table_name = None;
+    let related_table_name;
 
     if let Expr::Assign(ref assign) = *arg {
         if let Expr::Path(ref path) = *assign.right {
@@ -46,14 +40,13 @@ pub fn argument_to_join(arg: &Expression, table_name: &str) -> Result<Join> {
             let mut ident = path.path.segments[0].ident;
             // NOTE: adjust the span for better error reporting.
             ident.span = assign.right.span();
-            related_table_name = Some(ident);
+            related_table_name = ident;
         }
         else {
             return Err(vec![Error::new("Expecting structure expression, but got", assign.right.span())]); // TODO: improve error message.
         }
 
         if let Some(identifier) = path_expr_to_identifier(&assign.left, &mut errors) {
-            check_field(&identifier, arg.span(), &mut errors);
             // TODO: check that the field is a ForeignKey<_>.
             //mismatched_types("ForeignKey<_>", field_type, arg.span(), &mut errors);
             // TODO: check that the struct has the field id.
@@ -62,7 +55,7 @@ pub fn argument_to_join(arg: &Expression, table_name: &str) -> Result<Join> {
                 base_field: identifier,
                 base_table: table_name.to_string(),
                 joined_field: "id".to_string(),
-                joined_table: related_table_name.expect("related table name"),
+                joined_table: related_table_name,
             });
             // NOTE: if the field type is not an SQL table, an error is thrown by the
             // linter.

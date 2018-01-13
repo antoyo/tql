@@ -76,7 +76,6 @@ mod state;
 mod string;
 mod types;
 
-use std::collections::BTreeMap;
 use std::iter::FromIterator;
 
 use proc_macro::TokenStream;
@@ -90,11 +89,9 @@ use rand::Rng;
 use syn::{
     AngleBracketedGenericArguments,
     Expr,
-    ExprGroup,
     Field,
     Fields,
     FieldsNamed,
-    GenericArgument,
     Ident,
     Item,
     ItemEnum,
@@ -118,7 +115,6 @@ use analyzer::{
     get_method_calls,
     get_sort_idents,
     get_values_idents,
-    has_joins,
 };
 use arguments::{Arg, Args, arguments};
 use ast::{
@@ -272,17 +268,22 @@ pub fn sql_table(input: TokenStream) -> TokenStream {
 
     let gen =
         if let Item::Struct(item_struct) = item {
-            let table_name = item_struct.ident.to_string();
             let (fields, primary_key, impls) = get_struct_fields(&item_struct);
             let mut compiler_errors = quote! {};
-            if let Ok(fields) = fields {
+            if let Err(errors) = fields {
+                for error in errors {
+                    add_error(error, &mut compiler_errors);
+                }
+                concat_token_stream(compiler_errors.into(), impls)
+            }
+            else {
                 // NOTE: Transform the span by dummy spans to workaround this issue:
                 // https://github.com/rust-lang/rust/issues/42337
                 // https://github.com/rust-lang/rust/issues/45934#issuecomment-344497531
                 // NOTE: if there is no error, there is a primary key, hence expect().
                 let code = tosql_impl(&item_struct, &primary_key.expect("primary key"));
                 let methods = table_methods(&item_struct);
-                let insert_macro = insert_macro(&item_struct);
+                let table_macro = table_macro(&item_struct);
                 let code = quote! {
                     #methods
                     #code
@@ -291,16 +292,10 @@ pub fn sql_table(input: TokenStream) -> TokenStream {
                 let code = respan_tokens(code);
                 let code = quote! {
                     #code
-                    #insert_macro
+                    #table_macro
                 };
-                return concat_token_stream(code.into(), impls);
+                concat_token_stream(code.into(), impls)
             }
-            if let Err(errors) = fields {
-                for error in errors {
-                    add_error(error, &mut compiler_errors);
-                }
-            }
-            concat_token_stream(compiler_errors.into(), impls)
         }
         else {
             let mut compiler_errors = quote! {};
@@ -465,8 +460,6 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
 
         let field_names = named.iter()
             .map(|field| field.ident.expect("field has name"));
-        let field_names2 = named.iter()
-            .map(|field| field.ident.expect("field has name"));
 
         let field_idents = named.iter()
             .map(|field| (field.ident.expect("field has name"), field.ty.clone()));
@@ -496,32 +489,19 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
     }
 }
 
-fn get_missing_fields(fields: &[Ident], mandatory_fields: &[Ident]) -> Option<Vec<String>> {
-    let mut missing_fields = vec![];
-
-    for field in mandatory_fields {
-        if !fields.contains(field) {
-            missing_fields.push(field.to_string());
-        }
-    }
-
-    if missing_fields.is_empty() {
-        None
-    }
-    else {
-        Some(missing_fields)
-    }
-}
-
 /// Create the insert macro for the table struct to check that all the mandatory fields are
 /// provided.
-fn insert_macro(item_struct: &ItemStruct) -> Tokens {
+fn table_macro(item_struct: &ItemStruct) -> Tokens {
     let table_ident = &item_struct.ident;
+    let mut primary_key_found = false;
     if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
         let mut mandatory_fields = vec![];
         for field in named {
             let typ = token_to_string(&field.ty);
             if let Some(ident) = field.ident {
+                if typ == "PrimaryKey" {
+                    primary_key_found = true;
+                }
                 if !typ.starts_with("Option") && typ != "PrimaryKey" {
                     mandatory_fields.push(ident);
                 }
@@ -529,6 +509,7 @@ fn insert_macro(item_struct: &ItemStruct) -> Tokens {
         }
 
         let macro_name = Ident::new(&format!("tql_{}_check_missing_fields", table_ident), Span::call_site());
+        let pk_macro_name = Ident::new(&format!("tql_{}_check_primary_key", table_ident), Span::call_site());
         #[cfg(feature = "unstable")]
         let macro_call = quote_spanned! { table_ident.span() =>
             tql_macros::check_missing_fields!
@@ -537,11 +518,27 @@ fn insert_macro(item_struct: &ItemStruct) -> Tokens {
         let macro_call = quote! {
             check_missing_fields!
         };
+        let pk_code =
+            if primary_key_found {
+                quote! {}
+            }
+            else {
+                quote! {
+                    compiler_error!("No primary key found")
+                }
+            };
         quote_spanned! { table_ident.span() =>
             #[macro_export]
             macro_rules! #macro_name {
                 ($($insert_idents:ident),*) => {
                     #macro_call([#(#mandatory_fields),*], [$($insert_idents),*])
+                };
+            }
+
+            #[macro_export]
+            macro_rules! #pk_macro_name {
+                () => {
+                    #pk_code
                 };
             }
         }
@@ -880,9 +877,6 @@ fn typecheck_arguments(table_ident: &Ident, args: &SqlQueryWithArgs) -> Tokens {
 
 /// Create the struct expression needed by the generated code.
 fn create_struct(table_ident: &Ident, joins: &[Join]) -> Tokens {
-    let mut field_idents: Vec<String> = vec![];
-    let mut field_values: Vec<String> = vec![];
-    let mut index = 0usize;
     let joined_fields =
         joins.iter()
             .map(|join| &join.base_field);
@@ -933,35 +927,6 @@ fn gen_aggregate_struct(aggregates: &[Aggregate]) -> (Tokens, Tokens) {
 
 fn new_ident(string: &str) -> Ident {
     Ident::new(string, Span::call_site())
-}
-
-fn is_string_type(typ: &syn::Type) -> bool {
-    if let syn::Type::Path(TypePath { ref path, .. }) = *typ {
-        let element = path.segments.first().expect("first segment of path");
-        let segment = element.value();
-        return segment.ident.as_ref() == "String";
-    }
-    false
-}
-
-fn inner_type(typ: &syn::Type) -> Option<syn::Type> {
-    if let syn::Type::Path(TypePath { ref path, .. }) = *typ {
-        let element = path.segments.first().expect("first segment of path");
-        let segment = element.value();
-        match segment.ident.as_ref() {
-            "Option" | "ForeignKey" => {
-                if let AngleBracketed(AngleBracketedGenericArguments { ref args, .. }) = segment.arguments {
-                    let element = args.first().expect("first arg of args");
-                    let arg = element.value();
-                    if let GenericArgument::Type(ref ty) = **arg {
-                        return Some(ty.clone());
-                    }
-                }
-            },
-            _ => (),
-        }
-    }
-    None
 }
 
 fn rand_string() -> String {

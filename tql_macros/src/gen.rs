@@ -33,7 +33,6 @@ use ast::{
     Assignment,
     AssignementOperator,
     Expression,
-    FieldList,
     Filter,
     Filters,
     FilterExpression,
@@ -194,7 +193,7 @@ impl ToSql for Expression {
 
 slice_to_sql!(Expression, ", ");
 
-impl ToSql for FieldList {
+impl ToSql for Vec<String> {
     fn to_sql(&self) -> String {
         self.join(", ")
     }
@@ -330,7 +329,7 @@ impl ToSql for Query {
                                             aggregate_filter = aggregate_filter.to_sql())
                                     )
             },
-            Query::CreateTable { ref table } => {
+            Query::CreateTable { .. } => {
                 // NOTE: the query is in a method added to the table struct.
                 String::new()
             },

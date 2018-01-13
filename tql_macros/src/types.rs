@@ -33,7 +33,6 @@ use syn::{
     Path,
     PathArguments,
     TypePath,
-    parse,
 };
 
 use ast::Expression;
@@ -62,26 +61,6 @@ pub enum Type {
     String,
     UnsupportedType(String),
     UtcDateTime,
-}
-
-impl Type {
-    // TODO: not sure it's a good idea. We already lost the Span.
-    pub fn to_syn(&self) -> syn::Type {
-        let code =
-            match *self {
-                Type::I32 => {
-                    quote! { i32 }
-                },
-                Type::I64 => {
-                    quote! { i64 }
-                },
-                Type::String => {
-                    quote! { String }
-                },
-                _ => unimplemented!("Type::to_syn({:?})", self),
-            };
-        parse(code.into()).expect("parse to_syn()")
-    }
 }
 
 impl Display for Type {

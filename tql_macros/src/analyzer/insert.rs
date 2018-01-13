@@ -25,24 +25,19 @@ use std::collections::HashSet;
 
 use proc_macro2::Span;
 use syn::Ident;
-use syn::spanned::Spanned;
 
 use ast::{
     Assignment,
     AssignementOperator,
     Query,
-    WithSpan,
 };
 use error::Error;
 use parser::MethodCalls;
-use state::BothTypes;
-use types::Type;
 
 /// Check that the method call contains all the fields from the `table` and that all assignments
 /// does not use an operation (e.g. +=).
-pub fn check_insert_arguments(assignments: &[Assignment], position: Span, errors: &mut Vec<Error>) {
+pub fn check_insert_arguments(assignments: &[Assignment], errors: &mut Vec<Error>) {
     let mut fields = HashSet::new();
-    let mut missing_fields: Vec<&str> = vec![];
 
     // Check the assignment operators.
     for assignment in assignments {
@@ -51,11 +46,6 @@ pub fn check_insert_arguments(assignments: &[Assignment], position: Span, errors
         if *operator != AssignementOperator::Equal {
             errors.push(Error::new(&format!("expected = but got {}", *operator), assignment.operator.span));
         }
-    }
-
-    if !missing_fields.is_empty() {
-        let fields = "`".to_string() + &missing_fields.join("`, `") + "`";
-        errors.push(Error::new_with_code(&format!("missing fields: {}", fields), position, "E0063"));
     }
 
     // TODO: check if the primary key is not in the inserted field?

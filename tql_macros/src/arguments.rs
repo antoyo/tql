@@ -22,12 +22,10 @@
 //! Query arguments extractor.
 
 use syn::{
-    self,
     Expr,
     Ident,
     parse,
 };
-use syn::spanned::Spanned;
 
 use ast::{
     Aggregate,
@@ -38,11 +36,8 @@ use ast::{
     FilterValue,
     Limit,
     MethodCall,
-    Order,
     Query,
-    query_table,
 };
-use types::Type;
 
 macro_rules! add_filter_arguments {
     ( $name:ident, $typ:ident, $func:ident ) => {
@@ -139,8 +134,7 @@ fn add_limit_arguments(limit: Limit, arguments: &mut Args, literals: &mut Args) 
 }
 
 /// Construct an argument from the method and add it to `args`.
-fn add_with_method(args: &mut Args, literals: &mut Args, object_name: &Ident, index: usize,
-                   expr: Expression)
+fn add_with_method(args: &mut Args, literals: &mut Args, expr: Expression)
 {
     add_expr(args, literals, Arg {
         expression: expr,
@@ -168,23 +162,19 @@ fn add_filter_value_arguments(filter_value: &FilterValue, args: &mut Args, liter
                 add(args, literals, Some(identifier.clone()), Some(table.clone()), expr);
             }
         },
-        FilterValue::MethodCall(MethodCall { ref arguments, ref object_name, .. }) => {
-            for (index, arg) in arguments.iter().enumerate() {
-                add_with_method(args, literals, object_name, index, arg.clone());
+        FilterValue::MethodCall(MethodCall { ref arguments, .. }) => {
+            for arg in arguments {
+                add_with_method(args, literals, arg.clone());
             }
         },
         FilterValue::None => unreachable!("FilterValue::None in add_filter_value_arguments()"),
     }
 }
 
-fn add_sort_idents(orders: &[Order], idents: &mut Vec<Ident>) {
-}
-
 /// Extract the Rust `Expression`s, the literal arguments and identifiers from the `Query`.
 pub fn arguments(query: Query) -> (Args, Args) {
     let mut arguments = vec![];
     let mut literals = vec![];
-    let table_name = query_table(&query);
 
     match query {
         Query::Aggregate { aggregate_filter, filter, .. } => {
