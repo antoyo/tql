@@ -117,10 +117,11 @@ fn list_todo_items(connection: &Connection, show_done: bool) {
 
 fn main() {
     let connection = get_connection();
-    tql::init(&connection);
 
     // Create the table.
     let _ = sql!(TodoItem.create());
+
+    tql::init(&connection);
 
     let mut args = env::args();
     args.next();

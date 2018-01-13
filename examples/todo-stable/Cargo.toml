@@ -11,3 +11,6 @@ tql_macros = { path = "../../tql_macros" }
 [dependencies.postgres]
 features = ["with-chrono"]
 version = "^0.15.1"
+
+[replace]
+"postgres:0.15.1" = { git = "https://github.com/antoyo/rust-postgres" }
