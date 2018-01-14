@@ -29,10 +29,6 @@ error[E0308]: mismatched types
    |
 68 |     sql!(Table.filter(date.year()));
    |                       ^^^^^^^^^^^ expected bool, found i32
-   |
-   = help: here are some functions which might fulfill your needs:
-           - .is_negative()
-           - .is_positive()
 
 error[E0308]: mismatched types
   --> $DIR/methods.rs:74:40
@@ -51,26 +47,18 @@ error[E0308]: mismatched types
    |
    = note: expected type `usize`
               found type `&'static str`
-   = help: here are some functions which might fulfill your needs:
-           - .len()
 
 error[E0308]: mismatched types
   --> $DIR/methods.rs:86:23
    |
 86 |     sql!(Table.filter(field1.len()));
    |                       ^^^^^^^^^^^^ expected bool, found usize
-   |
-   = help: here are some functions which might fulfill your needs:
-           - .is_power_of_two()
 
 error[E0308]: mismatched types
   --> $DIR/methods.rs:92:23
    |
 92 |     sql!(Table.filter(field1.len() && option_field.is_some()));
    |                       ^^^^^^^^^^^^ expected bool, found usize
-   |
-   = help: here are some functions which might fulfill your needs:
-           - .is_power_of_two()
 
 error: aborting due to 9 previous errors
 

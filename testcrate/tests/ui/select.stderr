@@ -50,7 +50,10 @@ error[E0308]: mismatched types
   --> $DIR/select.rs:84:54
    |
 84 |     sql!(Table.filter(i32_field >= b'f' || field1 == 't'));
-   |                                                      ^^^ expected struct `std::string::String`, found char
+   |                                                      ^^^
+   |                                                      |
+   |                                                      expected struct `std::string::String`, found char
+   |                                                      help: try using a conversion method: `'t'.to_string()`
    |
    = note: expected type `std::string::String`
               found type `char`
