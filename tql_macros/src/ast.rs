@@ -158,6 +158,7 @@ pub enum FilterValue {
     None,
     Identifier(String, Ident),
     MethodCall(MethodCall),
+    PrimaryKey(String),
 }
 
 /// A `Join` with another `joined_table` via a specific `joined_field`.
@@ -247,6 +248,7 @@ pub enum Query {
     Delete {
         filter: FilterExpression,
         table: Identifier,
+        use_pk: bool,
     },
     Drop {
         table: Identifier,
@@ -262,11 +264,13 @@ pub enum Query {
         limit: Limit,
         order: Vec<Order>,
         table: Identifier,
+        use_pk: bool,
     },
     Update {
         assignments: Vec<Assignment>,
         filter: FilterExpression,
         table: Identifier,
+        use_pk: bool,
     },
 }
 

@@ -31,8 +31,11 @@ extern crate postgres;
 mod methods;
 mod types;
 
+#[cfg(feature = "postgres")]
 use std::collections::HashMap;
+#[cfg(feature = "postgres")]
 use std::mem;
+#[cfg(feature = "postgres")]
 use std::sync::{Arc, Mutex, Once, ONCE_INIT};
 
 #[cfg(feature = "postgres")]
@@ -63,6 +66,8 @@ pub unsafe trait SqlTable {
 
     #[cfg(feature = "postgres")]
     fn from_row(row: &::postgres::rows::Row, columns: &[::postgres::stmt::Column]) -> Self;
+
+    fn _primary_key_field() -> &'static str;
 }
 
 #[cfg(not(unstable))]

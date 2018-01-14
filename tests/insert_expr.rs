@@ -37,7 +37,7 @@ use teardown::TearDown;
 
 #[derive(SqlTable)]
 struct TableInsertExpr {
-    id: PrimaryKey,
+    primary_key: PrimaryKey,
     field1: String,
     field2: i32,
     related_field: ForeignKey<RelatedTableInsertExpr>,

@@ -116,6 +116,7 @@ struct QueryData {
     // Select
     limit: Limit,
     order: Vec<Order>,
+    use_pk: bool,
     // All
     query_type: SqlQueryType,
 }
@@ -154,7 +155,7 @@ pub fn analyze_types(query: Query) -> Result<Query> {
             analyze_filter_types(filter, &table, &mut errors);
         },
         Query::CreateTable { .. } => (), // Nothing to analyze.
-        Query::Delete { ref filter, ref table } => {
+        Query::Delete { ref filter, ref table, .. } => {
             analyze_filter_types(filter, &table, &mut errors);
         },
         Query::Drop { .. } => (), // Nothing to analyze.
@@ -380,7 +381,7 @@ fn mismatched_types<S: Display, T: Display>(expected_type: S, actual_type: &T, p
 
 /// Create a new query from all the data gathered by the method calls.
 fn new_query(QueryData { filter, joins, limit, order, assignments, aggregates, groups,
-    aggregate_filter, query_type }: QueryData, table_name: String) -> Query
+    aggregate_filter, query_type, use_pk }: QueryData, table_name: String) -> Query
 {
     match query_type {
         SqlQueryType::Aggregate =>
@@ -400,6 +401,7 @@ fn new_query(QueryData { filter, joins, limit, order, assignments, aggregates, g
             Query::Delete {
                 filter,
                 table: table_name,
+                use_pk,
             },
         SqlQueryType::Drop =>
             Query::Drop {
@@ -418,6 +420,7 @@ fn new_query(QueryData { filter, joins, limit, order, assignments, aggregates, g
                 limit,
                 order,
                 table: table_name,
+                use_pk,
             }
         },
         SqlQueryType::Update =>
@@ -425,6 +428,7 @@ fn new_query(QueryData { filter, joins, limit, order, assignments, aggregates, g
                 assignments,
                 filter,
                 table: table_name,
+                use_pk,
             },
     }
 }
@@ -503,10 +507,12 @@ fn process_methods(calls: &[MethodCall], table_name: &str, delete_position: &mut
                     query_data.limit = Limit::Index(number_literal(0));
                 }
                 else {
-                    try(get_expression_to_filter_expression(&method_call.args[0], table_name), &mut errors, |(filter, new_limit)| {
-                        query_data.filter = filter;
-                        query_data.limit = new_limit;
-                    });
+                    try(get_expression_to_filter_expression(&method_call.args[0], table_name), &mut errors,
+                        |(filter, use_pk, new_limit)| {
+                            query_data.filter = filter;
+                            query_data.use_pk = use_pk;
+                            query_data.limit = new_limit;
+                        });
                 }
                 query_data.query_type = SqlQueryType::SelectOne;
             },

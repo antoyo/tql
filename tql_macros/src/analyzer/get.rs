@@ -21,8 +21,7 @@
 
 /// Analyzer for the get() method.
 
-use proc_macro2::Span;
-use syn::{Expr, Ident};
+use syn::Expr;
 
 use ast::{
     Expression,
@@ -37,21 +36,20 @@ use plugin::number_literal;
 use super::filter::expression_to_filter_expression;
 
 /// Convert an expression from a `get()` method to a FilterExpression and a Limit.
-pub fn get_expression_to_filter_expression(arg: &Expression, table_name: &str) -> Result<(FilterExpression, Limit)> {
-    // TODO: get() should allow specifying the primary key.
-    // TODO: check that the table has the field id.
-    // Err(vec![no_primary_key(&table.name.to_string(), table.position)]),
-    let pk = "id";
+pub fn get_expression_to_filter_expression(arg: &Expression, table_name: &str) ->
+    Result<(FilterExpression, bool, Limit)>
+{
+    // TODO: check that the table has the field for the PK.
     match *arg {
         Expr::Lit(_) | Expr::Path(_) => {
             let filter = FilterExpression::Filter(Filter {
-                operand1: FilterValue::Identifier(table_name.to_string(), Ident::new(pk, Span::call_site())),
+                operand1: FilterValue::PrimaryKey(table_name.to_string()),
                 operator: RelationalOperator::Equal,
                 operand2: arg.clone(),
             });
-            res((filter, Limit::NoLimit), vec![])
+            res((filter, true, Limit::NoLimit), vec![])
         },
         _ => expression_to_filter_expression(arg, table_name)
-            .and_then(|filter| Ok((filter, Limit::Index(number_literal(0))))),
+            .and_then(|filter| Ok((filter, false, Limit::Index(number_literal(0))))),
     }
 }

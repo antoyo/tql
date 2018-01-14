@@ -155,6 +155,7 @@ struct SqlQueryWithArgs {
     span: Span,
     sql: String,
     table_name: Ident,
+    use_pk: bool,
 }
 
 /// Expand the `sql!()` macro.
@@ -243,6 +244,7 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
     let insert_idents = get_insert_idents(&query);
     let limit_exprs = get_limit_args(&query);
     let method_calls = get_method_calls(&query);
+    let use_pk = get_use_pk(&query);
     let (arguments, literal_arguments) = arguments(query);
     Ok(SqlQueryWithArgs {
         aggregates,
@@ -260,6 +262,7 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
         span,
         sql,
         table_name,
+        use_pk,
     })
 }
 
@@ -445,11 +448,18 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
     let table_ident = &item_struct.ident;
     if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
         let mut fields_to_create = vec![];
+        let mut primary_key = None;
         for field in named {
             fields_to_create.push(TypedField {
                 identifier: field.ident.expect("field ident").to_string(),
                 typ: field_ty_to_type(&field.ty).node.to_sql(),
             });
+            let typ = token_to_string(&field.ty);
+            if let Some(ident) = field.ident {
+                if typ == "PrimaryKey" {
+                    primary_key = Some(ident);
+                }
+            }
         }
         let create_query = format!("CREATE TABLE {table} ({fields})",
             table = table_ident,
@@ -463,6 +473,18 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
             .map(|field| (field.ident.expect("field has name"), field.ty.clone()));
         let columns = field_idents.map(|(ident, typ)| to_row_get(&table_ident, &ident, typ));
 
+        let primary_key =
+            if let Some(ident) = primary_key {
+                let ident = ident.to_string();
+                quote! {
+                    #ident
+                }
+            }
+            else {
+                quote! {
+                    unreachable!("no primary key")
+                }
+            };
         quote! {
             unsafe impl ::tql::SqlTable for #table_ident {
                 fn _create_query() -> &'static str {
@@ -478,6 +500,10 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
                     Self {
                         #(#field_names: #columns,)*
                     }
+                }
+
+                fn _primary_key_field() -> &'static str {
+                    #primary_key
                 }
             }
         }
@@ -631,23 +657,26 @@ fn generate_errors(errors: Vec<Error>) -> TokenStream {
 
 /// Generate the Rust code from the SQL query.
 fn gen_query(args: SqlQueryWithArgs) -> TokenStream {
-    let table_ident = &args.table_name;
-    let ident = Ident::new("connection", table_ident.span);
-    let struct_expr = create_struct(table_ident, &args.joins);
+    let ident = Ident::new("connection", args.table_name.span);
+    let struct_expr = create_struct(&args.table_name, &args.joins);
     let (aggregate_struct, aggregate_expr) = gen_aggregate_struct(&args.aggregates);
-    let args_expr = typecheck_arguments(table_ident, &args);
-    let tokens = gen_query_expr(ident, args.sql, args_expr, struct_expr, aggregate_struct, aggregate_expr,
-                                args.query_type, table_ident);
+    let args_expr = typecheck_arguments(&args);
+    let tokens = gen_query_expr(ident, args, args_expr, struct_expr, aggregate_struct, aggregate_expr);
     tokens.into()
 }
 
 /// Generate the Rust code using the `postgres` library depending on the `QueryType`.
-fn gen_query_expr(connection_ident: Ident, sql_query: String, args_expr: Tokens, struct_expr: Tokens,
-                  aggregate_struct: Tokens, aggregate_expr: Tokens, query_type: QueryType, table_ident: &Ident) -> Tokens
+fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: Tokens, struct_expr: Tokens,
+                  aggregate_struct: Tokens, aggregate_expr: Tokens) -> Tokens
 {
+    let table_ident = &args.table_name;
     let result_ident = Ident::from("result");
-    let sql_query = string_literal(&sql_query);
-    match query_type {
+    let sql_query = string_literal(&args.sql);
+    let trait_ident = quote_spanned! { table_ident.span() =>
+        ::tql::SqlTable
+    };
+
+    match args.query_type {
         QueryType::AggregateMulti => {
             let result = quote! {{
                 let result = #connection_ident.prepare(#sql_query).expect("prepare query");
@@ -674,10 +703,6 @@ fn gen_query_expr(connection_ident: Ident, sql_query: String, args_expr: Tokens,
             }}
         },
         QueryType::Create => {
-            let trait_ident = quote_spanned! { table_ident.span() =>
-                ::tql::SqlTable
-            };
-
             quote! {{
                 #connection_ident.prepare(<#table_ident as #trait_ident>::_create_query())
                     .and_then(|result| result.execute(&[]))
@@ -716,6 +741,17 @@ fn gen_query_expr(connection_ident: Ident, sql_query: String, args_expr: Tokens,
             }}
         },
         QueryType::SelectOne => {
+            let sql_query =
+                if args.use_pk {
+                    quote! {
+                        &format!(#sql_query, pk = <#table_ident as #trait_ident>::_primary_key_field())
+                    }
+                }
+                else {
+                    quote! {
+                        #sql_query
+                    }
+                };
             let result =
                 quote! {
                     let #result_ident = #connection_ident.prepare(#sql_query).expect("prepare query");
@@ -733,6 +769,17 @@ fn gen_query_expr(connection_ident: Ident, sql_query: String, args_expr: Tokens,
             }}
         },
         QueryType::Exec => {
+            let sql_query =
+                if args.use_pk {
+                    quote! {
+                        &format!(#sql_query, pk = <#table_ident as #trait_ident>::_primary_key_field())
+                    }
+                }
+                else {
+                    quote! {
+                        #sql_query
+                    }
+                };
             quote! {{
                 #connection_ident.prepare(#sql_query)
                     .and_then(|result| result.execute(&#args_expr))
@@ -743,7 +790,8 @@ fn gen_query_expr(connection_ident: Ident, sql_query: String, args_expr: Tokens,
 
 /// Get the arguments to send to the `postgres::stmt::Statement::query` or
 /// `postgres::stmt::Statement::execute` method.
-fn typecheck_arguments(table_ident: &Ident, args: &SqlQueryWithArgs) -> Tokens {
+fn typecheck_arguments(args: &SqlQueryWithArgs) -> Tokens {
+    let table_ident = &args.table_name;
     let mut arg_refs = vec![];
     let mut fns = vec![];
     let mut assigns = vec![];
@@ -1103,4 +1151,11 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
     }
 
     empty_token_stream()
+}
+
+fn get_use_pk(query: &Query) -> bool {
+    match *query {
+        Query::Delete { use_pk, .. } | Query::Select { use_pk, .. } | Query::Update { use_pk, .. } => use_pk,
+        _ => false,
+    }
 }

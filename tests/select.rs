@@ -200,11 +200,11 @@ fn test_filter_sort_limit() {
 #[test]
 fn test_get() {
     assert_eq!(
-        format!("{} FROM Table WHERE Table.id = 1", SELECT),
+        format!("{} FROM Table WHERE Table.{{pk}} = 1", SELECT),
         to_sql!(Table.get(1))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE Table.id = $1", SELECT),
+        format!("{} FROM Table WHERE Table.{{pk}} = $1", SELECT),
         to_sql!(Table.get(id))
     );
     assert_eq!(

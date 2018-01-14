@@ -236,6 +236,7 @@ impl ToSql for FilterValue {
                 }
             },
             FilterValue::None => unreachable!("FilterValue::None in FilterValue::to_sql()"),
+            FilterValue::PrimaryKey(ref table) => format!("{}.{{pk}}", table),
         }
     }
 }
@@ -333,7 +334,7 @@ impl ToSql for Query {
                 // NOTE: the query is in a method added to the table struct.
                 String::new()
             },
-            Query::Delete { ref filter, ref table } => {
+            Query::Delete { ref filter, ref table, use_pk: _use_pk } => {
                 let where_clause = filter_to_where_clause(filter);
                 replace_placeholder(format!("DELETE FROM {table}{where_clause}{filter}",
                                             table = table,
@@ -357,7 +358,7 @@ impl ToSql for Query {
                         values = values.to_sql(),
                     ))
             },
-            Query::Select { ref filter, get: _get, ref joins, ref limit, ref order, ref table } => {
+            Query::Select { ref filter, get: _get, ref joins, ref limit, ref order, ref table, use_pk: _use_pk } => {
                 let where_clause = filter_to_where_clause(filter);
                 let order_clause =
                     if has_order_clauses(order) {
@@ -377,7 +378,7 @@ impl ToSql for Query {
                                            )
                                    )
             },
-            Query::Update { ref assignments, ref filter, ref table } => {
+            Query::Update { ref assignments, ref filter, ref table, use_pk: _use_pk } => {
                 let where_clause = filter_to_where_clause(filter);
                 replace_placeholder(format!("UPDATE {table} SET {assignments}{where_clause}{filter}",
                                             table = table,

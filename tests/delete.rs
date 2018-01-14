@@ -48,4 +48,8 @@ fn test_delete() {
         "DELETE FROM Table WHERE Table.field1 = 'test'",
         to_sql!(Table.filter(field1 == "test").delete())
     );
+    assert_eq!(
+        "DELETE FROM Table WHERE Table.{pk} = $1",
+        to_sql!(Table.get(id).delete())
+    );
 }
