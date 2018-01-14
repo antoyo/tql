@@ -112,6 +112,13 @@ pub fn index_from_table_column(table: &str, column_name: &str, columns: &[Column
     panic!("Make sure you called tql::init() first");
 }
 
+#[doc(hidden)]
+pub fn from_related_row<T: SqlTable>(field: &mut Option<T>, row: &::postgres::rows::Row,
+                                     columns: &[::postgres::stmt::Column])
+{
+    *field = Some(T::from_row(row, columns));
+}
+
 #[cfg(feature = "postgres")]
 #[derive(Clone)]
 struct TableState {

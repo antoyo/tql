@@ -2,6 +2,9 @@
  * Primary key field
  * SQLite: ROWID
  *
+ * FIXME: update all generated identifiers to avoid name clash.
+ * TODO: don't hard-code "id" for join.
+ *
  * TODO: try to get the table of a foreign key field so that it's not necessary to specify in the
  * query.
  * TODO: document the management of the connection.
@@ -137,7 +140,7 @@ use parser::Parser;
 use plugin::string_literal;
 use state::SqlFields;
 use string::token_to_string;
-use types::Type;
+use types::{Type, get_type_parameter};
 
 struct SqlQueryWithArgs {
     aggregates: Vec<Aggregate>,
@@ -491,6 +494,7 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
                     #create_query
                 }
 
+                // TODO: rename to avoid clash.
                 fn default() -> Self {
                     unimplemented!()
                 }
@@ -502,6 +506,7 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
                     }
                 }
 
+                // TODO: move to next impl (should not be in the trait).
                 fn _primary_key_field() -> &'static str {
                     #primary_key
                 }
@@ -520,6 +525,10 @@ fn table_macro(item_struct: &ItemStruct) -> Tokens {
     let mut primary_key_found = false;
     if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
         let mut mandatory_fields = vec![];
+        let mut related_table_names = vec![];
+        let mut non_related_table_names = vec![];
+        let mut related_table_types = vec![];
+        let mut compiler_errors = vec![];
         for field in named {
             let typ = token_to_string(&field.ty);
             if let Some(ident) = field.ident {
@@ -528,6 +537,25 @@ fn table_macro(item_struct: &ItemStruct) -> Tokens {
                 }
                 if !typ.starts_with("Option") && typ != "PrimaryKey" {
                     mandatory_fields.push(ident);
+                }
+                if typ.starts_with("ForeignKey") {
+                    if let syn::Type::Path(ref path) = field.ty {
+                        let element = path.path.segments.first().expect("first segment of path");
+                        let first_segment = element.value();
+                        let typ = get_type_parameter(&first_segment.arguments)
+                            .expect("ForeignKey inner type");
+                        related_table_names.push(ident);
+                        related_table_types.push(typ);
+                    }
+                }
+                else {
+                    non_related_table_names.push(ident);
+                    let msg = string_literal(&format!("mismatched types
+expected type `ForeignKey<_>`
+   found type `{}`", typ));
+                    compiler_errors.push(quote_spanned! { field.span() =>
+                        compile_error!(#msg)
+                    });
                 }
             }
         }
@@ -551,6 +579,7 @@ fn table_macro(item_struct: &ItemStruct) -> Tokens {
                     compiler_error!("No primary key found")
                 }
             };
+        let related_tables_macro_name = Ident::new(&format!("tql_{}_related_tables", table_ident), Span::call_site());
         quote_spanned! { table_ident.span() =>
             #[macro_export]
             macro_rules! #macro_name {
@@ -564,6 +593,15 @@ fn table_macro(item_struct: &ItemStruct) -> Tokens {
                 () => {
                     #pk_code
                 };
+            }
+
+            #[allow(unused_macros)]
+            macro_rules! #related_tables_macro_name {
+                #((#related_table_names) => { #related_table_types };)*
+                #((#non_related_table_names) => { #compiler_errors };)*
+                // NOTE: the check for the field name is done elsewhere, hence it is okay to return
+                // "" here.
+                ($tt:tt) => { "" };
             }
         }
     }
@@ -675,6 +713,38 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
     let trait_ident = quote_spanned! { table_ident.span() =>
         ::tql::SqlTable
     };
+    let pk =
+        if args.use_pk {
+            quote! {
+                , pk = <#table_ident as #trait_ident>::_primary_key_field()
+            }
+        }
+        else {
+            quote! { }
+        };
+    let joins = args.joins.iter()
+        .map(|join| {
+            let base_field = &join.base_field;
+            let macro_name = Ident::new(&format!("tql_{}_related_tables", table_ident), Span::call_site());
+            let code = quote! {
+                , #base_field = #macro_name!(#base_field)
+            };
+            #[cfg(feature = "unstable")]
+            let code = respan_tokens_with(code, base_field.span().unstable());
+            code
+        });
+    let select_query = || {
+        if args.use_pk || !args.joins.is_empty() {
+            quote! {
+                &format!(#sql_query #pk #(#joins)*)
+            }
+        }
+        else {
+            quote! {
+                #sql_query
+            }
+        }
+    };
 
     match args.query_type {
         QueryType::AggregateMulti => {
@@ -722,6 +792,7 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
             }}
         },
         QueryType::SelectMulti => {
+            let sql_query = select_query();
             let result =
                 quote! {
                     let #result_ident = #connection_ident.prepare(#sql_query).expect("prepare query");
@@ -741,17 +812,7 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
             }}
         },
         QueryType::SelectOne => {
-            let sql_query =
-                if args.use_pk {
-                    quote! {
-                        &format!(#sql_query, pk = <#table_ident as #trait_ident>::_primary_key_field())
-                    }
-                }
-                else {
-                    quote! {
-                        #sql_query
-                    }
-                };
+            let sql_query = select_query();
             let result =
                 quote! {
                     let #result_ident = #connection_ident.prepare(#sql_query).expect("prepare query");
@@ -772,7 +833,7 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
             let sql_query =
                 if args.use_pk {
                     quote! {
-                        &format!(#sql_query, pk = <#table_ident as #trait_ident>::_primary_key_field())
+                        &format!(#sql_query #pk)
                     }
                 }
                 else {
@@ -923,28 +984,23 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> Tokens {
 
 /// Create the struct expression needed by the generated code.
 fn create_struct(table_ident: &Ident, joins: &[Join]) -> Tokens {
-    let joined_fields =
-        joins.iter()
-            .map(|join| &join.base_field);
     let row_ident = quote! { row };
     let result_ident = Ident::from("result");
-    let exprs =
+    let assign_related_fields =
         joins.iter()
             .map(|join| {
-                let ident = &join.joined_table;
-                quote_spanned! { ident.span() =>
-                    Some(<#ident as ::tql::SqlTable>::from_row(&#row_ident, #result_ident.columns()))
-                }
+                let ident = &join.base_field;
+                quote_spanned! { ident.span() => {
+                    let ref mut _related_field: Option<_> = item.#ident;
+                    ::tql::from_related_row(_related_field, &#row_ident, #result_ident.columns());
+                }}
             });
-    let code = quote_spanned! { table_ident.span() => {
+    quote_spanned! { table_ident.span() => {
         #[allow(unused_mut)]
         let mut item = <#table_ident as ::tql::SqlTable>::from_row(&#row_ident, #result_ident.columns());
-        #(item.#joined_fields = #exprs;)*
+        #(#assign_related_fields)*
         item
-    }};
-    code
-    // TODO: when the private field issue is fixed, remove the call to respan.
-    //respan_tokens(code.into())
+    }}
 }
 
 /// Generate the aggregate struct and struct expression.

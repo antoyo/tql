@@ -358,7 +358,7 @@ fn test_select() {
     let table = sql!(TableSelectExpr.get(!(field2 < 24))).unwrap();
     assert_eq!(id1, table.id);
 
-    let mut tables = sql!(TableSelectExpr.all().join(related_field = RelatedTableSelectExpr));
+    let mut tables = sql!(TableSelectExpr.all().join(related_field));
     assert_eq!(5, tables.len());
     let_vec!(table1, table2, table3, table4, table5 = tables);
     assert_eq!(id1, table1.id);
@@ -372,7 +372,7 @@ fn test_select() {
     assert_eq!(id5, table5.id);
     assert_eq!(related_field2.id, table5.related_field.unwrap().id);
 
-    let mut tables = sql!(TableSelectExpr.join(related_field = RelatedTableSelectExpr));
+    let mut tables = sql!(TableSelectExpr.join(related_field));
     assert_eq!(5, tables.len());
     let_vec!(table1, table2, table3, table4, table5 = tables);
     assert_eq!(id1, table1.id);

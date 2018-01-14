@@ -97,7 +97,7 @@ fn test_insert() {
     assert!(table.related_field.is_none());
     assert!(table.optional_field.is_none());
 
-    let table = sql!(TableInsertExpr.get(id).join(related_field = RelatedTableInsertExpr)).unwrap();
+    let table = sql!(TableInsertExpr.get(id).join(related_field)).unwrap();
     assert_eq!("value1", table.field1);
     assert_eq!(55, table.field2);
     let related_table = table.related_field.unwrap();

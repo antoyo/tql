@@ -253,7 +253,7 @@ impl<'a> From<&'a Path> for Type {
 }
 
 /// Get the type between < and > as a String.
-fn get_type_parameter(parameters: &PathArguments) -> Option<String> {
+pub fn get_type_parameter(parameters: &PathArguments) -> Option<String> {
     get_type_parameter_as_path(parameters).map(|path| path.segments.first()
         .expect("first segment in path").value().ident.to_string())
 }

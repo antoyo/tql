@@ -21,7 +21,6 @@
 
 /// Analyzer for the join() method.
 
-use syn::Expr;
 use syn::spanned::Spanned;
 
 use ast::{Expression, Join};
@@ -31,39 +30,25 @@ use super::path_expr_to_identifier;
 /// Convert an `Expression` to a `Join`
 pub fn argument_to_join(arg: &Expression, table_name: &str) -> Result<Join> {
     let mut errors = vec![];
-    let mut join = None;
-    let related_table_name;
+    let join;
 
-    if let Expr::Assign(ref assign) = *arg {
-        if let Expr::Path(ref path) = *assign.right {
-            // TODO: check that it is only an identifier (i.e. without Prefix::Module::).
-            let mut ident = path.path.segments[0].ident;
-            // NOTE: adjust the span for better error reporting.
-            ident.span = assign.right.span();
-            related_table_name = ident;
-        }
-        else {
-            return Err(vec![Error::new("Expecting structure expression, but got", assign.right.span())]); // TODO: improve error message.
-        }
-
-        if let Some(identifier) = path_expr_to_identifier(&assign.left, &mut errors) {
-            // TODO: check that the field is a ForeignKey<_>.
-            //mismatched_types("ForeignKey<_>", field_type, arg.span(), &mut errors);
-            // TODO: check that the struct has the field id.
-            // TODO: allow specifying an alternate primary key field.
-            join = Some(Join {
-                base_field: identifier,
-                base_table: table_name.to_string(),
-                joined_field: "id".to_string(),
-                joined_table: related_table_name,
-            });
-            // NOTE: if the field type is not an SQL table, an error is thrown by the
-            // linter.
-            // FIXME: update the previous comment since there's no more a linter.
-        }
+    if let Some(identifier) = path_expr_to_identifier(&arg, &mut errors) {
+        // TODO: check that the field is a ForeignKey<_>.
+        //mismatched_types("ForeignKey<_>", field_type, arg.span(), &mut errors);
+        // TODO: check that the struct has the field id.
+        // TODO: allow specifying an alternate primary key field.
+        join = Some(Join {
+            base_field: identifier,
+            base_table: table_name.to_string(),
+            joined_field: "id".to_string(),
+        });
+        // NOTE: if the field type is not an SQL table, an error is thrown by the
+        // linter.
+        // FIXME: update the previous comment since there's no more a linter.
     }
     else {
-        return Err(vec![Error::new("Expecting assignment, but got", arg.span())]); // TODO: improve error message.
+        return Err(vec![Error::new("Expecting identifier, but got", arg.span())]); // TODO: improve error message.
     }
+
     res(join.expect("join"), errors)
 }

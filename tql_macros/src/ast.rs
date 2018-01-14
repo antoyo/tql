@@ -161,13 +161,12 @@ pub enum FilterValue {
     PrimaryKey(String),
 }
 
-/// A `Join` with another `joined_table` via a specific `joined_field`.
+/// A `Join` with another table via a specific `joined_field`.
 #[derive(Clone, Debug)]
 pub struct Join {
     pub base_field: Ident,
     pub base_table: Identifier,
     pub joined_field: Identifier,
-    pub joined_table: Ident,
 }
 
 /// An SQL LIMIT clause.
