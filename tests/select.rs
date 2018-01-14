@@ -232,11 +232,11 @@ fn test_get() {
 #[test]
 fn test_join() {
     assert_eq!(
-        format!("{} FROM Table INNER JOIN {{related_field}} ON Table.related_field = {{related_field}}.id", SELECT),
+        format!("{} FROM Table INNER JOIN {{related_field}} ON Table.related_field = {{related_field}}.{{related_field_pk}}", SELECT),
         to_sql!(Table.join(related_field))
     );
     assert_eq!(
-        format!("{} FROM Table INNER JOIN {{related_field}} ON Table.related_field = {{related_field}}.id", SELECT),
+        format!("{} FROM Table INNER JOIN {{related_field}} ON Table.related_field = {{related_field}}.{{related_field_pk}}", SELECT),
         to_sql!(Table.all().join(related_field))
     );
 }

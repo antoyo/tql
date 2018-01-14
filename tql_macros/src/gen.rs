@@ -244,9 +244,10 @@ impl ToSql for FilterValue {
 impl ToSql for Join {
     fn to_sql(&self) -> String {
         let fk = format!("{{{}}}", self.base_field);
+        let fk_pk = format!("{{{}_pk}}", self.base_field);
         " INNER JOIN ".to_string() + &fk +
             " ON " + &self.base_table + "." + &self.base_field.to_sql() + " = "
-            + &fk + "." + &self.joined_field
+            + &fk + "." + &fk_pk
     }
 }
 

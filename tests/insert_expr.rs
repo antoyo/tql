@@ -53,7 +53,7 @@ struct TableInsertExpr {
 
 #[derive(SqlTable)]
 struct RelatedTableInsertExpr {
-    id: PrimaryKey,
+    primary_key: PrimaryKey,
     field1: i32,
 }
 
@@ -101,7 +101,7 @@ fn test_insert() {
     assert_eq!("value1", table.field1);
     assert_eq!(55, table.field2);
     let related_table = table.related_field.unwrap();
-    assert_eq!(related_id, related_table.id);
+    assert_eq!(related_id, related_table.primary_key);
     assert_eq!(42, related_table.field1);
     assert!(table.optional_field.is_none());
 

@@ -60,14 +60,12 @@ pub type PrimaryKey = types::StdI32;
 // Marker trait used for error reporting:
 // when a struct is used in a ForeignKey, but it is not annotated with #[derive(SqlTable)].
 pub unsafe trait SqlTable {
-    fn _create_query() -> &'static str;
+    fn _create_query() -> String;
 
     fn default() -> Self;
 
     #[cfg(feature = "postgres")]
     fn from_row(row: &::postgres::rows::Row, columns: &[::postgres::stmt::Column]) -> Self;
-
-    fn _primary_key_field() -> &'static str;
 }
 
 #[cfg(not(unstable))]

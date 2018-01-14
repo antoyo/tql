@@ -100,9 +100,7 @@ fn type_to_sql(typ: &Type, mut nullable: bool) -> String {
             Type::ByteString => "BYTEA".to_string(),
             Type::I8 | Type::Char => "CHARACTER(1)".to_string(),
             Type::Custom(ref related_table_name) => {
-                // TODO: allow specifying a different primary key.
-                let primary_key_field = "id";
-                "INTEGER REFERENCES ".to_string() + related_table_name + "(" + primary_key_field + ")"
+                "INTEGER REFERENCES ".to_string() + related_table_name + "({" + related_table_name + "_pk})"
                 // NOTE: if the field type is not an SQL table, an error is thrown by the linter.
                 // FIXME: previous comment.
             },
@@ -259,7 +257,7 @@ pub fn get_type_parameter(parameters: &PathArguments) -> Option<String> {
 }
 
 /// Get the type between < and > as a Path.
-fn get_type_parameter_as_path(parameters: &PathArguments) -> Option<&Path> {
+pub fn get_type_parameter_as_path(parameters: &PathArguments) -> Option<&Path> {
     if let PathArguments::AngleBracketed(AngleBracketedGenericArguments { ref args, .. }) = *parameters {
         args.first()
             .and_then(|ty| {

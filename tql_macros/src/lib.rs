@@ -3,7 +3,6 @@
  * SQLite: ROWID
  *
  * FIXME: update all generated identifiers to avoid name clash.
- * TODO: don't hard-code "id" for join.
  *
  * TODO: try to get the table of a foreign key field so that it's not necessary to specify in the
  * query.
@@ -140,7 +139,7 @@ use parser::Parser;
 use plugin::string_literal;
 use state::SqlFields;
 use string::token_to_string;
-use types::{Type, get_type_parameter};
+use types::{Type, get_type_parameter, get_type_parameter_as_path};
 
 struct SqlQueryWithArgs {
     aggregates: Vec<Aggregate>,
@@ -452,6 +451,8 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
     if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
         let mut fields_to_create = vec![];
         let mut primary_key = None;
+        let mut pk_idents = vec![];
+        let mut pk_tables = vec![];
         for field in named {
             fields_to_create.push(TypedField {
                 identifier: field.ident.expect("field ident").to_string(),
@@ -461,6 +462,20 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
             if let Some(ident) = field.ident {
                 if typ == "PrimaryKey" {
                     primary_key = Some(ident);
+                }
+                else if typ.starts_with("ForeignKey") {
+                    if let syn::Type::Path(ref path) = field.ty {
+                        let element = path.path.segments.first().expect("first segment of path");
+                        let first_segment = element.value();
+                        if let Some(path) = get_type_parameter_as_path(&first_segment.arguments) {
+                            let ident = get_type_parameter(&first_segment.arguments)
+                                .expect("get type parameter");
+                            if !pk_tables.contains(&path) {
+                                pk_idents.push(Ident::from(format!("{}_pk", ident).as_str()));
+                                pk_tables.push(path);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -490,8 +505,8 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
             };
         quote! {
             unsafe impl ::tql::SqlTable for #table_ident {
-                fn _create_query() -> &'static str {
-                    #create_query
+                fn _create_query() -> String {
+                    format!(#create_query #(, #pk_idents = #pk_tables::_primary_key_field())*)
                 }
 
                 // TODO: rename to avoid clash.
@@ -505,9 +520,10 @@ fn table_methods(item_struct: &ItemStruct) -> Tokens {
                         #(#field_names: #columns,)*
                     }
                 }
+            }
 
-                // TODO: move to next impl (should not be in the trait).
-                fn _primary_key_field() -> &'static str {
+            impl #table_ident {
+                pub fn _primary_key_field() -> &'static str {
                     #primary_key
                 }
             }
@@ -527,6 +543,7 @@ fn table_macro(item_struct: &ItemStruct) -> Tokens {
         let mut mandatory_fields = vec![];
         let mut related_table_names = vec![];
         let mut non_related_table_names = vec![];
+        let mut related_tables = vec![];
         let mut related_table_types = vec![];
         let mut compiler_errors = vec![];
         for field in named {
@@ -544,8 +561,10 @@ fn table_macro(item_struct: &ItemStruct) -> Tokens {
                         let first_segment = element.value();
                         let typ = get_type_parameter(&first_segment.arguments)
                             .expect("ForeignKey inner type");
+                        related_tables.push(typ);
                         related_table_names.push(ident);
-                        related_table_types.push(typ);
+                        related_table_types.push(get_type_parameter_as_path(&first_segment.arguments)
+                            .expect("ForeignKey inner type"));
                     }
                 }
                 else {
@@ -580,6 +599,9 @@ expected type `ForeignKey<_>`
                 }
             };
         let related_tables_macro_name = Ident::new(&format!("tql_{}_related_tables", table_ident), Span::call_site());
+        let related_pks_macro_name = Ident::new(&format!("tql_{}_related_pks", table_ident), Span::call_site());
+        let related_table_names2 = &related_table_names;
+        let related_table_names = &related_table_names;
         quote_spanned! { table_ident.span() =>
             #[macro_export]
             macro_rules! #macro_name {
@@ -597,8 +619,16 @@ expected type `ForeignKey<_>`
 
             #[allow(unused_macros)]
             macro_rules! #related_tables_macro_name {
-                #((#related_table_names) => { #related_table_types };)*
+                #((#related_table_names) => { #related_tables };)*
                 #((#non_related_table_names) => { #compiler_errors };)*
+                // NOTE: the check for the field name is done elsewhere, hence it is okay to return
+                // "" here.
+                ($tt:tt) => { "" };
+            }
+
+            #[allow(unused_macros)]
+            macro_rules! #related_pks_macro_name {
+                #((#related_table_names2) => { #related_table_types::_primary_key_field() };)*
                 // NOTE: the check for the field name is done elsewhere, hence it is okay to return
                 // "" here.
                 ($tt:tt) => { "" };
@@ -716,7 +746,7 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
     let pk =
         if args.use_pk {
             quote! {
-                , pk = <#table_ident as #trait_ident>::_primary_key_field()
+                , pk = #table_ident::_primary_key_field()
             }
         }
         else {
@@ -725,9 +755,12 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
     let joins = args.joins.iter()
         .map(|join| {
             let base_field = &join.base_field;
+            let related_pk = Ident::new(&format!("{}_pk", join.base_field), join.base_field.span());
             let macro_name = Ident::new(&format!("tql_{}_related_tables", table_ident), Span::call_site());
+            let pks_macro_name = Ident::new(&format!("tql_{}_related_pks", table_ident), Span::call_site());
             let code = quote! {
                 , #base_field = #macro_name!(#base_field)
+                , #related_pk = #pks_macro_name!(#base_field)
             };
             #[cfg(feature = "unstable")]
             let code = respan_tokens_with(code, base_field.span().unstable());
@@ -774,7 +807,7 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
         },
         QueryType::Create => {
             quote! {{
-                #connection_ident.prepare(<#table_ident as #trait_ident>::_create_query())
+                #connection_ident.prepare(&<#table_ident as #trait_ident>::_create_query())
                     .and_then(|result| result.execute(&[]))
             }}
         },

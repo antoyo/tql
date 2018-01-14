@@ -166,7 +166,6 @@ pub enum FilterValue {
 pub struct Join {
     pub base_field: Ident,
     pub base_table: Identifier,
-    pub joined_field: Identifier,
 }
 
 /// An SQL LIMIT clause.

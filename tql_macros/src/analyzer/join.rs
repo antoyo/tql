@@ -40,7 +40,6 @@ pub fn argument_to_join(arg: &Expression, table_name: &str) -> Result<Join> {
         join = Some(Join {
             base_field: identifier,
             base_table: table_name.to_string(),
-            joined_field: "id".to_string(),
         });
         // NOTE: if the field type is not an SQL table, an error is thrown by the
         // linter.
