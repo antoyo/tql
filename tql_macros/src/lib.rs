@@ -2,17 +2,16 @@
  * Primary key field
  * SQLite: ROWID
  *
+ * TODO: get column from index.
+ * TODO: write multi-crate test.
+ * TODO: write test for Option variable.
  * FIXME: update all generated identifiers to avoid name clash.
  *
- * TODO: try to get the table of a foreign key field so that it's not necessary to specify in the
- * query.
  * TODO: document the management of the connection.
  * TODO: improve the error handling of the generated code.
- * TODO: test that get() does not work when the primary key is not named id.
  * TODO: use as_ref() for Ident instead of &ident.to_string().
  * TODO: support recursive foreign key.
  * TODO: write fail tests for stable using include!().
- * TODO: try to get the columns by OID from postgres to improve the syntax.
  * TODO: try to hide Option in the mismatched type error message for ForeignKey.
  * TODO: use fully-qualified name everywhere in the query (aggregate, …).
  * TODO: check errors for joined tables.
@@ -670,7 +669,7 @@ fn tosql_impl(item_struct: &ItemStruct, primary_key_field: &str) -> Tokens {
 
         impl #table_ident {
             #[allow(dead_code)]
-            fn to_owned(&self) -> Option<Self> {
+            pub fn to_owned(&self) -> Option<Self> {
                 unimplemented!();
             }
         }
