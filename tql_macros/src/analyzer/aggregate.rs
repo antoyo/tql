@@ -42,7 +42,7 @@ use ast::{
     first_token_span,
 };
 use error::{Error, Result, res};
-use new_ident;
+use plugin::new_ident;
 use state::aggregates_singleton;
 use super::{
     check_argument_count,

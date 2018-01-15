@@ -119,8 +119,6 @@ fn main() {
     // Create the table.
     let _ = sql!(TodoItem.create());
 
-    tql::init(&connection);
-
     let mut args = env::args();
     args.next();
 

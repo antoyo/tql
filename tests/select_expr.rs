@@ -61,6 +61,37 @@ struct RelatedTableSelectExpr {
     field1: i32,
 }
 
+#[derive(SqlTable)]
+struct Table1 {
+    id: PrimaryKey,
+    field1: i32,
+    field2: i32,
+    related1: ForeignKey<Table2>,
+    related2: ForeignKey<Table3>,
+    related3: ForeignKey<Table4>,
+}
+
+#[derive(SqlTable)]
+struct Table2 {
+    id: PrimaryKey,
+    field1: i32,
+    field2: i32,
+}
+
+#[derive(SqlTable)]
+struct Table3 {
+    id: PrimaryKey,
+    field1: i32,
+    field2: i32,
+}
+
+#[derive(SqlTable)]
+struct Table4 {
+    id: PrimaryKey,
+    field1: i32,
+    field2: i32,
+}
+
 fn get_connection() -> Connection {
     Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
 }
@@ -72,12 +103,18 @@ fn test_select() {
     let _teardown = TearDown::new(|| {
         let _ = sql!(TableSelectExpr.drop());
         let _ = sql!(RelatedTableSelectExpr.drop());
+        let _ = sql!(Table1.drop());
+        let _ = sql!(Table2.drop());
+        let _ = sql!(Table3.drop());
+        let _ = sql!(Table4.drop());
     });
 
     let _ = sql!(RelatedTableSelectExpr.create());
     let _ = sql!(TableSelectExpr.create());
-
-    tql::init(&connection);
+    let _ = sql!(Table2.create());
+    let _ = sql!(Table3.create());
+    let _ = sql!(Table4.create());
+    let _ = sql!(Table1.create());
 
     let datetime: DateTime<Utc> = FromStr::from_str("2015-11-16T15:51:12-05:00").unwrap();
     let datetime2: DateTime<Utc> = FromStr::from_str("2013-11-15T15:51:12-05:00").unwrap();
@@ -86,7 +123,12 @@ fn test_select() {
     let related_field = sql!(RelatedTableSelectExpr.get(id)).unwrap();
     let id = sql!(RelatedTableSelectExpr.insert(field1 = 24)).unwrap();
     let related_field2 = sql!(RelatedTableSelectExpr.get(id)).unwrap();
-    let id1 = sql!(TableSelectExpr.insert(field1 = "value1", field2 = 55, related_field = related_field, datetime = datetime2)).unwrap();
+    let id1 = sql!(TableSelectExpr.insert(
+        field1 = "value1",
+        field2 = 55,
+        related_field = related_field,
+        datetime = datetime2,
+    )).unwrap();
     let new_field2 = 42;
     let id2 = sql!(TableSelectExpr.insert(field1 = "value2", field2 = new_field2, related_field = related_field, datetime = datetime2)).unwrap();
     let id3 = sql!(TableSelectExpr.insert(field1 = "value3", field2 = 12, related_field = related_field2, datetime = datetime2)).unwrap();
@@ -455,4 +497,30 @@ fn test_select() {
     let index = -2;
     let table = sql!(TableSelectExpr[i64::from(-index)]).unwrap();
     assert_eq!(id3, table.id);
+
+    let table2_id = sql!(Table2.insert(field1 = 24, field2 = 42)).unwrap();
+    let related1 = sql!(Table2.get(table2_id)).unwrap();
+    let table2_id = sql!(Table3.insert(field1 = 25, field2 = 43)).unwrap();
+    let related2 = sql!(Table3.get(table2_id)).unwrap();
+    let table3_id = sql!(Table4.insert(field1 = 26, field2 = 44)).unwrap();
+    let related3 = sql!(Table4.get(table3_id)).unwrap();
+    let id1 = sql!(Table1.insert(
+        field1 = 1,
+        field2 = 55,
+        related1 = related1,
+        related2 = related2,
+        related3 = related3,
+    )).unwrap();
+    let table1 = sql!(Table1.get(id1).join(related1, related2, related3)).unwrap();
+    assert_eq!(table1.field1, 1);
+    assert_eq!(table1.field2, 55);
+    let table_related1 = table1.related1.unwrap();
+    let table_related2 = table1.related2.unwrap();
+    let table_related3 = table1.related3.unwrap();
+    assert_eq!(table_related1.field1, 24);
+    assert_eq!(table_related1.field2, 42);
+    assert_eq!(table_related2.field1, 25);
+    assert_eq!(table_related2.field2, 43);
+    assert_eq!(table_related3.field1, 26);
+    assert_eq!(table_related3.field2, 44);
 }

@@ -35,7 +35,3 @@ path = "./tql_macros"
 [features]
 default = ["unstable"]
 unstable = ["tql_macros/unstable"]
-
-[replace]
-"postgres:0.15.1" = { git = "https://github.com/antoyo/rust-postgres" }
-"postgres-shared:0.4.0" = { git = "https://github.com/antoyo/rust-postgres" }

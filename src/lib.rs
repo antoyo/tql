@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ * Copyright (c) 2017-2018 Boucher, Antoni <bouanto@zoho.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -31,20 +31,6 @@ extern crate postgres;
 mod methods;
 mod types;
 
-#[cfg(feature = "postgres")]
-use std::collections::HashMap;
-#[cfg(feature = "postgres")]
-use std::mem;
-#[cfg(feature = "postgres")]
-use std::sync::{Arc, Mutex, Once, ONCE_INIT};
-
-#[cfg(feature = "postgres")]
-use postgres::Connection;
-#[cfg(feature = "postgres")]
-use postgres::stmt::Column;
-#[cfg(feature = "postgres")]
-use postgres::types::Oid;
-
 pub use types::{Date, DateTime, Time, ToTqlType};
 pub use types::numbers::{i16, i32, i64, i8, u16, u32, u64, u8};
 
@@ -60,13 +46,30 @@ pub type PrimaryKey = types::StdI32;
 // Marker trait used for error reporting:
 // when a struct is used in a ForeignKey, but it is not annotated with #[derive(SqlTable)].
 pub unsafe trait SqlTable {
+    const FIELD_COUNT: usize;
+
     fn _create_query() -> String;
 
     fn default() -> Self;
 
     #[cfg(feature = "postgres")]
-    fn from_row(row: &::postgres::rows::Row, columns: &[::postgres::stmt::Column]) -> Self;
+    fn from_row(row: &::postgres::rows::Row) -> Self;
+
+    #[cfg(feature = "postgres")]
+    fn from_related_row(row: &::postgres::rows::Row, delta: usize) -> Self;
+
+    fn field_list() -> &'static str;
 }
+
+#[cfg(feature = "postgres")]
+#[doc(hidden)]
+pub fn from_related_row<T: SqlTable>(field: &mut Option<T>, row: &::postgres::rows::Row, delta: usize) -> usize
+{
+    *field = Some(T::from_related_row(row, delta));
+    T::FIELD_COUNT
+}
+
+// Stable implementation.
 
 #[cfg(not(unstable))]
 #[macro_export]
@@ -92,70 +95,4 @@ macro_rules! sql {
 
         __tql_call_macro!()
     }};
-}
-
-#[cfg(feature = "postgres")]
-#[doc(hidden)]
-pub fn index_from_table_column(table: &str, column_name: &str, columns: &[Column]) -> usize {
-    let table_state = table_singleton();
-    if let Ok(table_state) = table_state.inner.lock() {
-        if let Some(&table_oid) = table_state.get(table) {
-            for (index, column) in columns.iter().enumerate() {
-                if column.table() == table_oid && column.name() == column_name {
-                    return index;
-                }
-            }
-        }
-    }
-    panic!("Make sure you called tql::init() first");
-}
-
-#[cfg(feature = "postgres")]
-#[doc(hidden)]
-pub fn from_related_row<T: SqlTable>(field: &mut Option<T>, row: &::postgres::rows::Row,
-                                     columns: &[::postgres::stmt::Column])
-{
-    *field = Some(T::from_row(row, columns));
-}
-
-#[cfg(feature = "postgres")]
-#[derive(Clone)]
-struct TableState {
-    inner: Arc<Mutex<HashMap<String, Oid>>>,
-}
-
-#[cfg(feature = "postgres")]
-/// Initialize the state required to use the sql!() macro.
-pub fn init(connection: &Connection) {
-    let query = "SELECT relname, oid
-     FROM pg_class
-     WHERE relkind = 'r'
-        AND relowner = (
-            SELECT usesysid
-            FROM pg_user
-            WHERE usename = CURRENT_USER
-        )";
-    let tables = table_singleton().inner;
-    let mut tables = tables.lock().expect("table state");
-    for row in &connection.query(query, &[]).unwrap() {
-        tables.insert(row.get::<_, String>(0).to_lowercase(), row.get(1));
-    }
-}
-
-#[cfg(feature = "postgres")]
-fn table_singleton() -> TableState {
-    // Initialize it to a null value
-    static mut SINGLETON: *const TableState = 0 as *const TableState;
-    static ONCE: Once = ONCE_INIT;
-
-    unsafe {
-        ONCE.call_once(|| {
-            let singleton = TableState {
-                inner: Arc::new(Mutex::new(HashMap::new())),
-            };
-            SINGLETON = mem::transmute(Box::new(singleton));
-        });
-
-        (*SINGLETON).clone()
-    }
 }

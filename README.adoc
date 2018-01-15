@@ -81,7 +81,6 @@ Finally, we can use the `sql!` macro to execute an SQL query:
 ----
 fn main() {
     let connection = get_connection();
-    tql::init(&connection);
 
     // We first create the table.
     // (You might not want to execute this query every time.)

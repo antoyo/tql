@@ -73,8 +73,6 @@ fn test_insert() {
     let _ = sql!(RelatedTableInsertExpr.create());
     let _ = sql!(TableInsertExpr.drop());
 
-    tql::init(&connection);
-
     let related_id = sql!(RelatedTableInsertExpr.insert(field1 = 42)).unwrap();
     let related_field = sql!(RelatedTableInsertExpr.get(related_id)).unwrap();
 
@@ -85,8 +83,6 @@ fn test_insert() {
     }
 
     let _ = sql!(TableInsertExpr.create());
-
-    tql::init(&connection);
 
     let id = sql!(TableInsertExpr.insert(field1 = "value1", field2 = 55, related_field = related_field)).unwrap();
     assert_eq!(1, id);

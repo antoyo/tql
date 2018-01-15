@@ -36,7 +36,7 @@ use syn::{
 };
 
 use ast::Expression;
-use gen::ToSql;
+use sql::ToSql;
 
 /// A field type.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

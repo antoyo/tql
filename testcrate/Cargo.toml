@@ -12,6 +12,3 @@ version = "^0.15.1"
 
 [dev-dependencies]
 compiletest_rs = "^0.3.3"
-
-[replace]
-"postgres:0.15.1" = { git = "https://github.com/antoyo/rust-postgres" }
