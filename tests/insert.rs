@@ -49,19 +49,19 @@ struct RelatedTable {
 #[test]
 fn test_insert() {
     assert_eq!(
-        "INSERT INTO RelatedTable(field1) VALUES('test') RETURNING CAST(LASTVAL() AS INT4)",
+        "INSERT INTO RelatedTable(field1) VALUES('test') {returning_pk}",
         to_sql!(RelatedTable.insert(field1 = "test"))
     );
     assert_eq!(
-        "INSERT INTO Table(field1, field2, related_field) VALUES('value1', 55, $1) RETURNING CAST(LASTVAL() AS INT4)",
+        "INSERT INTO Table(field1, field2, related_field) VALUES('value1', 55, $1) {returning_pk}",
         to_sql!(Table.insert(field1 = "value1", field2 = 55, related_field = related_object))
     );
     assert_eq!(
-        "INSERT INTO Table(field1, field2, related_field) VALUES('value1', $1, $2) RETURNING CAST(LASTVAL() AS INT4)",
+        "INSERT INTO Table(field1, field2, related_field) VALUES('value1', $1, $2) {returning_pk}",
         to_sql!(Table.insert(field1 = "value1", field2 = new_field2, related_field = related_object))
     );
     assert_eq!(
-        "INSERT INTO Table(field1, field2, related_field, optional_field) VALUES('value1', 55, $1, 42) RETURNING CAST(LASTVAL() AS INT4)",
+        "INSERT INTO Table(field1, field2, related_field, optional_field) VALUES('value1', 55, $1, 42) {returning_pk}",
         to_sql!(Table.insert(field1 = "value1", field2 = 55, related_field = related_object, optional_field = 42))
     );
 }

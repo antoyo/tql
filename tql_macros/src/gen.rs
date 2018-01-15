@@ -354,7 +354,7 @@ impl ToSql for Query {
                 let values: Vec<_> = assignments.iter().map(|assign| assign.value.to_sql()).collect();
                 // Add the SQL code to get the inserted primary key.
                 // TODO: what to do when there is no primary key?
-                replace_placeholder(format!("INSERT INTO {table}({fields}) VALUES({values}) RETURNING CAST(LASTVAL() AS INT4)",
+                replace_placeholder(format!("INSERT INTO {table}({fields}) VALUES({values}) {{returning_pk}}",
                         table = table,
                         fields = fields.to_sql(),
                         values = values.to_sql(),

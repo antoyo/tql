@@ -6,6 +6,7 @@
  * TODO: write multi-crate test.
  * TODO: write test for Option variable.
  * FIXME: update all generated identifiers to avoid name clash.
+ * TODO: allow using a model from another module without #[macro_use].
  *
  * TODO: document the management of the connection.
  * TODO: improve the error handling of the generated code.
@@ -811,6 +812,16 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
             }}
         },
         QueryType::InsertOne => {
+            let sql_query =
+                if args.use_pk {
+                    quote! {
+                        &format!(#sql_query,
+                            returning_pk = format!("RETURNING {}", #table_ident::_primary_key_field()))
+                    }
+                }
+                else {
+                    quote! { #sql_query }
+                };
             quote! {{
                 #connection_ident.prepare(#sql_query)
                     .and_then(|result| {
@@ -864,14 +875,10 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
         QueryType::Exec => {
             let sql_query =
                 if args.use_pk {
-                    quote! {
-                        &format!(#sql_query #pk)
-                    }
+                    quote! { &format!(#sql_query #pk) }
                 }
                 else {
-                    quote! {
-                        #sql_query
-                    }
+                    quote! { #sql_query }
                 };
             quote! {{
                 #connection_ident.prepare(#sql_query)
@@ -1180,6 +1187,14 @@ fn gen_check_missing_fields(input: TokenStream) -> TokenStream {
     }
 }
 
+fn get_use_pk(query: &Query) -> bool {
+    match *query {
+        Query::Delete { use_pk, .. } | Query::Select { use_pk, .. } | Query::Update { use_pk, .. } => use_pk,
+        Query::Insert { .. } => true,
+        _ => false,
+    }
+}
+
 // Stable implementation.
 
 #[proc_macro_derive(StableCheckMissingFields)]
@@ -1239,11 +1254,4 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
     }
 
     empty_token_stream()
-}
-
-fn get_use_pk(query: &Query) -> bool {
-    match *query {
-        Query::Delete { use_pk, .. } | Query::Select { use_pk, .. } | Query::Update { use_pk, .. } => use_pk,
-        _ => false,
-    }
 }
