@@ -24,7 +24,7 @@
 use std::fmt::{Display, Error, Formatter};
 
 use proc_macro2::{Span, TokenStream};
-use quote::ToTokens;
+use quote::{Tokens, ToTokens};
 use syn::{Expr, Ident};
 
 pub type Expression = Expr;
@@ -287,7 +287,7 @@ pub enum QueryType {
 #[derive(Debug)]
 pub struct TypedField {
     pub identifier: Identifier,
-    pub typ: String,
+    pub typ: Tokens,
 }
 
 /// Get the query type.

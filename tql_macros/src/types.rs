@@ -21,6 +21,8 @@
 
 use std::fmt::{self, Display, Formatter};
 
+use proc_macro2::Span;
+use quote::Tokens;
 use syn::{
     self,
     AngleBracketedGenericArguments,
@@ -28,6 +30,7 @@ use syn::{
     ExprLit,
     FloatSuffix,
     GenericArgument,
+    Ident,
     IntSuffix,
     Lit,
     Path,
@@ -36,6 +39,7 @@ use syn::{
 };
 
 use ast::Expression;
+use plugin::string_literal;
 use sql::ToSql;
 
 /// A field type.
@@ -93,48 +97,58 @@ impl Display for Type {
 }
 
 /// Convert a `Type` to its SQL representation.
-fn type_to_sql(typ: &Type, mut nullable: bool) -> String {
+pub fn type_to_sql(typ: &Type) -> Tokens {
+    _type_to_sql(typ, false)
+}
+
+fn _type_to_sql(typ: &Type, nullable: bool) -> Tokens {
     let sql_type =
         match *typ {
-            Type::Bool => "BOOLEAN".to_string(),
-            Type::ByteString => "BYTEA".to_string(),
-            Type::I8 | Type::Char => "CHARACTER(1)".to_string(),
+            Type::Bool => "BOOLEAN",
+            Type::ByteString => "BYTEA",
+            Type::I8 | Type::Char => "CHARACTER(1)",
             Type::Custom(ref related_table_name) => {
-                "INTEGER REFERENCES ".to_string() + related_table_name + "({" + related_table_name + "_pk})"
+                let related_table_ident = string_literal(related_table_name);
+                let pk_macro_name = Ident::new(&format!("tql_{}_primary_key_field", related_table_name),
+                    Span::call_site());
+                return quote! {
+                    "INTEGER REFERENCES ", #related_table_name, "(", #pk_macro_name!(), ") NOT NULL"
+                };
                 // NOTE: if the field type is not an SQL table, an error is thrown by the linter.
                 // FIXME: previous comment.
             },
-            Type::F32 => "REAL".to_string(),
-            Type::F64 => "DOUBLE PRECISION".to_string(),
-            Type::Generic => "".to_string(),
-            Type::I16 => "SMALLINT".to_string(),
-            Type::I32 => "INTEGER".to_string(),
-            Type::I64 => "BIGINT".to_string(),
-            Type::LocalDateTime => "TIMESTAMP WITH TIME ZONE".to_string(),
-            Type::NaiveDate => "DATE".to_string(),
-            Type::NaiveDateTime => "TIMESTAMP".to_string(),
-            Type::NaiveTime => "TIME".to_string(),
+            Type::F32 => "REAL",
+            Type::F64 => "DOUBLE PRECISION",
+            Type::Generic => "", // TODO: document why this is empty.
+            Type::I16 => "SMALLINT",
+            Type::I32 => "INTEGER",
+            Type::I64 => "BIGINT",
+            Type::LocalDateTime => "TIMESTAMP WITH TIME ZONE",
+            Type::NaiveDate => "DATE",
+            Type::NaiveDateTime => "TIMESTAMP",
+            Type::NaiveTime => "TIME",
             Type::Nullable(ref typ) => {
-                nullable = true;
-                type_to_sql(&*typ, true)
+                let sql = _type_to_sql(&*typ, true);
+                return quote! {
+                    #sql
+                };
             },
-            Type::Serial => "SERIAL PRIMARY KEY".to_string(),
-            Type::String => "CHARACTER VARYING".to_string(),
-            Type::UnsupportedType(_) => "".to_string(), // TODO: should panic.
-            Type::UtcDateTime => "TIMESTAMP WITH TIME ZONE".to_string(),
+            Type::Serial => "SERIAL PRIMARY KEY",
+            Type::String => "CHARACTER VARYING",
+            Type::UnsupportedType(_) => "", // TODO: should panic. TODO: document why.
+            Type::UtcDateTime => "TIMESTAMP WITH TIME ZONE",
         };
 
+    let expr = string_literal(sql_type);
     if nullable {
-        sql_type
+        quote! {
+            #expr
+        }
     }
     else {
-        sql_type + " NOT NULL"
-    }
-}
-
-impl ToSql for Type {
-    fn to_sql(&self) -> String {
-        type_to_sql(self, false)
+        quote! {
+            #expr, " NOT NULL"
+        }
     }
 }
 

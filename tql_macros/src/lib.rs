@@ -20,13 +20,15 @@
  */
 
 /*
- * Primary key field
- * SQLite: ROWID
- *
+ * TODO: Use concat! to avoid creating a String.
+ * TODO: remove nested (useless) concat!().
+ * TODO: remove useless empty string ("") in generated code (concat!("", "")).
+ * TODO: if there's an issue with macro ordering, use macro 2.0 on nightly.
+ * TODO: avoid using quote_spanned and respan when possible and document all of their usage.
+ * TODO: allow using a model from another module without #[macro_use].
  * TODO: write multi-crate test.
  * TODO: write test for Option variable.
- * FIXME: update all generated identifiers to avoid name clash.
- * TODO: allow using a model from another module without #[macro_use].
+ * FIXME: update all generated identifiers to avoid name clash (or maybe use Span::def_site()).
  *
  * FIXME: error when having mutiple ForeignKey with the same table.
  * TODO: document the management of the connection.
@@ -155,7 +157,6 @@ use gen::{
 };
 use optimizer::optimize;
 use parser::Parser;
-use sql::ToSql;
 
 struct SqlQueryWithArgs {
     aggregates: Vec<Aggregate>,
@@ -171,7 +172,7 @@ struct SqlQueryWithArgs {
     query_type: QueryType,
     #[cfg(feature = "unstable")]
     span: Span,
-    sql: String,
+    sql: Tokens,
     table_name: Ident,
     use_pk: bool,
 }
@@ -198,28 +199,7 @@ pub fn sql(input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn to_sql(input: TokenStream) -> TokenStream {
     match to_sql_query(input.into()) {
-        Ok(args) => {
-            let gen =
-                match args.query_type {
-                    QueryType::Create => {
-                        let trait_ident = quote_spanned! { args.table_name.span() =>
-                            ::tql::SqlTable
-                        };
-
-                        let table_name = args.table_name;
-                        quote! {
-                            <#table_name as #trait_ident>::_create_query()
-                        }
-                    },
-                    _ => {
-                        let expr = LitStr::new(&args.sql, args.span);
-                        quote! {
-                            #expr
-                        }
-                    }
-                };
-            gen.into()
-        },
+        Ok(args) => args.sql.into(),
         Err(errors) => generate_errors(errors),
     }
 }
@@ -245,7 +225,7 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
     let mut query = analyze(method_calls)?;
     optimize(&mut query);
     query = analyze_types(query)?;
-    let sql = query.to_sql();
+    let sql = query.to_tokens();
     let joins =
         match query {
             Query::Select { ref joins, .. } => joins.clone(),
@@ -311,11 +291,6 @@ pub fn sql_table(input: TokenStream) -> TokenStream {
                 let code = quote! {
                     #methods
                     #code
-                };
-                #[cfg(feature = "unstable")]
-                let code = respan_tokens(code);
-                let code = quote! {
-                    #code
                     #table_macro
                 };
                 concat_token_stream(code.into(), impls)
@@ -329,17 +304,6 @@ pub fn sql_table(input: TokenStream) -> TokenStream {
         };
 
     gen
-}
-
-#[cfg(feature = "unstable")]
-fn respan(tokens: TokenStream) -> TokenStream {
-    respan_with(tokens, proc_macro::Span::call_site())
-}
-
-#[cfg(feature = "unstable")]
-fn respan_tokens(tokens: Tokens) -> Tokens {
-    let tokens: proc_macro2::TokenStream = respan(tokens.into()).into();
-    tokens.into_tokens()
 }
 
 #[cfg(feature = "unstable")]
@@ -393,8 +357,9 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> Tokens {
             {
                 let expr = &arg.expression;
                 let convert_ident = Ident::new("convert", arg.expression.span());
+                let to_owned_ident = Ident::new("to_owned", Span::call_site());
                 assigns.push(quote_spanned! { arg.expression.span() =>
-                    #ident.#name = #convert_ident(&#expr.to_owned());
+                    #ident.#name = #convert_ident(&#expr.#to_owned_ident());
                 });
                 fns.push(quote_spanned! { arg.expression.span() =>
                     // NOTE: hack to get the type required by the field struct.

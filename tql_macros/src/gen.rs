@@ -39,6 +39,8 @@ use syn::{AngleBracketedGenericArguments, LitStr, Path, TypePath};
 use syn::PathArguments::AngleBracketed;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
+use syn::token::Comma;
+use respan_tokens_with;
 
 use ast::{
     Aggregate,
@@ -49,10 +51,15 @@ use ast::{
 use attribute::{field_ty_to_type, fields_vec_to_hashmap};
 use error::{Error, Result, res};
 use plugin::{new_ident, string_literal, usize_literal};
-use sql::ToSql;
+use sql::{ToSql, fields_to_sql};
 use state::SqlFields;
 use string::token_to_string;
-use types::{Type, get_type_parameter, get_type_parameter_as_path};
+use types::{
+    Type,
+    get_type_parameter,
+    get_type_parameter_as_path,
+    type_to_sql,
+};
 use {
     SqlQueryWithArgs,
     add_error,
@@ -61,97 +68,49 @@ use {
     typecheck_arguments,
 };
 #[cfg(feature = "unstable")]
-use {
-    respan_tokens_with,
-    respan_with,
-};
+use respan_with;
 
-/// Create the _create_query() and from_row() method for the table struct.
+/// Create the from_row() method for the table struct.
 pub fn table_methods(item_struct: &ItemStruct) -> Tokens {
     let table_ident = &item_struct.ident;
     if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
-        let mut fields_to_create = vec![];
-        let mut primary_key = None;
-        let mut pk_idents = vec![];
-        let mut pk_tables = vec![];
-        for field in named {
-            fields_to_create.push(TypedField {
-                identifier: field.ident.expect("field ident").to_string(),
-                typ: field_ty_to_type(&field.ty).node.to_sql(),
-            });
-            let typ = token_to_string(&field.ty);
-            if let Some(ident) = field.ident {
-                if typ == "PrimaryKey" {
-                    primary_key = Some(ident);
-                }
-                else if typ.starts_with("ForeignKey") {
-                    if let syn::Type::Path(ref path) = field.ty {
-                        let element = path.path.segments.first().expect("first segment of path");
-                        let first_segment = element.value();
-                        if let Some(path) = get_type_parameter_as_path(&first_segment.arguments) {
-                            let type_ident = get_type_parameter(&first_segment.arguments)
-                                .expect("get type parameter");
-                            if !pk_tables.contains(&path) {
-                                pk_idents.push(Ident::from(format!("{}_pk", type_ident).as_str()));
-                                pk_tables.push(path);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        let create_query = format!("CREATE TABLE {table} ({fields})",
-            table = table_ident,
-            fields = fields_to_create.to_sql()
-        );
+        let field_idents = named.iter()
+            .map(|field| field.ty.clone());
+        let index = &mut 0;
+        let columns = field_idents.map(|typ| to_row_get(typ, false, index));
 
         let field_idents = named.iter()
-            .map(|field| field.ty.clone())
-            .enumerate();
-        let columns = field_idents.map(|(index, typ)| to_row_get(index, typ, false));
+            .map(|field| field.ty.clone());
+        let index = &mut 0;
+        let related_columns = field_idents.map(|typ| to_row_get(typ, true, index));
 
-        let field_idents = named.iter()
-            .map(|field| field.ty.clone())
-            .enumerate();
-        let related_columns = field_idents.map(|(index, typ)| to_row_get(index, typ, true));
-
-        let field_count = usize_literal(named.len());
+        let field_count = named.iter()
+            .filter(|field| {
+                let typ = token_to_string(&field.ty);
+                if let Some(ident) = field.ident {
+                    return !typ.starts_with("ForeignKey");
+                }
+                true
+            })
+            .count();
+        let field_count = usize_literal(field_count);
 
         let field_idents = named.iter()
             .map(|field| field.ident.expect("field has name"));
         let field_idents2 = named.iter()
             .map(|field| field.ident.expect("field has name"));
 
-        let field_list = named.iter()
-            .map(|field| {
-                format!("{table}.{column} AS \"{table}.{column}\"",
-                        column = field.ident.expect("field has name"),
-                        table = table_ident
-                )
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
-        let field_list = string_literal(&field_list);
+        let trait_ident = quote_spanned! { table_ident.span() =>
+            ::tql::SqlTable
+        };
+        let postgres_ident = quote_spanned! { table_ident.span() =>
+            ::postgres
+        };
+        let row_ident = Ident::new("row", Span::call_site());
 
-        let primary_key =
-            if let Some(ident) = primary_key {
-                let ident = ident.to_string();
-                quote! {
-                    #ident
-                }
-            }
-            else {
-                quote! {
-                    unreachable!("no primary key")
-                }
-            };
         quote! {
-            unsafe impl ::tql::SqlTable for #table_ident {
+            unsafe impl #trait_ident for #table_ident {
                 const FIELD_COUNT: usize = #field_count;
-
-                fn _create_query() -> String {
-                    format!(#create_query #(, #pk_idents = #pk_tables::_primary_key_field())*)
-                }
 
                 // TODO: rename to avoid clash.
                 fn default() -> Self {
@@ -159,30 +118,18 @@ pub fn table_methods(item_struct: &ItemStruct) -> Tokens {
                 }
 
                 #[allow(unused)]
-                fn from_row(row: &::postgres::rows::Row) -> Self {
+                fn from_row(#row_ident: &#postgres_ident::rows::Row) -> Self {
                     Self {
                         #(#field_idents: #columns,)*
                     }
                 }
 
                 #[allow(unused)]
-                fn from_related_row(row: &::postgres::rows::Row, delta: usize) -> Self {
+                fn from_related_row(#row_ident: &#postgres_ident::rows::Row, delta: usize) -> Self {
                     Self {
                         #(#field_idents2: #related_columns,)*
                     }
                 }
-
-                #[allow(unused)]
-                fn field_list() -> &'static str {
-                    #field_list
-                }
-            }
-
-            impl #table_ident {
-                pub fn _primary_key_field() -> &'static str {
-                    #primary_key
-                }
-
             }
         }
     }
@@ -196,32 +143,39 @@ pub fn table_methods(item_struct: &ItemStruct) -> Tokens {
 pub fn tosql_impl(item_struct: &ItemStruct, primary_key_field: &str) -> Tokens {
     let table_ident = &item_struct.ident;
     let debug_impl = create_debug_impl(item_struct);
-    let primary_key_ident = Ident::from(primary_key_field);
+    let primary_key_ident = Ident::new(primary_key_field, Span::call_site());
+    let std_ident = quote_spanned! { table_ident.span() =>
+        ::std
+    };
+    let postgres_ident = quote_spanned! { table_ident.span() =>
+        ::postgres
+    };
+    let to_owned_ident = Ident::new("to_owned", Span::call_site());
     quote! {
         #debug_impl
 
-        impl ::postgres::types::ToSql for #table_ident {
-            fn to_sql(&self, ty: &::postgres::types::Type, out: &mut Vec<u8>) ->
-                Result<::postgres::types::IsNull, Box<::std::error::Error + 'static + Sync + Send>>
+        impl #postgres_ident::types::ToSql for #table_ident {
+            fn to_sql(&self, ty: &#postgres_ident::types::Type, out: &mut Vec<u8>) ->
+                Result<#postgres_ident::types::IsNull, Box<#std_ident::error::Error + 'static + Sync + Send>>
                 {
                     self.#primary_key_ident.to_sql(ty, out)
                 }
 
-            fn accepts(ty: &::postgres::types::Type) -> bool {
-                *ty == ::postgres::types::INT4
+            fn accepts(ty: &#postgres_ident::types::Type) -> bool {
+                *ty == #postgres_ident::types::INT4
             }
 
-            fn to_sql_checked(&self, ty: &::postgres::types::Type, out: &mut ::std::vec::Vec<u8>)
-                -> ::std::result::Result<::postgres::types::IsNull,
-                Box<::std::error::Error + ::std::marker::Sync + ::std::marker::Send>>
+            fn to_sql_checked(&self, ty: &#postgres_ident::types::Type, out: &mut #std_ident::vec::Vec<u8>)
+                -> #std_ident::result::Result<#postgres_ident::types::IsNull,
+                Box<#std_ident::error::Error + #std_ident::marker::Sync + #std_ident::marker::Send>>
                 {
-                    ::postgres::types::__to_sql_checked(self, ty, out)
+                    #postgres_ident::types::__to_sql_checked(self, ty, out)
                 }
         }
 
         impl #table_ident {
             #[allow(dead_code)]
-            pub fn to_owned(&self) -> Option<Self> {
+            pub fn #to_owned_ident(&self) -> Option<Self> {
                 unimplemented!();
             }
         }
@@ -238,9 +192,12 @@ fn create_debug_impl(item_struct: &ItemStruct) -> Tokens {
             .map(|ident| ident.to_string());
         let field_idents = named.iter()
             .map(|field| field.ident.expect("field has name"));
+        let std_ident = quote_spanned! { table_ident.span() =>
+            ::std
+        };
         quote! {
-            impl ::std::fmt::Debug for #table_ident {
-                fn fmt(&self, formatter: &mut ::std::fmt::Formatter) -> Result<(), ::std::fmt::Error> {
+            impl #std_ident::fmt::Debug for #table_ident {
+                fn fmt(&self, formatter: &mut #std_ident::fmt::Formatter) -> Result<(), #std_ident::fmt::Error> {
                     formatter.debug_struct(#table_name)
                         #(.field(#field_names, &self.#field_idents))*
                         .finish()
@@ -290,56 +247,9 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
 {
     let table_ident = &args.table_name;
     let result_ident = Ident::from("result");
-    let sql_query = string_literal(&args.sql);
+    let sql_query = &args.sql;
     let trait_ident = quote_spanned! { table_ident.span() =>
         ::tql::SqlTable
-    };
-    let pk =
-        if args.use_pk {
-            quote! {
-                , pk = #table_ident::_primary_key_field()
-            }
-        }
-        else {
-            quote! { }
-        };
-    let joins = args.joins.iter()
-        .map(|join| {
-            let base_field = &join.base_field;
-            let related_pk = Ident::new(&format!("{}_pk", join.base_field), join.base_field.span());
-            let macro_name = Ident::new(&format!("tql_{}_related_tables", table_ident), Span::call_site());
-            let pks_macro_name = Ident::new(&format!("tql_{}_related_pks", table_ident), Span::call_site());
-            let code = quote! {
-                , #base_field = #macro_name!(#base_field)
-                , #related_pk = #pks_macro_name!(#base_field)
-            };
-            #[cfg(feature = "unstable")]
-            let code = respan_tokens_with(code, base_field.span().unstable());
-            code
-        });
-    let join_fields = args.joins.iter()
-        .map(|join| {
-            let base_field = join.base_field;
-            let field_list_macro_name = Ident::new(&format!("tql_{}_field_list", table_ident), Span::call_site());
-            quote_spanned! { table_ident.span() =>
-                #field_list_macro_name!(#base_field)
-            }
-        });
-    let fields = quote! { <#table_ident as #trait_ident>::field_list() };
-    let select_query = || {
-        let pks =
-            if args.use_pk || !args.joins.is_empty() {
-                quote! {
-                    #pk
-                    #(#joins)*
-                }
-            }
-            else {
-                quote! { }
-            };
-        quote! {
-            &format!(#sql_query #pks, fields = [#fields #(, #join_fields)*].join(", "))
-        }
     };
 
     match args.query_type {
@@ -370,21 +280,11 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
         },
         QueryType::Create => {
             quote! {{
-                #connection_ident.prepare(&<#table_ident as #trait_ident>::_create_query())
+                #connection_ident.prepare(#sql_query)
                     .and_then(|result| result.execute(&[]))
             }}
         },
         QueryType::InsertOne => {
-            let sql_query =
-                if args.use_pk {
-                    quote! {
-                        &format!(#sql_query,
-                            returning_pk = format!("RETURNING {}", #table_ident::_primary_key_field()))
-                    }
-                }
-                else {
-                    quote! { #sql_query }
-                };
             quote! {{
                 #connection_ident.prepare(#sql_query)
                     .and_then(|result| {
@@ -398,7 +298,6 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
             }}
         },
         QueryType::SelectMulti => {
-            let sql_query = select_query();
             let result =
                 quote! {
                     let #result_ident = #connection_ident.prepare(#sql_query).expect("prepare query");
@@ -418,7 +317,6 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
             }}
         },
         QueryType::SelectOne => {
-            let sql_query = select_query();
             let result =
                 quote! {
                     let #result_ident = #connection_ident.prepare(#sql_query).expect("prepare query");
@@ -436,13 +334,6 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
             }}
         },
         QueryType::Exec => {
-            let sql_query =
-                if args.use_pk {
-                    quote! { &format!(#sql_query #pk) }
-                }
-                else {
-                    quote! { #sql_query }
-                };
             quote! {{
                 #connection_ident.prepare(#sql_query)
                     .and_then(|result| result.execute(&#args_expr))
@@ -588,6 +479,116 @@ pub fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, Option
     (res(fields, errors), primary_key_field, impls)
 }
 
+fn field_list_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> Tokens {
+    let field_list = named.iter()
+        .filter(|field| {
+            let typ = token_to_string(&field.ty);
+            if let Some(ident) = field.ident {
+                return !typ.starts_with("ForeignKey");
+            }
+            true
+        })
+        .map(|field| {
+            format!("{table}.{column}",
+                    column = field.ident.expect("field has name"),
+                    table = table_ident
+                   )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let field_list = string_literal(&field_list);
+    let macro_name = Ident::new(&format!("tql_{}_field_list", table_ident), Span::call_site());
+    quote! {
+        #[allow(unused_macros)]
+        macro_rules! #macro_name {
+            () => { #field_list };
+        }
+    }
+}
+
+fn create_query_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> Tokens {
+    let mut fields_to_create = vec![];
+    for field in named {
+        fields_to_create.push(TypedField {
+            identifier: field.ident.expect("field ident").to_string(),
+            typ: type_to_sql(&field_ty_to_type(&field.ty).node),
+        });
+    }
+    let table = table_ident.to_string();
+    let fields = fields_to_sql(&fields_to_create);
+    let create_query = quote! {
+        concat!("CREATE TABLE ", #table, " (", #fields, ")")
+    };
+    let macro_name = Ident::new(&format!("tql_{}_create_query", table_ident), Span::call_site());
+    quote! {
+        macro_rules! #macro_name {
+            () => { #create_query };
+        }
+    }
+}
+
+fn related_pks_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> Tokens {
+    let mut related_table_names = vec![];
+    let mut related_pk_macro_names = vec![];
+    for field in named {
+        let typ = token_to_string(&field.ty);
+        if let Some(ident) = field.ident {
+            if typ.starts_with("ForeignKey") {
+                if let syn::Type::Path(ref path) = field.ty {
+                    let element = path.path.segments.first().expect("first segment of path");
+                    let first_segment = element.value();
+                    let typ = get_type_parameter(&first_segment.arguments)
+                        .expect("ForeignKey inner type");
+                    related_table_names.push(ident);
+                    related_pk_macro_names.push(Ident::new(&format!("tql_{}_primary_key_field", typ),
+                    Span::call_site()));
+                }
+            }
+        }
+    }
+    let macro_name = Ident::new(&format!("tql_{}_related_pks", table_ident), Span::call_site());
+    quote! {
+        #[allow(unused_macros)]
+        macro_rules! #macro_name {
+            #((#related_table_names) => { #related_pk_macro_names!() };)*
+            // NOTE: the check for the field name is done elsewhere, hence it is okay to return
+            // "" here.
+            ($tt:tt) => { "" };
+        }
+    }
+}
+
+fn pk_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> Tokens {
+    let macro_name = Ident::new(&format!("tql_{}_primary_key_field", table_ident), Span::call_site());
+    let mut primary_key = None;
+    for field in named {
+        let typ = token_to_string(&field.ty);
+        if let Some(ident) = field.ident {
+            if typ == "PrimaryKey" {
+                primary_key = Some(ident);
+            }
+        }
+    }
+    let primary_key =
+        if let Some(ident) = primary_key {
+            let ident = ident.to_string();
+            quote! {
+                #ident
+            }
+        }
+        else {
+            quote! {
+                unreachable!("no primary key")
+            }
+        };
+    quote! {
+        #[macro_export]
+        macro_rules! #macro_name {
+            () => { #primary_key };
+        }
+    }
+}
+
 /// Create the insert macro for the table struct to check that all the mandatory fields are
 /// provided.
 pub fn table_macro(item_struct: &ItemStruct) -> Tokens {
@@ -598,7 +599,6 @@ pub fn table_macro(item_struct: &ItemStruct) -> Tokens {
         let mut related_table_names = vec![];
         let mut non_related_table_names = vec![];
         let mut related_tables = vec![];
-        let mut related_table_types = vec![];
         let mut compiler_errors = vec![];
         let mut fk_patterns = vec![];
         for field in named {
@@ -616,15 +616,12 @@ pub fn table_macro(item_struct: &ItemStruct) -> Tokens {
                         let first_segment = element.value();
                         let typ = get_type_parameter(&first_segment.arguments)
                             .expect("ForeignKey inner type");
-                        related_tables.push(typ);
                         related_table_names.push(ident);
-                        related_table_types.push(get_type_parameter_as_path(&first_segment.arguments)
-                            .expect("ForeignKey inner type"));
-                        if let Some(path) = get_type_parameter_as_path(&first_segment.arguments) {
-                            fk_patterns.push(quote_spanned! { table_ident.span() =>
-                                (#ident) => { <#path as ::tql::SqlTable>::field_list() };
-                            });
-                        }
+                        let macro_name = Ident::new(&format!("tql_{}_field_list", typ), Span::call_site());
+                        related_tables.push(typ);
+                        fk_patterns.push(quote_spanned! { table_ident.span() =>
+                            (#ident) => { #macro_name!() };
+                        });
                     }
                 }
                 else {
@@ -640,7 +637,7 @@ expected type `ForeignKey<_>`
         }
 
         let macro_name = Ident::new(&format!("tql_{}_check_missing_fields", table_ident), Span::call_site());
-        let pk_macro_name = Ident::new(&format!("tql_{}_check_primary_key", table_ident), Span::call_site());
+        let check_pk_macro_name = Ident::new(&format!("tql_{}_check_primary_key", table_ident), Span::call_site());
         #[cfg(feature = "unstable")]
         let macro_call = quote_spanned! { table_ident.span() =>
             tql_macros::check_missing_fields!
@@ -659,11 +656,13 @@ expected type `ForeignKey<_>`
                 }
             };
         let related_tables_macro_name = Ident::new(&format!("tql_{}_related_tables", table_ident), Span::call_site());
-        let related_pks_macro_name = Ident::new(&format!("tql_{}_related_pks", table_ident), Span::call_site());
-        let field_list_macro_name = Ident::new(&format!("tql_{}_field_list", table_ident), Span::call_site());
-        let related_table_names2 = &related_table_names;
+        let related_field_list_macro_name = Ident::new(&format!("tql_{}_related_field_list", table_ident), Span::call_site());
         let related_table_names = &related_table_names;
-        quote_spanned! { table_ident.span() =>
+        let field_list_macro = field_list_macro(named, table_ident);
+        let create_query_macro = create_query_macro(named, table_ident);
+        let pk_macro = pk_macro(named, table_ident);
+        let related_pks_macro = related_pks_macro(named, table_ident);
+        quote! {
             #[macro_export]
             macro_rules! #macro_name {
                 ($($insert_idents:ident),*) => {
@@ -672,12 +671,13 @@ expected type `ForeignKey<_>`
             }
 
             #[macro_export]
-            macro_rules! #pk_macro_name {
+            macro_rules! #check_pk_macro_name {
                 () => {
                     #pk_code
                 };
             }
 
+            // TODO: probably need to export all macros.
             #[allow(unused_macros)]
             macro_rules! #related_tables_macro_name {
                 #((#related_table_names) => { #related_tables };)*
@@ -688,18 +688,15 @@ expected type `ForeignKey<_>`
             }
 
             #[allow(unused_macros)]
-            macro_rules! #related_pks_macro_name {
-                #((#related_table_names2) => { #related_table_types::_primary_key_field() };)*
-                // NOTE: the check for the field name is done elsewhere, hence it is okay to return
-                // "" here.
-                ($tt:tt) => { "" };
-            }
-
-            #[allow(unused_macros)]
-            macro_rules! #field_list_macro_name {
+            macro_rules! #related_field_list_macro_name {
                 #(#fk_patterns)*
                 ($tt:tt) => { "" };
             }
+
+            #field_list_macro
+            #create_query_macro
+            #related_pks_macro
+            #pk_macro
         }
     }
     else {
@@ -707,27 +704,32 @@ expected type `ForeignKey<_>`
     }
 }
 
-fn to_row_get(index: usize, typ: syn::Type, with_delta: bool) -> Tokens {
+fn to_row_get(typ: syn::Type, with_delta: bool, index: &mut usize) -> Tokens {
     if let syn::Type::Path(path) = typ {
         let segment = path.path.segments.first().expect("first segment").into_value();
         if segment.ident == "ForeignKey" {
-            return quote! {
+            // NOTE: this use the Span call_site() to work-around a privacy issue:
+            // https://github.com/rust-lang/rust/issues/46635
+            return quote_spanned! { Span::call_site() =>
                 None
             };
         }
     }
-    let index = usize_literal(index);
-    let index =
+    let index_lit = usize_literal(*index);
+    *index += 1;
+    let index_lit =
         if with_delta {
             quote! {
-                #index + delta
+                #index_lit + delta
             }
         }
         else {
-            quote! { #index }
+            quote! { #index_lit }
         };
-    quote! {
-        row.get(#index)
+    // NOTE: this use the Span call_site() to work-around a privacy issue:
+    // https://github.com/rust-lang/rust/issues/46635
+    quote_spanned! { Span::call_site() =>
+        row.get(#index_lit)
     }
 }
 

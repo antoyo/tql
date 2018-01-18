@@ -21,8 +21,11 @@
 
 //! The PostgreSQL code generator.
 
+use std::iter;
 use std::str::from_utf8;
 
+use proc_macro2::Span;
+use quote::Tokens;
 use syn::{Expr, Ident, Lit};
 
 use ast::{
@@ -55,43 +58,8 @@ use ast::Limit::{
     Range,
     StartRange,
 };
+use plugin::string_literal;
 use state::methods_singleton;
-
-/// Macro used to generate a ToSql implementation for a filter (for use in WHERE or HAVING).
-macro_rules! filter_to_sql {
-    ( $name:ident ) => {
-        impl ToSql for $name {
-            fn to_sql(&self) -> String {
-                self.operand1.to_sql() + " " +
-                    &self.operator.to_sql() + " " +
-                    &self.operand2.to_sql()
-            }
-        }
-    };
-}
-
-/// Macro used to generate a ToSql implementation for a filter expression.
-macro_rules! filter_expression_to_sql {
-    ( $name:ident ) => {
-        impl ToSql for $name {
-            fn to_sql(&self) -> String {
-                match *self {
-                    $name::Filter(ref filter) => filter.to_sql(),
-                    $name::Filters(ref filters) => filters.to_sql(),
-                    $name::NegFilter(ref filter) =>
-                        "NOT ".to_string() +
-                        &filter.to_sql(),
-                    $name::NoFilters => "".to_string(),
-                    $name::ParenFilter(ref filter) =>
-                        "(".to_string() +
-                        &filter.to_sql() +
-                        ")",
-                    $name::FilterValue(ref filter_value) => filter_value.node.to_sql(),
-                }
-            }
-        }
-    };
-}
 
 /// Macro used to generate a ToSql implementation for a slice.
 macro_rules! slice_to_sql {
@@ -120,11 +88,39 @@ impl ToSql for Aggregate {
 
 slice_to_sql!(Aggregate, ", ");
 
-filter_to_sql!(AggregateFilter);
+impl ToSql for AggregateFilter {
+    fn to_sql(&self) -> String {
+        self.operand1.to_sql() + " " +
+            &self.operator.to_sql() + " " +
+            &self.operand2.to_sql()
+    }
+}
 
-filter_expression_to_sql!(AggregateFilterExpression);
+impl ToSql for AggregateFilterExpression {
+    fn to_sql(&self) -> String {
+        match *self {
+            AggregateFilterExpression::Filter(ref filter) => filter.to_sql(),
+            AggregateFilterExpression::Filters(ref filters) => filters.to_sql(),
+            AggregateFilterExpression::NegFilter(ref filter) =>
+                "NOT ".to_string() +
+                &filter.to_sql(),
+            AggregateFilterExpression::NoFilters => "".to_string(),
+            AggregateFilterExpression::ParenFilter(ref filter) =>
+                "(".to_string() +
+                &filter.to_sql() +
+                ")",
+            AggregateFilterExpression::FilterValue(ref filter_value) => filter_value.node.to_sql(),
+        }
+    }
+}
 
-filter_to_sql!(AggregateFilters);
+impl ToSql for AggregateFilters {
+    fn to_sql(&self) -> String {
+        self.operand1.to_sql() + " " +
+            &self.operator.to_sql() + " " +
+            &self.operand2.to_sql()
+    }
+}
 
 impl ToSql for Assignment {
     fn to_sql(&self) -> String {
@@ -198,11 +194,50 @@ impl ToSql for Vec<String> {
     }
 }
 
-filter_to_sql!(Filter);
+impl Filter {
+    fn to_tokens(&self, index: &mut usize) -> Tokens {
+        let operand1 = self.operand1.to_tokens();
+        let operator = self.operator.to_sql();
+        let operand2 = replace_placeholder(self.operand2.to_sql(), index);
+        quote! {
+            #operand1, " ", #operator, " ", #operand2
+        }
+    }
+}
 
-filter_expression_to_sql!(FilterExpression);
+impl FilterExpression {
+    fn to_tokens(&self, index: &mut usize) -> Tokens {
+        match *self {
+            FilterExpression::Filter(ref filter) => filter.to_tokens(index),
+            FilterExpression::Filters(ref filters) => filters.to_tokens(index),
+            FilterExpression::NegFilter(ref filter) => {
+                let filter = filter.to_tokens(index);
+                quote! {
+                    concat!("NOT ", #filter)
+                }
+            },
+            FilterExpression::NoFilters => quote! { "" }, // No filters result in no SQL code.
+            FilterExpression::ParenFilter(ref filter) => {
+                let filter = filter.to_tokens(index);
+                quote! {
+                    concat!("(", #filter, ")")
+                }
+            }
+            FilterExpression::FilterValue(ref filter_value) => filter_value.node.to_tokens(),
+        }
+    }
+}
 
-filter_to_sql!(Filters);
+impl Filters {
+    fn to_tokens(&self, index: &mut usize) -> Tokens {
+        let operand1 = self.operand1.to_tokens(index);
+        let operator = self.operator.to_sql();
+        let operand2 = self.operand2.to_tokens(index);
+        quote! {
+            #operand1, " ", #operator, " ", #operand2
+        }
+    }
+}
 
 impl ToSql for Ident {
     fn to_sql(&self) -> String {
@@ -212,45 +247,96 @@ impl ToSql for Ident {
 
 slice_to_sql!(Ident, ", ");
 
-impl ToSql for FilterValue {
-    fn to_sql(&self) -> String {
-        match *self {
-            FilterValue::Identifier(ref table, ref identifier) => format!("{}.{}", table, identifier.to_sql()),
-            FilterValue::MethodCall(MethodCall { ref arguments, ref object_name, ref method_name, ..  }) => {
-                let methods = methods_singleton();
-                if let Some(method) = methods.get(&method_name.to_string()) {
-                    // In the template, $0 represents the object identifier and $1, $2, ... the
-                    // arguments.
-                    let mut sql = method.template.replace("$0", &object_name.to_string());
-                    let mut index = 1;
-                    for argument in arguments {
-                        sql = sql.replace(&format!("${}", index), &argument.to_sql());
-                        index += 1;
+impl FilterValue {
+    fn to_tokens(&self) -> Tokens {
+        let sql =
+            match *self {
+                FilterValue::Identifier(ref table, ref identifier) => format!("{}.{}", table, identifier.to_sql()),
+                FilterValue::MethodCall(MethodCall { ref arguments, ref object_name, ref method_name, ..  }) => {
+                    let methods = methods_singleton();
+                    if let Some(method) = methods.get(&method_name.to_string()) {
+                        // In the template, $0 represents the object identifier and $1, $2, ... the
+                        // arguments.
+                        let mut sql = method.template.replace("$0", &object_name.to_string());
+                        let mut index = 1;
+                        for argument in arguments {
+                            sql = sql.replace(&format!("${}", index), &argument.to_sql());
+                            index += 1;
+                        }
+                        sql
                     }
-                    sql
-                }
-                else {
-                    // NOTE: type checking will disallow this code to be executed.
-                    String::new()
-                }
-            },
-            FilterValue::None => unreachable!("FilterValue::None in FilterValue::to_sql()"),
-            FilterValue::PrimaryKey(ref table) => format!("{}.{{pk}}", table),
+                    else {
+                        // NOTE: type checking will disallow this code to be executed.
+                        String::new()
+                    }
+                },
+                FilterValue::None => unreachable!("FilterValue::None in FilterValue::to_sql()"),
+                FilterValue::PrimaryKey(ref table) => {
+                    let macro_name = Ident::new(&format!("tql_{}_primary_key_field", table), Span::call_site());
+                    return quote! {
+                        concat!(#table, ".", #macro_name!())
+                    };
+                },
+            };
+        let expr = string_literal(&sql);
+        quote! {
+            #expr
         }
     }
 }
 
-impl ToSql for Join {
-    fn to_sql(&self) -> String {
-        let fk = format!("{{{}}}", self.base_field);
-        let fk_pk = format!("{{{}_pk}}", self.base_field);
-        " INNER JOIN ".to_string() + &fk +
-            " ON " + &self.base_table + "." + &self.base_field.to_sql() + " = "
-            + &fk + "." + &fk_pk
+impl Join {
+    fn to_tokens(&self) -> Tokens {
+        let related_table_macro_name =
+            Ident::new(&format!("tql_{}_related_tables", self.base_table), Span::call_site());
+        let related_pks_macro_name = Ident::new(&format!("tql_{}_related_pks", self.base_table), Span::call_site());
+        let base_table = &self.base_table;
+        let base_field = self.base_field.to_sql();
+        let base_field_ident = &self.base_field;
+        let related_table_name = quote! {
+            #related_table_macro_name!(#base_field_ident)
+        };
+        quote! {
+            concat!(" INNER JOIN ", #related_table_name, " ON ", #base_table, ".", #base_field, " = ",
+                    #related_table_name, ".", #related_pks_macro_name!(#base_field_ident))
+        }
     }
 }
 
-slice_to_sql!(Join, " ");
+fn sep_by<I: Iterator<Item=Tokens>>(elements: I, sep: &str) -> Tokens {
+    let mut elements: Vec<_> = elements.collect();
+    if let Some(last_element) = elements.pop() {
+        let elements = elements.iter()
+            .map(|element|
+                 quote! {
+                     #element, #sep
+                 }
+                );
+        quote! {
+            #(#elements,)* #last_element
+        }
+    }
+    else {
+        quote! {
+            ""
+        }
+    }
+}
+
+fn joins_to_tokens(joins: &[Join]) -> Tokens {
+    sep_by(joins.iter().map(|join| join.to_tokens()), " ")
+}
+
+fn joined_fields(joins: &[Join], table: &str) -> Tokens {
+    let macro_name = Ident::new(&format!("tql_{}_related_field_list", table), Span::call_site());
+    let fields = joins.iter()
+        .map(|join| join.base_field);
+    let macro_name = iter::repeat(macro_name)
+        .take(joins.len());
+    quote! {
+        #(, ", ", #macro_name!(#fields)),*
+    }
+}
 
 impl ToSql for Identifier {
     fn to_sql(&self) -> String {
@@ -300,8 +386,8 @@ impl ToSql for Order {
 slice_to_sql!(Order, ", ");
 
 /// Convert a whole `Query` to SQL.
-impl ToSql for Query {
-    fn to_sql(&self) -> String {
+impl Query {
+    pub fn to_tokens(&self) -> Tokens {
         match *self {
             Query::Aggregate{ref aggregates, ref aggregate_filter, ref filter, ref groups, ref joins, ref table} => {
                 let where_clause = filter_to_where_clause(filter);
@@ -319,45 +405,54 @@ impl ToSql for Query {
                     else {
                         " HAVING "
                     };
-                replace_placeholder(format!("SELECT {aggregates} FROM {table_name}{joins}{where_clause}{filter}{group_clause}{groups}{having_clause}{aggregate_filter}",
-                                            aggregates = aggregates.to_sql(),
-                                            table_name = table,
-                                            joins = joins.to_sql(),
-                                            where_clause = where_clause,
-                                            filter = filter.to_sql(),
-                                            group_clause = group_clause,
-                                            groups = groups.to_sql(),
-                                            having_clause = having_clause,
-                                            aggregate_filter = aggregate_filter.to_sql())
-                                    )
+                let aggregates = aggregates.to_sql();
+                let joins = joins_to_tokens(&joins);
+                let index = &mut 1;
+                let filter = filter.to_tokens(index);
+                let groups = groups.to_sql();
+                let aggregate_filter = replace_placeholder(aggregate_filter.to_sql(), index);
+                quote! {
+                    concat!("SELECT ", #aggregates, " FROM ", #table, #joins, #where_clause, #filter, #group_clause,
+                            #groups, #having_clause, #aggregate_filter)
+                }
             },
-            Query::CreateTable { .. } => {
-                // NOTE: the query is in a method added to the table struct.
-                String::new()
+            Query::CreateTable { ref table } => {
+                let macro_name = Ident::new(&format!("tql_{}_create_query", table), Span::call_site());
+                quote_spanned! { Span::call_site() =>
+                    #macro_name!()
+                }
             },
             Query::Delete { ref filter, ref table, use_pk: _use_pk } => {
                 let where_clause = filter_to_where_clause(filter);
-                replace_placeholder(format!("DELETE FROM {table}{where_clause}{filter}",
-                                            table = table,
-                                            where_clause = where_clause,
-                                            filter = filter.to_sql()
-                                           )
-                                   )
+                let filter = filter.to_tokens(&mut 1);
+                // TODO: call replace_placeholder().
+                quote! {
+                    concat!("DELETE FROM ", #table, #where_clause, #filter)
+                }
             },
             Query::Drop { ref table } => {
-                format!("DROP TABLE {table}", table = table)
+                string_token(format!("DROP TABLE {table}", table = table).as_str())
             },
             Query::Insert { ref assignments, ref table } => {
                 let fields: Vec<_> = assignments.iter().map(|assign|
                     assign.identifier.expect("Assignment identifier").to_sql()).collect();
-                let values: Vec<_> = assignments.iter().map(|assign| assign.value.to_sql()).collect();
+                let index = &mut 1;
+                let values: Vec<_> = assignments.iter().map(|assign|
+                    replace_placeholder(assign.value.to_sql(), index)
+                ).collect();
                 // Add the SQL code to get the inserted primary key.
                 // TODO: what to do when there is no primary key?
-                replace_placeholder(format!("INSERT INTO {table}({fields}) VALUES({values}) {{returning_pk}}",
+                let query_start =
+                    format!("INSERT INTO {table}({fields}) VALUES({values}) RETURNING ",
                         table = table,
                         fields = fields.to_sql(),
                         values = values.to_sql(),
-                    ))
+                    );
+                let query_start = string_token(&query_start);
+                let macro_name = Ident::new(format!("tql_{}_primary_key_field", table).as_str(), Span::call_site());
+                quote! {
+                    concat!(#query_start, #macro_name!())
+                }
             },
             Query::Select { ref filter, get: _get, ref joins, ref limit, ref order, ref table, use_pk: _use_pk } => {
                 let where_clause = filter_to_where_clause(filter);
@@ -368,29 +463,38 @@ impl ToSql for Query {
                     else {
                         ""
                     };
-                replace_placeholder(
-                    format!("SELECT {{fields}} FROM {table}{joins}{where_clause}{filter}{order_clause}{order}{limit}",
-                            table = table,
-                            joins = joins.to_sql(),
-                            where_clause = where_clause,
-                            filter = filter.to_sql(),
-                            order_clause = order_clause,
-                            order = order.to_sql(),
-                            limit = limit.to_sql()
-                           )
-                    )
+                let macro_name = Ident::new(format!("tql_{}_field_list", table).as_str(), Span::call_site());
+                // TODO: add related fields (SELECT {related_fields} FROM}.
+                // TODO: add the joins (INNER JOIN {} ON {}).
+                // TODO: the pk could come be in a WHERE.
+                let joined_fields = joined_fields(&joins, table);
+                let joins = joins_to_tokens(&joins);
+                let index = &mut 1;
+                let filter = filter.to_tokens(index);
+                let order = replace_placeholder(order.to_sql(), index);
+                let limit = replace_placeholder(limit.to_sql(), index);
+                quote_spanned! { Span::call_site() =>
+                    concat!("SELECT ", #macro_name!() #joined_fields, " FROM ", #table, #joins, #where_clause, #filter, #order_clause,
+                        #order, #limit)
+                }
             },
             Query::Update { ref assignments, ref filter, ref table, use_pk: _use_pk } => {
                 let where_clause = filter_to_where_clause(filter);
-                replace_placeholder(format!("UPDATE {table} SET {assignments}{where_clause}{filter}",
-                                            table = table,
-                                            assignments = assignments.to_sql(),
-                                            where_clause = where_clause,
-                                            filter = filter.to_sql()
-                                           )
-                                   )
+                let assignments = assignments.to_sql();
+                let filter = filter.to_tokens(&mut 1);
+                // TODO: call replace_placeholder.
+                quote! {
+                    concat!("UPDATE ", #table, " SET ", #assignments, #where_clause, #filter)
+                }
             },
         }
+    }
+}
+
+fn string_token(string: &str) -> Tokens {
+    let expr = string_literal(string);
+    quote! {
+        #expr
     }
 }
 
@@ -407,13 +511,17 @@ impl ToSql for RelationalOperator {
     }
 }
 
-impl ToSql for TypedField {
-    fn to_sql(&self) -> String {
-        self.identifier.to_sql() + " " + &self.typ
-    }
+pub fn fields_to_sql(fields: &[TypedField]) -> Tokens {
+    let fields = fields.iter()
+        .map(|field| {
+             let ident = field.identifier.to_sql();
+             let typ = &field.typ;
+             quote! {
+                 #ident, " ", #typ
+             }
+        });
+    sep_by(fields, ", ")
 }
-
-slice_to_sql!(TypedField, ", ");
 
 /// Convert a `FilterExpression` to either " WHERE " or the empty string if there are no filters.
 fn filter_to_where_clause(filter: &FilterExpression) -> &str {
@@ -425,16 +533,15 @@ fn filter_to_where_clause(filter: &FilterExpression) -> &str {
 
 // TODO: find a better way to write the symbols ($1, $2, …) in the query.
 /// Replace the placeholders `{}` by $# by # where # is the index of the placeholder.
-fn replace_placeholder(string: String) -> String {
+fn replace_placeholder(string: String, index: &mut usize) -> String {
     let mut result = "".to_string();
     let mut in_string = false;
     let mut skip_next = false;
-    let mut index = 1;
     for character in string.chars() {
         if character == '?' && !in_string {
             result.push('$');
             result.push_str(&index.to_string());
-            index = index + 1;
+            *index += 1;
         }
         else {
             if character == '\\' {
