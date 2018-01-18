@@ -61,85 +61,82 @@ use ast::Limit::{
 use plugin::string_literal;
 use state::methods_singleton;
 
-/// Macro used to generate a ToSql implementation for a slice.
-macro_rules! slice_to_sql {
-    ( $name:ty, $sep:expr ) => {
-        impl ToSql for [$name] {
-            fn to_sql(&self) -> String {
-                self.iter().map(ToSql::to_sql).collect::<Vec<_>>().join($sep)
-            }
-        }
-    };
-}
-
 /// A generic trait for converting a value to SQL.
 pub trait ToSql {
-    fn to_sql(&self) -> String;
+    fn to_sql(&self, index: &mut usize) -> String;
 }
 
 impl ToSql for Aggregate {
-    fn to_sql(&self) -> String {
+    fn to_sql(&self, index: &mut usize) -> String {
         // TODO: do not use CAST when this is in a HAVING clause.
         // TODO: do not hard-code the type.
-        "CAST(".to_string() + &self.function.to_sql() + "(" + &self.field.expect("Aggregate field").to_sql()
+        "CAST(".to_string() + &self.function.to_sql(index) + "(" + &self.field.expect("Aggregate field").to_sql(index)
             + ") AS INT)"
     }
 }
 
-slice_to_sql!(Aggregate, ", ");
+impl ToSql for [Aggregate] {
+    fn to_sql(&self, index: &mut usize) -> String {
+        self.iter().map(|aggregate| aggregate.to_sql(index)).collect::<Vec<_>>().join(", ")
+    }
+}
 
 impl ToSql for AggregateFilter {
-    fn to_sql(&self) -> String {
-        self.operand1.to_sql() + " " +
-            &self.operator.to_sql() + " " +
-            &self.operand2.to_sql()
+    fn to_sql(&self, index: &mut usize) -> String {
+        self.operand1.to_sql(index) + " " +
+            &self.operator.to_sql(index) + " " +
+            &self.operand2.to_sql(index)
     }
 }
 
 impl ToSql for AggregateFilterExpression {
-    fn to_sql(&self) -> String {
+    fn to_sql(&self, index: &mut usize) -> String {
         match *self {
-            AggregateFilterExpression::Filter(ref filter) => filter.to_sql(),
-            AggregateFilterExpression::Filters(ref filters) => filters.to_sql(),
+            AggregateFilterExpression::Filter(ref filter) => filter.to_sql(index),
+            AggregateFilterExpression::Filters(ref filters) => filters.to_sql(index),
             AggregateFilterExpression::NegFilter(ref filter) =>
                 "NOT ".to_string() +
-                &filter.to_sql(),
+                &filter.to_sql(index),
             AggregateFilterExpression::NoFilters => "".to_string(),
             AggregateFilterExpression::ParenFilter(ref filter) =>
                 "(".to_string() +
-                &filter.to_sql() +
+                &filter.to_sql(index) +
                 ")",
-            AggregateFilterExpression::FilterValue(ref filter_value) => filter_value.node.to_sql(),
+            AggregateFilterExpression::FilterValue(ref filter_value) => filter_value.node.to_sql(index),
         }
     }
 }
 
 impl ToSql for AggregateFilters {
-    fn to_sql(&self) -> String {
-        self.operand1.to_sql() + " " +
-            &self.operator.to_sql() + " " +
-            &self.operand2.to_sql()
+    fn to_sql(&self, index: &mut usize) -> String {
+        self.operand1.to_sql(index) + " " +
+            &self.operator.to_sql(index) + " " +
+            &self.operand2.to_sql(index)
     }
 }
 
 impl ToSql for Assignment {
-    fn to_sql(&self) -> String {
-        let identifier = self.identifier.expect("Assignment identifier").to_sql();
+    fn to_sql(&self, index: &mut usize) -> String {
+        let identifier = self.identifier.expect("Assignment identifier").to_sql(index);
         if let AssignementOperator::Equal = self.operator.node {
-            identifier + &self.operator.node.to_sql() + &self.value.to_sql()
+            identifier + &self.operator.node.to_sql(index) + &self.value.to_sql(index)
         }
         else {
             identifier.clone() +
-                &self.operator.node.to_sql().replace("{}", &identifier) +
-                &self.value.to_sql()
+                &self.operator.node.to_sql(index).replace("{}", &identifier) +
+                &self.value.to_sql(index)
         }
     }
 }
 
-slice_to_sql!(Assignment, ", ");
+impl ToSql for [Assignment] {
+    fn to_sql(&self, index: &mut usize) -> String {
+        self.iter().map(|assignment| assignment.to_sql(index)).collect::<Vec<_>>().join(", ")
+    }
+}
 
 impl ToSql for AssignementOperator {
-    fn to_sql(&self) -> String {
+    fn to_sql(&self, index: &mut usize) -> String {
         match *self {
             AssignementOperator::Add => " = {} + ",
             AssignementOperator::Divide => " = {} / ",
@@ -154,42 +151,50 @@ impl ToSql for AssignementOperator {
 /// Convert a literal expression to its SQL representation.
 /// A non-literal is converted to ? for use with query parameters.
 impl ToSql for Expression {
-    fn to_sql(&self) -> String {
+    fn to_sql(&self, index: &mut usize) -> String {
         match *self {
             Expr::Lit(ref literal) => {
                 match literal.lit {
                     Lit::Bool(ref boolean) => boolean.value.to_string().to_uppercase(),
                     Lit::Byte(ref byte) =>
                         "'".to_string() +
-                            &escape((byte.value() as char).to_string()) +
-                            "'",
-                    Lit::ByteStr(ref bytestring) =>
-                        "'".to_string() +
+                        &escape((byte.value() as char).to_string()) +
+                        "'",
+                        Lit::ByteStr(ref bytestring) =>
+                            "'".to_string() +
                             // TODO: check if using unwrap() is secure here.
                             &escape(from_utf8(&bytestring.value()).unwrap().to_string()) +
                             "'",
-                    Lit::Char(ref character) =>
-                        "'".to_string() +
-                            &escape(character.value().to_string()) +
-                            "'",
-                    Lit::Float(ref float) => float.value().to_string(),
-                    Lit::Int(ref int) => int.value().to_string(),
-                    Lit::Str(ref string) =>
-                        "'".to_string() +
-                            &escape(string.value()) +
-                            "'",
-                    Lit::Verbatim(_) => panic!("Unsupported integer bigger than 64-bits"),
+                            Lit::Char(ref character) =>
+                                "'".to_string() +
+                                &escape(character.value().to_string()) +
+                                "'",
+                                Lit::Float(ref float) => float.value().to_string(),
+                                Lit::Int(ref int) => int.value().to_string(),
+                                Lit::Str(ref string) =>
+                                    "'".to_string() +
+                                    &escape(string.value()) +
+                                    "'",
+                                Lit::Verbatim(_) => panic!("Unsupported integer bigger than 64-bits"),
                 }
             },
-            _ => "?".to_string(),
+            _ => {
+                let sql = format!("${}", index);
+                *index += 1;
+                sql
+            },
         }
     }
 }
 
-slice_to_sql!(Expression, ", ");
+impl ToSql for [Expression] {
+    fn to_sql(&self, index: &mut usize) -> String {
+        self.iter().map(|expr| expr.to_sql(index)).collect::<Vec<_>>().join(", ")
+    }
+}
 
 impl ToSql for Vec<String> {
-    fn to_sql(&self) -> String {
+    fn to_sql(&self, index: &mut usize) -> String {
         self.join(", ")
     }
 }
@@ -197,8 +202,8 @@ impl ToSql for Vec<String> {
 impl Filter {
     fn to_tokens(&self, index: &mut usize) -> Tokens {
         let operand1 = self.operand1.to_tokens();
-        let operator = self.operator.to_sql();
-        let operand2 = replace_placeholder(self.operand2.to_sql(), index);
+        let operator = self.operator.to_sql(index);
+        let operand2 = self.operand2.to_sql(index);
         quote! {
             #operand1, " ", #operator, " ", #operand2
         }
@@ -231,7 +236,7 @@ impl FilterExpression {
 impl Filters {
     fn to_tokens(&self, index: &mut usize) -> Tokens {
         let operand1 = self.operand1.to_tokens(index);
-        let operator = self.operator.to_sql();
+        let operator = self.operator.to_sql(index);
         let operand2 = self.operand2.to_tokens(index);
         quote! {
             #operand1, " ", #operator, " ", #operand2
@@ -240,18 +245,22 @@ impl Filters {
 }
 
 impl ToSql for Ident {
-    fn to_sql(&self) -> String {
+    fn to_sql(&self, index: &mut usize) -> String {
         self.to_string()
     }
 }
 
-slice_to_sql!(Ident, ", ");
+impl ToSql for [Ident] {
+    fn to_sql(&self, index: &mut usize) -> String {
+        self.iter().map(|ident| ident.to_sql(index)).collect::<Vec<_>>().join(", ")
+    }
+}
 
 impl FilterValue {
     fn to_tokens(&self) -> Tokens {
         let sql =
             match *self {
-                FilterValue::Identifier(ref table, ref identifier) => format!("{}.{}", table, identifier.to_sql()),
+                FilterValue::Identifier(ref table, ref identifier) => format!("{}.{}", table, identifier.to_sql(&mut 1)),
                 FilterValue::MethodCall(MethodCall { ref arguments, ref object_name, ref method_name, ..  }) => {
                     let methods = methods_singleton();
                     if let Some(method) = methods.get(&method_name.to_string()) {
@@ -260,7 +269,7 @@ impl FilterValue {
                         let mut sql = method.template.replace("$0", &object_name.to_string());
                         let mut index = 1;
                         for argument in arguments {
-                            sql = sql.replace(&format!("${}", index), &argument.to_sql());
+                            sql = sql.replace(&format!("${}", index), &argument.to_sql(&mut 1));
                             index += 1;
                         }
                         sql
@@ -291,7 +300,7 @@ impl Join {
             Ident::new(&format!("tql_{}_related_tables", self.base_table), Span::call_site());
         let related_pks_macro_name = Ident::new(&format!("tql_{}_related_pks", self.base_table), Span::call_site());
         let base_table = &self.base_table;
-        let base_field = self.base_field.to_sql();
+        let base_field = self.base_field.to_sql(&mut 1);
         let base_field_ident = &self.base_field;
         let related_table_name = quote! {
             #related_table_macro_name!(#base_field_ident)
@@ -334,37 +343,37 @@ fn joined_fields(joins: &[Join], table: &str) -> Tokens {
     let macro_name = iter::repeat(macro_name)
         .take(joins.len());
     quote! {
-        #(, ", ", #macro_name!(#fields)),*
+        #(, ", ", #macro_name!(#fields))*
     }
 }
 
 impl ToSql for Identifier {
-    fn to_sql(&self) -> String {
+    fn to_sql(&self, index: &mut usize) -> String {
         self.clone()
     }
 }
 
 impl ToSql for Limit {
-    fn to_sql(&self) -> String {
+    fn to_sql(&self, index: &mut usize) -> String {
         match *self {
-            EndRange(ref expression) => " LIMIT ".to_string() + &expression.to_sql(),
+            EndRange(ref expression) => " LIMIT ".to_string() + &expression.to_sql(index),
             Index(ref expression) =>
-                " OFFSET ".to_string() + &expression.to_sql() +
+                " OFFSET ".to_string() + &expression.to_sql(index) +
                 " LIMIT 1",
             LimitOffset(ref expression1, ref expression2) =>
-                " OFFSET ".to_string() + &expression2.to_sql() +
-                " LIMIT " + &expression1.to_sql(),
+                " OFFSET ".to_string() + &expression2.to_sql(index) +
+                " LIMIT " + &expression1.to_sql(index),
             NoLimit => "".to_string(),
             Range(ref expression1, ref expression2) =>
-                " OFFSET ".to_string() + &expression1.to_sql() +
-                " LIMIT " + &expression2.to_sql(),
-            StartRange(ref expression) => " OFFSET ".to_string() + &expression.to_sql(),
+                " OFFSET ".to_string() + &expression1.to_sql(index) +
+                " LIMIT " + &expression2.to_sql(index),
+            StartRange(ref expression) => " OFFSET ".to_string() + &expression.to_sql(index),
         }
     }
 }
 
 impl ToSql for LogicalOperator {
-    fn to_sql(&self) -> String {
+    fn to_sql(&self, index: &mut usize) -> String {
         match *self {
             LogicalOperator::And => "AND",
             LogicalOperator::Not => "NOT",
@@ -374,22 +383,26 @@ impl ToSql for LogicalOperator {
 }
 
 impl ToSql for Order {
-    fn to_sql(&self) -> String {
+    fn to_sql(&self, index: &mut usize) -> String {
         match *self {
-            Order::Ascending(ref field) => field.to_sql(),
-            Order::Descending(ref field) => field.to_sql() + " DESC",
+            Order::Ascending(ref field) => field.to_sql(index),
+            Order::Descending(ref field) => field.to_sql(index) + " DESC",
             Order::NoOrder => String::new(),
         }
     }
 }
 
-slice_to_sql!(Order, ", ");
+impl ToSql for [Order] {
+    fn to_sql(&self, index: &mut usize) -> String {
+        self.iter().map(|order| order.to_sql(index)).collect::<Vec<_>>().join(", ")
+    }
+}
 
 /// Convert a whole `Query` to SQL.
 impl Query {
     pub fn to_tokens(&self) -> Tokens {
         match *self {
-            Query::Aggregate{ref aggregates, ref aggregate_filter, ref filter, ref groups, ref joins, ref table} => {
+            Query::Aggregate { ref aggregates, ref aggregate_filter, ref filter, ref groups, ref joins, ref table } => {
                 let where_clause = filter_to_where_clause(filter);
                 let group_clause =
                     if !groups.is_empty() {
@@ -405,12 +418,12 @@ impl Query {
                     else {
                         " HAVING "
                     };
-                let aggregates = aggregates.to_sql();
+                let aggregates = aggregates.to_sql(&mut 1);
                 let joins = joins_to_tokens(&joins);
                 let index = &mut 1;
                 let filter = filter.to_tokens(index);
-                let groups = groups.to_sql();
-                let aggregate_filter = replace_placeholder(aggregate_filter.to_sql(), index);
+                let groups = groups.to_sql(&mut 1);
+                let aggregate_filter = aggregate_filter.to_sql(index);
                 quote! {
                     concat!("SELECT ", #aggregates, " FROM ", #table, #joins, #where_clause, #filter, #group_clause,
                             #groups, #having_clause, #aggregate_filter)
@@ -425,7 +438,6 @@ impl Query {
             Query::Delete { ref filter, ref table, use_pk: _use_pk } => {
                 let where_clause = filter_to_where_clause(filter);
                 let filter = filter.to_tokens(&mut 1);
-                // TODO: call replace_placeholder().
                 quote! {
                     concat!("DELETE FROM ", #table, #where_clause, #filter)
                 }
@@ -435,18 +447,18 @@ impl Query {
             },
             Query::Insert { ref assignments, ref table } => {
                 let fields: Vec<_> = assignments.iter().map(|assign|
-                    assign.identifier.expect("Assignment identifier").to_sql()).collect();
+                    assign.identifier.expect("Assignment identifier").to_sql(&mut 1)).collect();
                 let index = &mut 1;
                 let values: Vec<_> = assignments.iter().map(|assign|
-                    replace_placeholder(assign.value.to_sql(), index)
+                    assign.value.to_sql(index)
                 ).collect();
                 // Add the SQL code to get the inserted primary key.
                 // TODO: what to do when there is no primary key?
                 let query_start =
                     format!("INSERT INTO {table}({fields}) VALUES({values}) RETURNING ",
                         table = table,
-                        fields = fields.to_sql(),
-                        values = values.to_sql(),
+                        fields = fields.to_sql(&mut 1),
+                        values = values.to_sql(&mut 1),
                     );
                 let query_start = string_token(&query_start);
                 let macro_name = Ident::new(format!("tql_{}_primary_key_field", table).as_str(), Span::call_site());
@@ -471,8 +483,8 @@ impl Query {
                 let joins = joins_to_tokens(&joins);
                 let index = &mut 1;
                 let filter = filter.to_tokens(index);
-                let order = replace_placeholder(order.to_sql(), index);
-                let limit = replace_placeholder(limit.to_sql(), index);
+                let order = order.to_sql(&mut 1);
+                let limit = limit.to_sql(&mut 1);
                 quote_spanned! { Span::call_site() =>
                     concat!("SELECT ", #macro_name!() #joined_fields, " FROM ", #table, #joins, #where_clause, #filter, #order_clause,
                         #order, #limit)
@@ -480,9 +492,9 @@ impl Query {
             },
             Query::Update { ref assignments, ref filter, ref table, use_pk: _use_pk } => {
                 let where_clause = filter_to_where_clause(filter);
-                let assignments = assignments.to_sql();
-                let filter = filter.to_tokens(&mut 1);
-                // TODO: call replace_placeholder.
+                let index = &mut 1;
+                let assignments = assignments.to_sql(index);
+                let filter = filter.to_tokens(index);
                 quote! {
                     concat!("UPDATE ", #table, " SET ", #assignments, #where_clause, #filter)
                 }
@@ -499,7 +511,7 @@ fn string_token(string: &str) -> Tokens {
 }
 
 impl ToSql for RelationalOperator {
-    fn to_sql(&self) -> String {
+    fn to_sql(&self, index: &mut usize) -> String {
         match *self {
             RelationalOperator::Equal => "=",
             RelationalOperator::LesserThan => "<",
@@ -514,7 +526,7 @@ impl ToSql for RelationalOperator {
 pub fn fields_to_sql(fields: &[TypedField]) -> Tokens {
     let fields = fields.iter()
         .map(|field| {
-             let ident = field.identifier.to_sql();
+             let ident = field.identifier.to_sql(&mut 1);
              let typ = &field.typ;
              quote! {
                  #ident, " ", #typ
@@ -529,35 +541,6 @@ fn filter_to_where_clause(filter: &FilterExpression) -> &str {
         FilterExpression::Filter(_) | FilterExpression::Filters(_) | FilterExpression::NegFilter(_) | FilterExpression::ParenFilter(_) | FilterExpression::FilterValue(_) => " WHERE ",
         FilterExpression::NoFilters => "",
     }
-}
-
-// TODO: find a better way to write the symbols ($1, $2, …) in the query.
-/// Replace the placeholders `{}` by $# by # where # is the index of the placeholder.
-fn replace_placeholder(string: String, index: &mut usize) -> String {
-    let mut result = "".to_string();
-    let mut in_string = false;
-    let mut skip_next = false;
-    for character in string.chars() {
-        if character == '?' && !in_string {
-            result.push('$');
-            result.push_str(&index.to_string());
-            *index += 1;
-        }
-        else {
-            if character == '\\' {
-                skip_next = true;
-            }
-            else if character == '\'' && !skip_next {
-                skip_next = false;
-                in_string = !in_string;
-            }
-            else {
-                skip_next = false;
-            }
-            result.push(character);
-        }
-    }
-    result
 }
 
 fn has_order_clauses(orders: &[Order]) -> bool {

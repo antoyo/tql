@@ -199,11 +199,11 @@ fn test_filter_sort_limit() {
 #[test]
 fn test_get() {
     assert_eq!(
-        format!("{} FROM Table WHERE Table.{{pk}} = 1", SELECT),
+        format!("{} FROM Table WHERE Table.id = 1", SELECT),
         to_sql!(Table.get(1))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE Table.{{pk}} = $1", SELECT),
+        format!("{} FROM Table WHERE Table.id = $1", SELECT),
         to_sql!(Table.get(id))
     );
     assert_eq!(
@@ -231,11 +231,11 @@ fn test_get() {
 #[test]
 fn test_join() {
     assert_eq!(
-        format!("{} FROM Table INNER JOIN {{related_field}} ON Table.related_field = {{related_field}}.{{related_field_pk}}", SELECT),
+        format!("{}, RelatedTable.id, RelatedTable.field1 FROM Table INNER JOIN RelatedTable ON Table.related_field = RelatedTable.id", SELECT),
         to_sql!(Table.join(related_field))
     );
     assert_eq!(
-        format!("{} FROM Table INNER JOIN {{related_field}} ON Table.related_field = {{related_field}}.{{related_field_pk}}", SELECT),
+        format!("{}, RelatedTable.id, RelatedTable.field1 FROM Table INNER JOIN RelatedTable ON Table.related_field = RelatedTable.id", SELECT),
         to_sql!(Table.all().join(related_field))
     );
 }

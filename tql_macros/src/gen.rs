@@ -499,7 +499,7 @@ fn field_list_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> To
     let field_list = string_literal(&field_list);
     let macro_name = Ident::new(&format!("tql_{}_field_list", table_ident), Span::call_site());
     quote! {
-        #[allow(unused_macros)]
+        #[macro_export]
         macro_rules! #macro_name {
             () => { #field_list };
         }
@@ -521,6 +521,7 @@ fn create_query_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> 
     };
     let macro_name = Ident::new(&format!("tql_{}_create_query", table_ident), Span::call_site());
     quote! {
+        #[macro_export]
         macro_rules! #macro_name {
             () => { #create_query };
         }
@@ -548,7 +549,7 @@ fn related_pks_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> T
     }
     let macro_name = Ident::new(&format!("tql_{}_related_pks", table_ident), Span::call_site());
     quote! {
-        #[allow(unused_macros)]
+        #[macro_export]
         macro_rules! #macro_name {
             #((#related_table_names) => { #related_pk_macro_names!() };)*
             // NOTE: the check for the field name is done elsewhere, hence it is okay to return
@@ -677,8 +678,7 @@ expected type `ForeignKey<_>`
                 };
             }
 
-            // TODO: probably need to export all macros.
-            #[allow(unused_macros)]
+            #[macro_export]
             macro_rules! #related_tables_macro_name {
                 #((#related_table_names) => { #related_tables };)*
                 #((#non_related_table_names) => { #compiler_errors };)*
@@ -687,7 +687,7 @@ expected type `ForeignKey<_>`
                 ($tt:tt) => { "" };
             }
 
-            #[allow(unused_macros)]
+            #[macro_export]
             macro_rules! #related_field_list_macro_name {
                 #(#fk_patterns)*
                 ($tt:tt) => { "" };

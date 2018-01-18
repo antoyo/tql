@@ -49,7 +49,7 @@ struct RelatedTable {
 #[test]
 fn test_update() {
     assert_eq!(
-        "UPDATE Table SET field1 = 'value1', field2 = 55 WHERE Table.{pk} = 1",
+        "UPDATE Table SET field1 = 'value1', field2 = 55 WHERE Table.id = 1",
         to_sql!(Table.get(1).update(field1 = "value1", field2 = 55))
     );
     assert_eq!(
@@ -61,27 +61,27 @@ fn test_update() {
 #[test]
 fn test_update_operation() {
     assert_eq!(
-        "UPDATE Table SET field2 = field2 + 1 WHERE Table.{pk} = 1",
+        "UPDATE Table SET field2 = field2 + 1 WHERE Table.id = 1",
         to_sql!(Table.get(1).update(field2 += 1))
     );
     assert_eq!(
-        "UPDATE Table SET field2 = field2 - 3 WHERE Table.{pk} = 1",
+        "UPDATE Table SET field2 = field2 - 3 WHERE Table.id = 1",
         to_sql!(Table.get(1).update(field2 -= 3))
     );
     assert_eq!(
-        "UPDATE Table SET field2 = field2 % 7 WHERE Table.{pk} = 1",
+        "UPDATE Table SET field2 = field2 % 7 WHERE Table.id = 1",
         to_sql!(Table.get(1).update(field2 %= 7))
     );
     assert_eq!(
-        "UPDATE Table SET field2 = field2 * 2 WHERE Table.{pk} = 1",
+        "UPDATE Table SET field2 = field2 * 2 WHERE Table.id = 1",
         to_sql!(Table.get(1).update(field2 *= 2))
     );
     assert_eq!(
-        "UPDATE Table SET field2 = field2 / 3 WHERE Table.{pk} = 1",
+        "UPDATE Table SET field2 = field2 / 3 WHERE Table.id = 1",
         to_sql!(Table.get(1).update(field2 /= 3))
     );
     assert_eq!(
-        "UPDATE Table SET field2 = field2 + 10, field3 = field3 / 3 WHERE Table.{pk} = 1",
+        "UPDATE Table SET field2 = field2 + 10, field3 = field3 / 3 WHERE Table.id = 1",
         to_sql!(Table.get(1).update(field2 += 10, field3 /= 3))
     );
 }
