@@ -118,8 +118,6 @@ use syn::{
     parse,
     parse2,
 };
-#[cfg(feature = "unstable")]
-use syn::LitStr;
 use syn::spanned::Spanned;
 
 use analyzer::{
@@ -170,11 +168,8 @@ struct SqlQueryWithArgs {
     literal_arguments: Args,
     method_calls: Vec<(MethodCall, Option<Expression>)>,
     query_type: QueryType,
-    #[cfg(feature = "unstable")]
-    span: Span,
     sql: Tokens,
     table_name: Ident,
-    use_pk: bool,
 }
 
 /// Expand the `sql!()` macro.
@@ -215,8 +210,6 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
             Ok(expr) => expr,
             Err(error) => return Err(vec![Error::new(&error.to_string(), Span::call_site())]),
         };
-    #[cfg(feature = "unstable")]
-    let span = expr.span();
     let parser = Parser::new();
     let method_calls = parser.parse(&expr)?;
     let table_name = method_calls.name.clone().expect("table name in method_calls");
@@ -242,7 +235,6 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
     let insert_idents = get_insert_idents(&query);
     let limit_exprs = get_limit_args(&query);
     let method_calls = get_method_calls(&query);
-    let use_pk = get_use_pk(&query);
     let (arguments, literal_arguments) = arguments(query);
     Ok(SqlQueryWithArgs {
         aggregates,
@@ -256,11 +248,8 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
         literal_arguments,
         method_calls,
         query_type,
-        #[cfg(feature = "unstable")]
-        span,
         sql,
         table_name,
-        use_pk,
     })
 }
 
@@ -495,14 +484,6 @@ fn add_error(error: Error, compiler_errors: &mut Tokens) {
 #[proc_macro]
 pub fn check_missing_fields(input: TokenStream) -> TokenStream {
     gen_check_missing_fields(input)
-}
-
-fn get_use_pk(query: &Query) -> bool {
-    match *query {
-        Query::Delete { use_pk, .. } | Query::Select { use_pk, .. } | Query::Update { use_pk, .. } => use_pk,
-        Query::Insert { .. } => true,
-        _ => false,
-    }
 }
 
 // Stable implementation.

@@ -40,7 +40,6 @@ use syn::PathArguments::AngleBracketed;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::token::Comma;
-use respan_tokens_with;
 
 use ast::{
     Aggregate,
@@ -51,13 +50,12 @@ use ast::{
 use attribute::{field_ty_to_type, fields_vec_to_hashmap};
 use error::{Error, Result, res};
 use plugin::{new_ident, string_literal, usize_literal};
-use sql::{ToSql, fields_to_sql};
+use sql::fields_to_sql;
 use state::SqlFields;
 use string::token_to_string;
 use types::{
     Type,
     get_type_parameter,
-    get_type_parameter_as_path,
     type_to_sql,
 };
 use {
@@ -87,10 +85,7 @@ pub fn table_methods(item_struct: &ItemStruct) -> Tokens {
         let field_count = named.iter()
             .filter(|field| {
                 let typ = token_to_string(&field.ty);
-                if let Some(ident) = field.ident {
-                    return !typ.starts_with("ForeignKey");
-                }
-                true
+                !typ.starts_with("ForeignKey")
             })
             .count();
         let field_count = usize_literal(field_count);
@@ -245,12 +240,8 @@ pub(crate) fn gen_query(args: SqlQueryWithArgs) -> TokenStream {
 fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: Tokens, struct_expr: Tokens,
                   aggregate_struct: Tokens, aggregate_expr: Tokens) -> Tokens
 {
-    let table_ident = &args.table_name;
     let result_ident = Ident::from("result");
     let sql_query = &args.sql;
-    let trait_ident = quote_spanned! { table_ident.span() =>
-        ::tql::SqlTable
-    };
 
     match args.query_type {
         QueryType::AggregateMulti => {
@@ -483,10 +474,7 @@ fn field_list_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> To
     let field_list = named.iter()
         .filter(|field| {
             let typ = token_to_string(&field.ty);
-            if let Some(ident) = field.ident {
-                return !typ.starts_with("ForeignKey");
-            }
-            true
+            !typ.starts_with("ForeignKey")
         })
         .map(|field| {
             format!("{table}.{column}",
@@ -590,6 +578,77 @@ fn pk_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> Tokens {
     }
 }
 
+fn check_missing_fields_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> Tokens {
+    let mut mandatory_fields = vec![];
+    for field in named {
+        let typ = token_to_string(&field.ty);
+        if let Some(ident) = field.ident {
+            if !typ.starts_with("Option") && typ != "PrimaryKey" {
+                mandatory_fields.push(ident);
+            }
+        }
+    }
+    let macro_name = Ident::new(&format!("tql_{}_check_missing_fields", table_ident), Span::call_site());
+    #[cfg(feature = "unstable")]
+    let macro_call = quote_spanned! { table_ident.span() =>
+        tql_macros::check_missing_fields!
+    };
+    #[cfg(not(feature = "unstable"))]
+    let macro_call = quote! {
+        check_missing_fields!
+    };
+    quote_spanned! { table_ident.span() =>
+        #[macro_export]
+        macro_rules! #macro_name {
+            ($($insert_idents:ident),*) => {
+                #macro_call([#(#mandatory_fields),*], [$($insert_idents),*])
+            };
+        }
+    }
+}
+
+fn related_table_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> Tokens {
+    let mut related_table_names = vec![];
+    let mut non_related_table_names = vec![];
+    let mut related_tables = vec![];
+    let mut compiler_errors = vec![];
+    for field in named {
+        let typ = token_to_string(&field.ty);
+        if let Some(ident) = field.ident {
+            if typ.starts_with("ForeignKey") {
+                if let syn::Type::Path(ref path) = field.ty {
+                    let element = path.path.segments.first().expect("first segment of path");
+                    let first_segment = element.value();
+                    let typ = get_type_parameter(&first_segment.arguments)
+                        .expect("ForeignKey inner type");
+                    related_table_names.push(ident);
+                    related_tables.push(typ);
+                }
+            }
+            else {
+                non_related_table_names.push(ident);
+                let msg = string_literal(&format!("mismatched types
+expected type `ForeignKey<_>`
+   found type `{}`", typ));
+                compiler_errors.push(quote_spanned! { field.span() =>
+                    compile_error!(#msg)
+                });
+            }
+        }
+    }
+    let macro_name = Ident::new(&format!("tql_{}_related_tables", table_ident), Span::call_site());
+    quote! {
+        #[macro_export]
+        macro_rules! #macro_name {
+            #((#related_table_names) => { #related_tables };)*
+            #((#non_related_table_names) => { #compiler_errors };)*
+            // NOTE: the check for the field name is done elsewhere, hence it is okay to return
+            // "" here.
+            ($tt:tt) => { "" };
+        }
+    }
+}
+
 /// Create the insert macro for the table struct to check that all the mandatory fields are
 /// provided.
 pub fn table_macro(item_struct: &ItemStruct) -> Tokens {
@@ -597,10 +656,6 @@ pub fn table_macro(item_struct: &ItemStruct) -> Tokens {
     let mut primary_key_found = false;
     if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
         let mut mandatory_fields = vec![];
-        let mut related_table_names = vec![];
-        let mut non_related_table_names = vec![];
-        let mut related_tables = vec![];
-        let mut compiler_errors = vec![];
         let mut fk_patterns = vec![];
         for field in named {
             let typ = token_to_string(&field.ty);
@@ -617,36 +672,16 @@ pub fn table_macro(item_struct: &ItemStruct) -> Tokens {
                         let first_segment = element.value();
                         let typ = get_type_parameter(&first_segment.arguments)
                             .expect("ForeignKey inner type");
-                        related_table_names.push(ident);
                         let macro_name = Ident::new(&format!("tql_{}_field_list", typ), Span::call_site());
-                        related_tables.push(typ);
                         fk_patterns.push(quote_spanned! { table_ident.span() =>
                             (#ident) => { #macro_name!() };
                         });
                     }
                 }
-                else {
-                    non_related_table_names.push(ident);
-                    let msg = string_literal(&format!("mismatched types
-expected type `ForeignKey<_>`
-   found type `{}`", typ));
-                    compiler_errors.push(quote_spanned! { field.span() =>
-                        compile_error!(#msg)
-                    });
-                }
             }
         }
 
-        let macro_name = Ident::new(&format!("tql_{}_check_missing_fields", table_ident), Span::call_site());
         let check_pk_macro_name = Ident::new(&format!("tql_{}_check_primary_key", table_ident), Span::call_site());
-        #[cfg(feature = "unstable")]
-        let macro_call = quote_spanned! { table_ident.span() =>
-            tql_macros::check_missing_fields!
-        };
-        #[cfg(not(feature = "unstable"))]
-        let macro_call = quote! {
-            check_missing_fields!
-        };
         let pk_code =
             if primary_key_found {
                 quote! {}
@@ -656,21 +691,14 @@ expected type `ForeignKey<_>`
                     compiler_error!("No primary key found")
                 }
             };
-        let related_tables_macro_name = Ident::new(&format!("tql_{}_related_tables", table_ident), Span::call_site());
         let related_field_list_macro_name = Ident::new(&format!("tql_{}_related_field_list", table_ident), Span::call_site());
-        let related_table_names = &related_table_names;
+        let check_missing_fields_macro = check_missing_fields_macro(named, table_ident);
         let field_list_macro = field_list_macro(named, table_ident);
         let create_query_macro = create_query_macro(named, table_ident);
         let pk_macro = pk_macro(named, table_ident);
         let related_pks_macro = related_pks_macro(named, table_ident);
+        let related_table_macro = related_table_macro(named, table_ident);
         quote! {
-            #[macro_export]
-            macro_rules! #macro_name {
-                ($($insert_idents:ident),*) => {
-                    #macro_call([#(#mandatory_fields),*], [$($insert_idents),*])
-                };
-            }
-
             #[macro_export]
             macro_rules! #check_pk_macro_name {
                 () => {
@@ -679,20 +707,13 @@ expected type `ForeignKey<_>`
             }
 
             #[macro_export]
-            macro_rules! #related_tables_macro_name {
-                #((#related_table_names) => { #related_tables };)*
-                #((#non_related_table_names) => { #compiler_errors };)*
-                // NOTE: the check for the field name is done elsewhere, hence it is okay to return
-                // "" here.
-                ($tt:tt) => { "" };
-            }
-
-            #[macro_export]
             macro_rules! #related_field_list_macro_name {
                 #(#fk_patterns)*
                 ($tt:tt) => { "" };
             }
 
+            #related_table_macro
+            #check_missing_fields_macro
             #field_list_macro
             #create_query_macro
             #related_pks_macro

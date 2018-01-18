@@ -136,7 +136,7 @@ impl ToSql for [Assignment] {
 }
 
 impl ToSql for AssignementOperator {
-    fn to_sql(&self, index: &mut usize) -> String {
+    fn to_sql(&self, _index: &mut usize) -> String {
         match *self {
             AssignementOperator::Add => " = {} + ",
             AssignementOperator::Divide => " = {} / ",
@@ -194,7 +194,7 @@ impl ToSql for [Expression] {
 }
 
 impl ToSql for Vec<String> {
-    fn to_sql(&self, index: &mut usize) -> String {
+    fn to_sql(&self, _index: &mut usize) -> String {
         self.join(", ")
     }
 }
@@ -245,7 +245,7 @@ impl Filters {
 }
 
 impl ToSql for Ident {
-    fn to_sql(&self, index: &mut usize) -> String {
+    fn to_sql(&self, _index: &mut usize) -> String {
         self.to_string()
     }
 }
@@ -298,11 +298,11 @@ impl Join {
     fn to_tokens(&self) -> Tokens {
         let related_table_macro_name =
             Ident::new(&format!("tql_{}_related_tables", self.base_table), Span::call_site());
-        let related_pks_macro_name = Ident::new(&format!("tql_{}_related_pks", self.base_table), Span::call_site());
+        let related_pks_macro_name = Ident::new(&format!("tql_{}_related_pks", self.base_table), self.base_field.span);
         let base_table = &self.base_table;
         let base_field = self.base_field.to_sql(&mut 1);
         let base_field_ident = &self.base_field;
-        let related_table_name = quote! {
+        let related_table_name = quote_spanned! { Span::call_site() =>
             #related_table_macro_name!(#base_field_ident)
         };
         quote! {
@@ -348,7 +348,7 @@ fn joined_fields(joins: &[Join], table: &str) -> Tokens {
 }
 
 impl ToSql for Identifier {
-    fn to_sql(&self, index: &mut usize) -> String {
+    fn to_sql(&self, _index: &mut usize) -> String {
         self.clone()
     }
 }
@@ -373,7 +373,7 @@ impl ToSql for Limit {
 }
 
 impl ToSql for LogicalOperator {
-    fn to_sql(&self, index: &mut usize) -> String {
+    fn to_sql(&self, _index: &mut usize) -> String {
         match *self {
             LogicalOperator::And => "AND",
             LogicalOperator::Not => "NOT",
@@ -511,7 +511,7 @@ fn string_token(string: &str) -> Tokens {
 }
 
 impl ToSql for RelationalOperator {
-    fn to_sql(&self, index: &mut usize) -> String {
+    fn to_sql(&self, _index: &mut usize) -> String {
         match *self {
             RelationalOperator::Equal => "=",
             RelationalOperator::LesserThan => "<",

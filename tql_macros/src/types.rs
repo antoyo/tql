@@ -40,7 +40,6 @@ use syn::{
 
 use ast::Expression;
 use plugin::string_literal;
-use sql::ToSql;
 
 /// A field type.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -108,7 +107,6 @@ fn _type_to_sql(typ: &Type, nullable: bool) -> Tokens {
             Type::ByteString => "BYTEA",
             Type::I8 | Type::Char => "CHARACTER(1)",
             Type::Custom(ref related_table_name) => {
-                let related_table_ident = string_literal(related_table_name);
                 let pk_macro_name = Ident::new(&format!("tql_{}_primary_key_field", related_table_name),
                     Span::call_site());
                 return quote! {
