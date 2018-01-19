@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ * Copyright (c) 2018 Boucher, Antoni <bouanto@zoho.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -19,41 +19,32 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#![feature(proc_macro)]
-
-extern crate tql;
-#[macro_use]
-extern crate tql_macros;
-
-#[macro_use]
-mod connection;
-
-backend_extern_crate!();
-
-use tql::PrimaryKey;
-use tql_macros::to_sql;
-
-#[derive(SqlTable)]
-#[allow(dead_code)]
-struct Table {
-    id: PrimaryKey,
-    field1: String,
-    field2: i32,
+#[cfg(feature = "postgres")]
+macro_rules! backend_extern_crate {
+    () => { extern crate postgres; };
 }
 
-#[test]
-fn test_delete() {
-    //assert_eq!(
-        //"DELETE FROM Table",
-        //to_sql!(Table.delete()) // TODO: this does not work because the errors (including
-        //warnings) return a dummy result.
-    //);
-    assert_eq!(
-        "DELETE FROM Table WHERE Table.field1 = 'test'",
-        to_sql!(Table.filter(field1 == "test").delete())
-    );
-    assert_eq!(
-        "DELETE FROM Table WHERE Table.id = $1",
-        to_sql!(Table.get(id).delete())
-    );
+#[cfg(feature = "sqlite")]
+macro_rules! backend_extern_crate {
+    () => { extern crate rusqlite; };
+}
+
+#[cfg(feature = "postgres")]
+use postgres::TlsMode;
+#[cfg(feature = "postgres")]
+pub use postgres::Connection;
+
+#[cfg(feature = "postgres")]
+#[allow(dead_code)]
+pub fn get_connection() -> Connection {
+    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
+}
+
+#[cfg(feature = "sqlite")]
+pub use rusqlite::Connection;
+
+#[cfg(feature = "sqlite")]
+#[allow(dead_code)]
+pub fn get_connection() -> Connection {
+    Connection::open_in_memory().unwrap()
 }

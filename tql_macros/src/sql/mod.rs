@@ -19,41 +19,15 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#![feature(proc_macro)]
+//! The PostgreSQL code generator.
 
-extern crate tql;
-#[macro_use]
-extern crate tql_macros;
+#[cfg(feature = "postgres")]
+mod postgres;
+#[cfg(feature = "rusqlite")]
+mod sqlite;
 
-#[macro_use]
-mod connection;
+#[cfg(feature = "postgres")]
+pub use self::postgres::*;
 
-backend_extern_crate!();
-
-use tql::PrimaryKey;
-use tql_macros::to_sql;
-
-#[derive(SqlTable)]
-#[allow(dead_code)]
-struct Table {
-    id: PrimaryKey,
-    field1: String,
-    field2: i32,
-}
-
-#[test]
-fn test_delete() {
-    //assert_eq!(
-        //"DELETE FROM Table",
-        //to_sql!(Table.delete()) // TODO: this does not work because the errors (including
-        //warnings) return a dummy result.
-    //);
-    assert_eq!(
-        "DELETE FROM Table WHERE Table.field1 = 'test'",
-        to_sql!(Table.filter(field1 == "test").delete())
-    );
-    assert_eq!(
-        "DELETE FROM Table WHERE Table.id = $1",
-        to_sql!(Table.get(id).delete())
-    );
-}
+#[cfg(feature = "rusqlite")]
+pub use self::sqlite::*;

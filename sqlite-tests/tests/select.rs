@@ -22,7 +22,7 @@
 #![feature(proc_macro)]
 
 extern crate chrono;
-extern crate postgres;
+extern crate rusqlite;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
@@ -119,11 +119,11 @@ fn test_filter_method_call() {
         to_sql!(Table.filter(field3.is_none()))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE EXTRACT(YEAR FROM date) = 2015", SELECT),
+        format!("{} FROM Table WHERE CAST(STRFTIME(\'%Y\', date) AS INT) = 2015", SELECT),
         to_sql!(Table.filter(date.year() == 2015))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE EXTRACT(YEAR FROM date) = 2015 AND EXTRACT(MONTH FROM date) = 10 AND EXTRACT(DAY FROM date) = 26 AND EXTRACT(HOUR FROM date) = 1 AND EXTRACT(MINUTE FROM date) = 39 AND EXTRACT(SECOND FROM date) > 0", SELECT),
+        format!("{} FROM Table WHERE CAST(STRFTIME(\'%Y\', date) AS INT) = 2015 AND CAST(STRFTIME(\'%m\', date) AS INT) = 10 AND CAST(STRFTIME(\'%d\', date) AS INT) = 26 AND CAST(STRFTIME(\'%H\', date) AS INT) = 1 AND CAST(STRFTIME(\'%M\', date) AS INT) = 39 AND CAST(STRFTIME(\'%S\', date) AS INT) > 0", SELECT),
         to_sql!(Table.filter(date.year() == 2015 && date.month() == 10 && date.day() == 26 && date.hour() == 1 && date.minute() == 39 && date.second() > 0))
     );
     assert_eq!(
@@ -147,19 +147,20 @@ fn test_filter_method_call() {
         to_sql!(Table.filter(field1.contains(value)))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE CHAR_LENGTH(field1) = 6", SELECT),
+        format!("{} FROM Table WHERE LENGTH(field1) = 6", SELECT),
         to_sql!(Table.filter(field1.len() == 6))
     );
-    assert_eq!(
+    // TODO: not yet supported.
+    /*assert_eq!(
         format!("{} FROM Table WHERE field1 LIKE '%3'", SELECT),
         to_sql!(Table.filter(field1.regex(r"%3")))
     );
     assert_eq!(
         format!("{} FROM Table WHERE field1 LIKE '%E3'", SELECT),
         to_sql!(Table.filter(field1.regex(r"%E3")))
-    );
+    );*/
     assert_eq!(
-        format!("{} FROM Table WHERE field1 ILIKE '%E3'", SELECT),
+        format!("{} FROM Table WHERE field1 LIKE '%E3'", SELECT),
         to_sql!(Table.filter(field1.iregex(r"%E3")))
     );
 }
@@ -167,7 +168,7 @@ fn test_filter_method_call() {
 #[test]
 fn test_filter_get() {
     assert_eq!(
-        format!("{} FROM Table WHERE Table.id = 2 OFFSET 0 LIMIT 1", SELECT),
+        format!("{} FROM Table WHERE Table.id = 2 LIMIT 1 OFFSET 0", SELECT),
         to_sql!(Table.filter(id == 2).get())
     );
 }
@@ -191,7 +192,7 @@ fn test_filter_sort() {
 #[test]
 fn test_filter_sort_limit() {
     assert_eq!(
-        format!("{} FROM Table WHERE Table.field2 > 10 ORDER BY field2 OFFSET 1 LIMIT 2", SELECT),
+        format!("{} FROM Table WHERE Table.field2 > 10 ORDER BY field2 LIMIT 2 OFFSET 1", SELECT),
         to_sql!(Table.filter(field2 > 10).sort(field2)[1..3])
     );
 }
@@ -207,23 +208,23 @@ fn test_get() {
         to_sql!(Table.get(id))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE Table.field2 = 24 OFFSET 0 LIMIT 1", SELECT),
+        format!("{} FROM Table WHERE Table.field2 = 24 LIMIT 1 OFFSET 0", SELECT),
         to_sql!(Table.get(field2 == 24))
     ); // TODO: remove the "OFFSET 0" in the optimizer.
     assert_eq!(
-        format!("{} FROM Table WHERE Table.field1 = 'test' AND Table.field2 = 24 OFFSET 0 LIMIT 1", SELECT),
+        format!("{} FROM Table WHERE Table.field1 = 'test' AND Table.field2 = 24 LIMIT 1 OFFSET 0", SELECT),
         to_sql!(Table.get(field1 == "test" && field2 == 24))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE (Table.field1 = 'test' AND Table.field2 = 24) OFFSET 0 LIMIT 1", SELECT),
+        format!("{} FROM Table WHERE (Table.field1 = 'test' AND Table.field2 = 24) LIMIT 1 OFFSET 0", SELECT),
         to_sql!(Table.get((field1 == "test" && field2 == 24)))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE NOT (Table.field1 = 'test' AND Table.field2 = 24) OFFSET 0 LIMIT 1", SELECT),
+        format!("{} FROM Table WHERE NOT (Table.field1 = 'test' AND Table.field2 = 24) LIMIT 1 OFFSET 0", SELECT),
         to_sql!(Table.get(!(field1 == "test" && field2 == 24)))
     );
     assert_eq!(
-        format!("{} FROM Table WHERE NOT (Table.field2 < 24) OFFSET 0 LIMIT 1", SELECT),
+        format!("{} FROM Table WHERE NOT (Table.field2 < 24) LIMIT 1 OFFSET 0", SELECT),
         to_sql!(Table.get(!(field2 < 24)))
     );
 }
@@ -251,23 +252,23 @@ fn test_limit() {
         to_sql!(Table[..2])
     );
     assert_eq!(
-        format!("{} FROM Table OFFSET 1 LIMIT 2", SELECT),
+        format!("{} FROM Table LIMIT 2 OFFSET 1", SELECT),
         to_sql!(Table[1..3])
     );
     assert_eq!(
-        format!("{} FROM Table OFFSET 2 LIMIT 1", SELECT),
+        format!("{} FROM Table LIMIT 1 OFFSET 2", SELECT),
         to_sql!(Table.all()[2])
     );
     assert_eq!(
-        format!("{} FROM Table OFFSET 2 LIMIT 1", SELECT),
+        format!("{} FROM Table LIMIT 1 OFFSET 2", SELECT),
         to_sql!(Table[2])
     );
     assert_eq!(
-        format!("{} FROM Table OFFSET 42 LIMIT 1", SELECT),
+        format!("{} FROM Table LIMIT 1 OFFSET 42", SELECT),
         to_sql!(Table.all()[42])
     );
     assert_eq!(
-        format!("{} FROM Table OFFSET 1 LIMIT 1", SELECT),
+        format!("{} FROM Table LIMIT 1 OFFSET 1", SELECT),
         to_sql!(Table.all()[2 - 1])
     );
     assert_eq!(
@@ -275,43 +276,43 @@ fn test_limit() {
         to_sql!(Table.all()[..2 - 1])
     );
     assert_eq!(
-        format!("{} FROM Table OFFSET 1", SELECT),
+        format!("{} FROM Table LIMIT -1 OFFSET 1", SELECT),
         to_sql!(Table.all()[2 - 1..])
     );
     assert_eq!(
-        format!("{} FROM Table OFFSET 3", SELECT),
+        format!("{} FROM Table LIMIT -1 OFFSET 3", SELECT),
         to_sql!(Table.all()[2 + 1..])
     );
     assert_eq!(
-        format!("{} FROM Table OFFSET 2", SELECT),
+        format!("{} FROM Table LIMIT -1 OFFSET 2", SELECT),
         to_sql!(Table.all()[2 + 1 - 3 + 2..])
     );
     assert_eq!(
-        format!("{} FROM Table OFFSET $1 LIMIT 1", SELECT),
+        format!("{} FROM Table LIMIT 1 OFFSET $1", SELECT),
         to_sql!(Table.all()[index])
     );
     assert_eq!(
-        format!("{} FROM Table OFFSET $1 LIMIT $2", SELECT),
+        format!("{} FROM Table LIMIT $1 OFFSET $2", SELECT),
         to_sql!(Table.all()[index..end_index])
     );
     assert_eq!(
-        format!("{} FROM Table OFFSET $1 LIMIT 1", SELECT),
+        format!("{} FROM Table LIMIT 1 OFFSET $1", SELECT),
         to_sql!(Table.all()[result()])
     );
     assert_eq!(
-        format!("{} FROM Table OFFSET $1 LIMIT 1", SELECT),
+        format!("{} FROM Table LIMIT 1 OFFSET $1", SELECT),
         to_sql!(Table.all()[strct.result()])
     );
     assert_eq!(
-        format!("{} FROM Table OFFSET $1 LIMIT 1", SELECT),
+        format!("{} FROM Table LIMIT 1 OFFSET $1", SELECT),
         to_sql!(Table.all()[index + 1])
     );
     assert_eq!(
-        format!("{} FROM Table OFFSET $1 LIMIT 1", SELECT),
+        format!("{} FROM Table LIMIT 1 OFFSET $1", SELECT),
         to_sql!(Table.all()[-index])
     );
     assert_eq!(
-        format!("{} FROM Table OFFSET $1 LIMIT 1", SELECT),
+        format!("{} FROM Table LIMIT 1 OFFSET $1", SELECT),
         to_sql!(Table.all()[-index as i64])
     );
 }

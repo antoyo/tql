@@ -120,7 +120,6 @@ fn add_limit_arguments(limit: Limit, arguments: &mut Args, literals: &mut Args) 
         Limit::NoLimit => (),
         Limit::Range(expression1, expression2) => {
             let offset = expression1.clone();
-            add(arguments, literals, None, None, expression1);
             let expression = parse((quote! { #expression2 - #offset }).into())
                 .expect("Subtraction quoted expression");
             add_expr(arguments, literals, Arg {
@@ -128,6 +127,7 @@ fn add_limit_arguments(limit: Limit, arguments: &mut Args, literals: &mut Args) 
                 field_name: None,
                 field_name_prefix: None,
             });
+            add(arguments, literals, None, None, expression1);
         },
         Limit::StartRange(expression) => add(arguments, literals, None, None, expression),
     }

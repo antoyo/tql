@@ -22,28 +22,20 @@
 #![feature(proc_macro)]
 
 extern crate chrono;
+extern crate rusqlite;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
-
-#[macro_use]
-mod connection;
-mod teardown;
-
-backend_extern_crate!();
 
 use chrono::DateTime;
 use chrono::naive::{NaiveDate, NaiveDateTime, NaiveTime};
 use chrono::offset::{Local, Utc};
 use tql::{ForeignKey, PrimaryKey};
-use tql_macros::sql;
-
-use connection::get_connection;
-use teardown::TearDown;
+use tql_macros::to_sql;
 
 #[derive(SqlTable)]
 #[allow(dead_code)]
-struct SqlTable {
+struct Table {
     id: PrimaryKey,
     field1: String,
     field2: i32,
@@ -69,30 +61,13 @@ struct Dates {
     date5: NaiveTime,
 }
 
-#[cfg(feature = "postgres")]
 #[derive(SqlTable)]
 #[allow(dead_code)]
 struct OtherTypes {
     pk: PrimaryKey,
     boolean: bool,
     bytestring: Vec<u8>,
-    //character: char, // FIXME: does not work.
-    float32: f32,
-    float64: f64,
-    int8: i8,
-    int16: i16,
-    int32: i32,
-    int64: i64,
-}
-
-#[cfg(feature = "sqlite")]
-#[derive(SqlTable)]
-#[allow(dead_code)]
-struct OtherTypes {
-    pk: PrimaryKey,
-    boolean: bool,
-    bytestring: Vec<u8>,
-    //character: char, // FIXME: does not work.
+    //character: char, // FIXME: not working.
     float64: f64,
     int8: i8,
     int16: i16,
@@ -102,25 +77,20 @@ struct OtherTypes {
 
 #[test]
 fn test_create() {
-    let connection = get_connection();
-
-    let _teardown = TearDown::new(|| {
-        let _ = sql!(SqlTable.drop());
-        let _ = sql!(RelatedTable.drop());
-        let _ = sql!(Dates.drop());
-        let _ = sql!(OtherTypes.drop());
-    });
-
-    assert!(sql!(RelatedTable.create()).is_ok());
-
-    assert!(sql!(SqlTable.create()).is_ok());
-
-    assert!(sql!(Dates.create()).is_ok());
-    assert!(sql!(Dates.drop()).is_ok());
-
-    assert!(sql!(OtherTypes.create()).is_ok());
-    assert!(sql!(OtherTypes.drop()).is_ok());
-
-    assert!(sql!(SqlTable.drop()).is_ok());
-    assert!(sql!(RelatedTable.drop()).is_ok());
+    assert_eq!(
+        "CREATE TABLE Table (id INTEGER PRIMARY KEY NOT NULL, field1 CHARACTER VARYING NOT NULL, field2 INTEGER NOT NULL, field3 INTEGER, related_field INTEGER REFERENCES RelatedTable(id) NOT NULL)",
+        to_sql!(Table.create())
+    );
+    assert_eq!(
+        "CREATE TABLE RelatedTable (id INTEGER PRIMARY KEY NOT NULL, field1 CHARACTER VARYING NOT NULL)",
+        to_sql!(RelatedTable.create())
+    );
+    assert_eq!(
+        "CREATE TABLE Dates (pk INTEGER PRIMARY KEY NOT NULL, date1 TIMESTAMP NOT NULL, date2 TIMESTAMP WITH TIME ZONE NOT NULL, date3 TIMESTAMP WITH TIME ZONE NOT NULL, date4 DATE NOT NULL, date5 TIME NOT NULL)",
+        to_sql!(Dates.create())
+    );
+    assert_eq!(
+        "CREATE TABLE OtherTypes (pk INTEGER PRIMARY KEY NOT NULL, boolean BOOLEAN NOT NULL, bytestring BYTEA NOT NULL, float64 DOUBLE PRECISION NOT NULL, int8 CHARACTER(1) NOT NULL, int16 SMALLINT NOT NULL, int32 INTEGER NOT NULL, int64 BIGINT NOT NULL)",
+        to_sql!(OtherTypes.create())
+    );
 }

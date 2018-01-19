@@ -27,11 +27,14 @@
 extern crate chrono;
 #[cfg(feature = "postgres")]
 extern crate postgres;
+#[cfg(feature = "rusqlite")]
+extern crate rusqlite;
 
 mod methods;
 mod types;
 
 pub use types::{Date, DateTime, Time, ToTqlType};
+use types::StdI32;
 pub use types::numbers::{i16, i32, i64, i8, u16, u32, u64, u8};
 
 /// The `ForeignKey` is optional.
@@ -40,13 +43,16 @@ pub use types::numbers::{i16, i32, i64, i8, u16, u32, u64, u8};
 pub type ForeignKey<T> = Option<T>;
 
 /// A `PrimaryKey` is a 4-byte integer.
-pub type PrimaryKey = types::StdI32;
+pub type PrimaryKey = StdI32;
 
 #[doc(hidden)]
 // Marker trait used for error reporting:
 // when a struct is used in a ForeignKey, but it is not annotated with #[derive(SqlTable)].
 pub unsafe trait SqlTable {
+    #[cfg(feature = "postgres")]
     const FIELD_COUNT: usize;
+    #[cfg(feature = "rusqlite")]
+    const FIELD_COUNT: StdI32;
 
     fn _tql_default() -> Self;
 
@@ -55,11 +61,25 @@ pub unsafe trait SqlTable {
 
     #[cfg(feature = "postgres")]
     fn from_related_row(row: &::postgres::rows::Row, delta: usize) -> Self;
+
+    #[cfg(feature = "rusqlite")]
+    fn from_row(row: &::rusqlite::Row) -> Self;
+
+    #[cfg(feature = "rusqlite")]
+    fn from_related_row(row: &::rusqlite::Row, delta: StdI32) -> Self;
 }
 
 #[cfg(feature = "postgres")]
 #[doc(hidden)]
 pub fn from_related_row<T: SqlTable>(field: &mut Option<T>, row: &::postgres::rows::Row, delta: usize) -> usize
+{
+    *field = Some(T::from_related_row(row, delta));
+    T::FIELD_COUNT
+}
+
+#[cfg(feature = "rusqlite")]
+#[doc(hidden)]
+pub fn from_related_row<T: SqlTable>(field: &mut Option<T>, row: &::rusqlite::Row, delta: StdI32) -> StdI32
 {
     *field = Some(T::from_related_row(row, delta));
     T::FIELD_COUNT

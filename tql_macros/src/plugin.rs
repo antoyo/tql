@@ -31,6 +31,13 @@ use syn::{
     parse,
 };
 
+pub fn i32_literal(num: usize) -> Expr {
+    Expr::Lit(ExprLit {
+        attrs: vec![],
+        lit: Lit::Int(LitInt::new(num as u64, IntSuffix::I32, Span::call_site())),
+    })
+}
+
 pub fn usize_literal(num: usize) -> Expr {
     Expr::Lit(ExprLit {
         attrs: vec![],

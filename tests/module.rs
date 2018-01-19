@@ -21,25 +21,26 @@
 
 #![feature(proc_macro)]
 
-extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
-use postgres::{Connection, TlsMode};
-use postgres::error::UNDEFINED_TABLE;
-use tql_macros::sql;
-
+#[macro_use]
+mod connection;
 #[macro_use]
 mod models;
 mod teardown;
 
+backend_extern_crate!();
+
+use connection::get_connection;
+
+#[cfg(feature = "postgres")]
+use postgres::error::UNDEFINED_TABLE;
+use tql_macros::sql;
+
 use models::{TableInsertExpr, RelatedTableInsertExpr};
 use teardown::TearDown;
-
-fn get_connection() -> Connection {
-    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
-}
 
 #[test]
 fn test_insert() {
@@ -58,7 +59,12 @@ fn test_insert() {
 
     let result = sql!(TableInsertExpr.insert(field1 = "value1", field2 = 55, related_field = related_field));
     match result {
-        Err(db_error) => assert_eq!(Some(&UNDEFINED_TABLE), db_error.code()),
+        Err(db_error) => {
+            #[cfg(feature = "postgres")]
+            assert_eq!(Some(&UNDEFINED_TABLE), db_error.code());
+            #[cfg(feature = "sqlite")]
+            assert_eq!(db_error.to_string(), "no such table: TableInsertExpr");
+        },
         Ok(_) => assert!(false),
     }
 
@@ -109,7 +115,6 @@ fn test_insert() {
 
     let boolean_value = true;
     //let character = 'a';
-    let float32 = 3.14f32;
     let float64 = 3.14f64;
     //let int8 = 42i8;
     let int16 = 42i16;
@@ -121,7 +126,6 @@ fn test_insert() {
         optional_field = Some(12),
         boolean = Some(boolean_value),
         /*character = character,*/
-        float32 = Some(float32),
         float64 = Some(float64),
         /*int8 = int8,*/
         int16 = Some(int16),

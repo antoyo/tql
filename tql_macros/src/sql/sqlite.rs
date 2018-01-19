@@ -19,7 +19,7 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-//! The PostgreSQL code generator.
+//! The SQLite code generator.
 
 use std::iter;
 use std::str::from_utf8;
@@ -60,6 +60,7 @@ use ast::Limit::{
 };
 use plugin::string_literal;
 use state::methods_singleton;
+use types::Type;
 
 /// A generic trait for converting a value to SQL.
 pub trait ToSql {
@@ -68,10 +69,8 @@ pub trait ToSql {
 
 impl ToSql for Aggregate {
     fn to_sql(&self, index: &mut usize) -> String {
-        // TODO: do not use CAST when this is in a HAVING clause.
         // TODO: do not hard-code the type.
-        "CAST(".to_string() + &self.function.to_sql(index) + "(" + &self.field.expect("Aggregate field").to_sql(index)
-            + ") AS INT)"
+        self.function.to_sql(index) + "(" + &self.field.expect("Aggregate field").to_sql(index) + ")"
     }
 }
 
@@ -377,16 +376,16 @@ impl ToSql for Limit {
         match *self {
             EndRange(ref expression) => " LIMIT ".to_string() + &expression.to_sql(index),
             Index(ref expression) =>
-                " OFFSET ".to_string() + &expression.to_sql(index) +
-                " LIMIT 1",
+                " LIMIT 1".to_string() +
+                    " OFFSET " + &expression.to_sql(index),
             LimitOffset(ref expression1, ref expression2) =>
-                " OFFSET ".to_string() + &expression2.to_sql(index) +
-                " LIMIT " + &expression1.to_sql(index),
+                " LIMIT ".to_string() + &expression1.to_sql(index) +
+                    " OFFSET " + &expression2.to_sql(index),
             NoLimit => "".to_string(),
             Range(ref expression1, ref expression2) =>
-                " OFFSET ".to_string() + &expression1.to_sql(index) +
-                " LIMIT " + &expression2.to_sql(index),
-            StartRange(ref expression) => " OFFSET ".to_string() + &expression.to_sql(index),
+                " LIMIT ".to_string() + &expression2.to_sql(index) +
+                    " OFFSET " + &expression1.to_sql(index),
+            StartRange(ref expression) => " LIMIT -1 OFFSET ".to_string() + &expression.to_sql(index),
         }
     }
 }
@@ -475,16 +474,14 @@ impl Query {
                 ).collect();
                 // Add the SQL code to get the inserted primary key.
                 // TODO: what to do when there is no primary key?
-                let query_start =
-                    format!("INSERT INTO {table}({fields}) VALUES({values}) RETURNING ",
+                let query =
+                    format!("INSERT INTO {table}({fields}) VALUES({values})",
                         table = table,
                         fields = fields.to_sql(&mut 1),
                         values = values.to_sql(&mut 1),
                     );
-                let query_start = string_token(&query_start);
-                let macro_name = Ident::new(format!("tql_{}_primary_key_field", table).as_str(), Span::call_site());
                 quote! {
-                    concat!(#query_start, #macro_name!())
+                    concat!(#query)
                 }
             },
             Query::Select { ref filter, get: _get, ref joins, ref limit, ref order, ref table, use_pk: _use_pk } => {
@@ -578,4 +575,53 @@ fn has_order_clauses(orders: &[Order]) -> bool {
 /// Escape the character '.
 fn escape(string: String) -> String {
     string.replace("'", "''")
+}
+
+pub fn type_to_sql(typ: &Type, nullable: bool) -> Tokens {
+    let sql_type =
+        match *typ {
+            Type::Bool => "BOOLEAN",
+            Type::ByteString => "BYTEA",
+            Type::I8 | Type::Char => "CHARACTER(1)",
+            Type::Custom(ref related_table_name) => {
+                let pk_macro_name = Ident::new(&format!("tql_{}_primary_key_field", related_table_name),
+                    Span::call_site());
+                return quote! {
+                    "INTEGER REFERENCES ", #related_table_name, "(", #pk_macro_name!(), ") NOT NULL"
+                };
+                // NOTE: if the field type is not an SQL table, an error is thrown.
+            },
+            Type::F32 => "REAL",
+            Type::F64 => "DOUBLE PRECISION",
+            Type::Generic => "", // TODO: document why this is empty.
+            Type::I16 => "SMALLINT",
+            Type::I32 => "INTEGER",
+            Type::I64 => "BIGINT",
+            Type::LocalDateTime => "TIMESTAMP WITH TIME ZONE",
+            Type::NaiveDate => "DATE",
+            Type::NaiveDateTime => "TIMESTAMP",
+            Type::NaiveTime => "TIME",
+            Type::Nullable(ref typ) => {
+                let sql = type_to_sql(&*typ, true);
+                return quote! {
+                    #sql
+                };
+            },
+            Type::Serial => "INTEGER PRIMARY KEY",
+            Type::String => "CHARACTER VARYING",
+            Type::UnsupportedType(_) => "", // TODO: should panic. TODO: document why.
+            Type::UtcDateTime => "TIMESTAMP WITH TIME ZONE",
+        };
+
+    let expr = string_literal(sql_type);
+    if nullable {
+        quote! {
+            #expr
+        }
+    }
+    else {
+        quote! {
+            #expr, " NOT NULL"
+        }
+    }
 }

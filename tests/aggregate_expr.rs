@@ -21,17 +21,20 @@
 
 #![feature(proc_macro)]
 
-extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
-use postgres::{Connection, TlsMode};
 use tql::PrimaryKey;
 use tql_macros::sql;
 
+#[macro_use]
+mod connection;
 mod teardown;
 
+backend_extern_crate!();
+
+use connection::get_connection;
 use teardown::TearDown;
 
 #[derive(SqlTable)]
@@ -40,10 +43,6 @@ struct TableAggregateExpr {
     primary_key: PrimaryKey,
     field1: String,
     field2: i32,
-}
-
-fn get_connection() -> Connection {
-    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
 }
 
 #[test]
@@ -63,37 +62,37 @@ fn test_aggregate() {
     sql!(TableAggregateExpr.insert(field1 = "test", field2 = new_field1)).unwrap();
 
     let aggregate = sql!(TableAggregateExpr.aggregate(avg(field2))).unwrap();
-    assert_eq!(36, aggregate.field2_avg); // NOTE: round((55 + 12 + 42) / 3) = 36.
+    assert_eq!((55.0 + 12.0 + 42.0) / 3.0, aggregate.field2_avg);
 
     let mut aggregates = sql!(TableAggregateExpr
           .values(field1)
           .aggregate(avg(field2)));
     assert_eq!(2, aggregates.len());
-    aggregates.sort_by_key(|agg| agg.field2_avg);
-    assert_eq!(12, aggregates[0].field2_avg); // NOTE: round(12 / 1) = 12.
-    assert_eq!(49, aggregates[1].field2_avg); // NOTE: round((55 + 42) / 3) = 49.
+    aggregates.sort_by(|x, y| x.field2_avg.partial_cmp(&y.field2_avg).expect("aggregate value"));
+    assert_eq!(12.0, aggregates[0].field2_avg); // NOTE: round(12 / 1) = 12.
+    assert_eq!(48.5, aggregates[1].field2_avg); // NOTE: round((55 + 42) / 3) = 49.
 
     let aggregate = sql!(TableAggregateExpr.aggregate(average = avg(field2))).unwrap();
-    assert_eq!(36, aggregate.average); // NOTE: round((55 + 12 + 42) / 3) = 36.
+    assert_eq!((55.0 + 12.0 + 42.0) / 3.0, aggregate.average);
 
     let aggregates = sql!(TableAggregateExpr.values(field1).aggregate(average = avg(field2)).filter(average < 20));
     assert_eq!(1, aggregates.len());
-    assert_eq!(12, aggregates[0].average); // NOTE: round(12 / 1) = 12.
+    assert_eq!(12.0, aggregates[0].average); // NOTE: round(12 / 1) = 12.
 
     let aggregates = sql!(TableAggregateExpr.values(field1).aggregate(avg(field2)).filter(field2_avg < 20));
     assert_eq!(1, aggregates.len());
-    assert_eq!(12, aggregates[0].field2_avg); // NOTE: round(12 / 1) = 12.
+    assert_eq!(12.0, aggregates[0].field2_avg); // NOTE: round(12 / 1) = 12.
 
     let aggregates = sql!(TableAggregateExpr
         .filter(field2 > 10)
         .values(field1)
         .aggregate(avg(field2)).filter(field2_avg < 20));
     assert_eq!(1, aggregates.len());
-    assert_eq!(12, aggregates[0].field2_avg); // NOTE: round(12 / 1) = 12.
+    assert_eq!(12.0, aggregates[0].field2_avg); // NOTE: round(12 / 1) = 12.
 
     let aggregates = sql!(TableAggregateExpr.filter(field2 > 10).values(field1).aggregate(average = avg(field2)).filter(average < 20));
     assert_eq!(1, aggregates.len());
-    assert_eq!(12, aggregates[0].average); // NOTE: round(12 / 1) = 12.
+    assert_eq!(12.0, aggregates[0].average); // NOTE: round(12 / 1) = 12.
 
     let value1 = 10;
     let aggregates = sql!(TableAggregateExpr
@@ -102,7 +101,7 @@ fn test_aggregate() {
         .aggregate(average = avg(field2))
         .filter(average < 20));
     assert_eq!(1, aggregates.len());
-    assert_eq!(12, aggregates[0].average); // NOTE: round(12 / 1) = 12.
+    assert_eq!(12.0, aggregates[0].average); // NOTE: round(12 / 1) = 12.
 
     let value2 = 20;
     let aggregates = sql!(TableAggregateExpr
@@ -111,5 +110,5 @@ fn test_aggregate() {
         .aggregate(average = avg(field2))
         .filter(average < value2));
     assert_eq!(1, aggregates.len());
-    assert_eq!(12, aggregates[0].average); // NOTE: round(12 / 1) = 12.
+    assert_eq!(12.0, aggregates[0].average); // NOTE: round(12 / 1) = 12.
 }

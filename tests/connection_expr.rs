@@ -21,17 +21,22 @@
 
 #![feature(proc_macro)]
 
-extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
-use postgres::{Connection, TlsMode};
+#[cfg(feature = "postgres")]
 use postgres::error::UNDEFINED_TABLE;
 use tql::{ForeignKey, PrimaryKey};
 use tql_macros::sql;
 
+use connection::get_connection;
+
+#[macro_use]
+mod connection;
 mod teardown;
+
+backend_extern_crate!();
 
 use teardown::TearDown;
 
@@ -44,7 +49,6 @@ struct TableInsertExpr {
     optional_field: Option<i32>,
     boolean: Option<bool>,
     //character: Option<char>, // TODO: does not work.
-    float32: Option<f32>,
     float64: Option<f64>,
     //int8: Option<i8>, // TODO: does not work.
     int16: Option<i16>,
@@ -55,10 +59,6 @@ struct TableInsertExpr {
 struct RelatedTableInsertExpr {
     primary_key: PrimaryKey,
     field1: i32,
-}
-
-fn get_connection() -> Connection {
-    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
 }
 
 #[test]
@@ -78,7 +78,12 @@ fn test_insert() {
 
     let result = sql!(cx, TableInsertExpr.insert(field1 = "value1", field2 = 55, related_field = related_field));
     match result {
-        Err(db_error) => assert_eq!(Some(&UNDEFINED_TABLE), db_error.code()),
+        Err(db_error) => {
+            #[cfg(feature = "postgres")]
+            assert_eq!(Some(&UNDEFINED_TABLE), db_error.code());
+            #[cfg(feature = "sqlite")]
+            assert_eq!(db_error.to_string(), "no such table: TableInsertExpr");
+        },
         Ok(_) => assert!(false),
     }
 
@@ -130,7 +135,6 @@ fn test_insert() {
     let connection = &cx;
     let boolean_value = true;
     //let character = 'a';
-    let float32 = 3.14f32;
     let float64 = 3.14f64;
     //let int8 = 42i8;
     let int16 = 42i16;
@@ -142,7 +146,6 @@ fn test_insert() {
         optional_field = Some(12),
         boolean = Some(boolean_value),
         /*character = character,*/
-        float32 = Some(float32),
         float64 = Some(float64),
         /*int8 = int8,*/
         int16 = Some(int16),

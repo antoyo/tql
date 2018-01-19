@@ -20,6 +20,7 @@
  */
 
 /*
+ * TODO: error for unsupported types and methods (like regex()) in backends (or add implementation?).
  * TODO: remove useless empty string ("") in generated code (concat!("", "")).
  * TODO: avoid using quote_spanned and respan when possible and document all of their usage.
  * TODO: allow using a model from another module without #[macro_use].
@@ -30,7 +31,8 @@
  * TODO: show a better error when using a type that is not a table (both in ForeignKey<_> and in
  * sql!(_.all())).
  * FIXME: escape name like `Table` to avoid error.
- * FIXME: error when having mutiple ForeignKey with the same table.
+ * FIXME: error when having mutiple ForeignKey with the same table (then support having multiple
+ * ForeignKey).
  * TODO: document the management of the connection.
  * TODO: improve the error handling of the generated code.
  * TODO: use as_ref() for Ident instead of &ident.to_string().

@@ -21,16 +21,12 @@
 
 #![feature(proc_macro)]
 
+extern crate rusqlite;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
-#[macro_use]
-mod connection;
-
-backend_extern_crate!();
-
-use tql::PrimaryKey;
+use tql::{ForeignKey, PrimaryKey};
 use tql_macros::to_sql;
 
 #[derive(SqlTable)]
@@ -39,21 +35,33 @@ struct Table {
     id: PrimaryKey,
     field1: String,
     field2: i32,
+    related_field: ForeignKey<RelatedTable>,
+    optional_field: Option<i32>,
+}
+
+#[derive(SqlTable)]
+#[allow(dead_code)]
+struct RelatedTable {
+    id: PrimaryKey,
+    field1: String,
 }
 
 #[test]
-fn test_delete() {
-    //assert_eq!(
-        //"DELETE FROM Table",
-        //to_sql!(Table.delete()) // TODO: this does not work because the errors (including
-        //warnings) return a dummy result.
-    //);
+fn test_insert() {
     assert_eq!(
-        "DELETE FROM Table WHERE Table.field1 = 'test'",
-        to_sql!(Table.filter(field1 == "test").delete())
+        "INSERT INTO RelatedTable(field1) VALUES('test')",
+        to_sql!(RelatedTable.insert(field1 = "test"))
     );
     assert_eq!(
-        "DELETE FROM Table WHERE Table.id = $1",
-        to_sql!(Table.get(id).delete())
+        "INSERT INTO Table(field1, field2, related_field) VALUES('value1', 55, $1)",
+        to_sql!(Table.insert(field1 = "value1", field2 = 55, related_field = related_object))
+    );
+    assert_eq!(
+        "INSERT INTO Table(field1, field2, related_field) VALUES('value1', $1, $2)",
+        to_sql!(Table.insert(field1 = "value1", field2 = new_field2, related_field = related_object))
+    );
+    assert_eq!(
+        "INSERT INTO Table(field1, field2, related_field, optional_field) VALUES('value1', 55, $1, 42)",
+        to_sql!(Table.insert(field1 = "value1", field2 = 55, related_field = related_object, optional_field = 42))
     );
 }

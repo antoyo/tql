@@ -29,7 +29,6 @@ pub struct TableInsertExpr {
     pub related_field: ForeignKey<RelatedTableInsertExpr>,
     pub optional_field: Option<i32>,
     pub boolean: Option<bool>,
-    pub float32: Option<f32>,
     pub float64: Option<f64>,
     pub int16: Option<i16>,
     pub int64: Option<i64>,
