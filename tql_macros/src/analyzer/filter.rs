@@ -217,8 +217,6 @@ fn method_call_expression_to_filter_expression(identifier: Ident, expr: &Express
 /// Convert a method call where the object is an identifier to a filter expression.
 fn path_method_call_to_filter(path: &Path, identifier: Ident, args: &Punctuated<Expr, Comma>, position: Span) -> FilterValue
 {
-    // TODO: check the method call (types, arguments and if it exists).
-    // TODO: check if the field exists.
     let object_name = path.segments.first().unwrap().into_value().ident;
     let arguments: Vec<Expression> = args.iter()
         .cloned()

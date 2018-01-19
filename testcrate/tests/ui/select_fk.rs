@@ -19,29 +19,28 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-/// Analyzer for the join() method.
+//! Tests of the methods related to `Query::Select`.
 
-use syn::spanned::Spanned;
+#![feature(proc_macro)]
 
-use ast::{Expression, Join};
-use error::{Error, Result, res};
-use super::path_expr_to_identifier;
+extern crate postgres;
+extern crate tql;
+#[macro_use]
+extern crate tql_macros;
 
-/// Convert an `Expression` to a `Join`
-pub fn argument_to_join(arg: &Expression, table_name: &str) -> Result<Join> {
-    let mut errors = vec![];
-    let join;
+use tql::{ForeignKey, PrimaryKey};
 
-    if let Some(identifier) = path_expr_to_identifier(&arg, &mut errors) {
-        join = Some(Join {
-            base_field: identifier,
-            base_table: table_name.to_string(),
-        });
-        // NOTE: if the field type is not an SQL table, an error is thrown.
-    }
-    else {
-        return Err(vec![Error::new("Expecting identifier, but got", arg.span())]); // TODO: improve error message.
-    }
+#[derive(SqlTable)]
+struct Table {
+    id: PrimaryKey,
+    related: ForeignKey<RelatedTable>,
+}
 
-    res(join.expect("join"), errors)
+#[derive(SqlTable)]
+struct RelatedTable {
+    field1: String,
+}
+
+fn main() {
+    sql!(Table.all().join(related));
 }

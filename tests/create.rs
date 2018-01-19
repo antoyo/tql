@@ -91,7 +91,6 @@ fn test_create() {
         to_sql!(Dates.create())
     );
     assert_eq!(
-        // character CHARACTER(1) NOT NULL,
         "CREATE TABLE OtherTypes (pk SERIAL PRIMARY KEY NOT NULL, boolean BOOLEAN NOT NULL, bytestring BYTEA NOT NULL, float32 REAL NOT NULL, float64 DOUBLE PRECISION NOT NULL, int8 CHARACTER(1) NOT NULL, int16 SMALLINT NOT NULL, int32 INTEGER NOT NULL, int64 BIGINT NOT NULL)",
         to_sql!(OtherTypes.create())
     );

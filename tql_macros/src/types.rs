@@ -112,8 +112,7 @@ fn _type_to_sql(typ: &Type, nullable: bool) -> Tokens {
                 return quote! {
                     "INTEGER REFERENCES ", #related_table_name, "(", #pk_macro_name!(), ") NOT NULL"
                 };
-                // NOTE: if the field type is not an SQL table, an error is thrown by the linter.
-                // FIXME: previous comment.
+                // NOTE: if the field type is not an SQL table, an error is thrown.
             },
             Type::F32 => "REAL",
             Type::F64 => "DOUBLE PRECISION",

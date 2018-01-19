@@ -296,11 +296,14 @@ impl FilterValue {
 
 impl Join {
     fn to_check(&self) -> Tokens {
-        let macro_name =
+        let related_table_macro_name =
             Ident::new(&format!("tql_{}_check_related_tables", self.base_table), self.base_field.span);
+        let related_pk_macro_name = Ident::new(&format!("tql_{}_check_related_pks", self.base_table),
+            self.base_field.span);
         let base_field_ident = &self.base_field;
         quote_spanned! { self.base_field.span =>
-            #macro_name!(#base_field_ident);
+            #related_table_macro_name!(#base_field_ident);
+            #related_pk_macro_name!(#base_field_ident);
         }
     }
 

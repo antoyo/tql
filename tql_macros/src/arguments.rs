@@ -170,7 +170,6 @@ fn add_filter_value_arguments(filter_value: &FilterValue, args: &mut Args, liter
         FilterValue::None => unreachable!("FilterValue::None in add_filter_value_arguments()"),
         FilterValue::PrimaryKey(ref table) => {
             if let Some(expr) = expression {
-                // TODO: maybe missing the field name.
                 add(args, literals, None, Some(table.clone()), expr);
             }
         },

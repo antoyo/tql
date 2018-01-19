@@ -39,7 +39,6 @@ use super::filter::expression_to_filter_expression;
 pub fn get_expression_to_filter_expression(arg: &Expression, table_name: &str) ->
     Result<(FilterExpression, bool, Limit)>
 {
-    // TODO: check that the table has the field for the PK.
     match *arg {
         Expr::Lit(_) | Expr::Path(_) => {
             let filter = FilterExpression::Filter(Filter {

@@ -26,6 +26,8 @@
  * TODO: write multi-crate test.
  * TODO: write test for Option variable.
  *
+ * TODO: show a better error when using a type that is not a table (both in ForeignKey<_> and in
+ * sql!(_.all())).
  * FIXME: escape name like `Table` to avoid error.
  * FIXME: error when having mutiple ForeignKey with the same table.
  * TODO: document the management of the connection.
@@ -260,27 +262,27 @@ pub fn sql_table(input: TokenStream) -> TokenStream {
         if let Item::Struct(item_struct) = item {
             let (fields, primary_key, impls) = get_struct_fields(&item_struct);
             let mut compiler_errors = quote! {};
-            if let Err(errors) = fields {
-                for error in errors {
-                    add_error(error, &mut compiler_errors);
+            let errors =
+                if let Err(errors) = fields {
+                    for error in errors {
+                        add_error(error, &mut compiler_errors);
+                    }
+                    compiler_errors
                 }
-                concat_token_stream(compiler_errors.into(), impls)
-            }
-            else {
-                // NOTE: Transform the span by dummy spans to workaround this issue:
-                // https://github.com/rust-lang/rust/issues/42337
-                // https://github.com/rust-lang/rust/issues/45934#issuecomment-344497531
-                // NOTE: if there is no error, there is a primary key, hence expect().
-                let code = tosql_impl(&item_struct, &primary_key.expect("primary key"));
-                let methods = table_methods(&item_struct);
-                let table_macro = table_macro(&item_struct);
-                let code = quote! {
-                    #methods
-                    #code
-                    #table_macro
+                else {
+                    quote! {
+                    }
                 };
-                concat_token_stream(code.into(), impls)
-            }
+            let code = tosql_impl(&item_struct, primary_key);
+            let methods = table_methods(&item_struct);
+            let table_macro = table_macro(&item_struct);
+            let code = quote! {
+                #errors
+                #methods
+                #code
+                #table_macro
+            };
+            concat_token_stream(code.into(), impls)
         }
         else {
             let mut compiler_errors = quote! {};
@@ -440,7 +442,7 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> Tokens {
         // TODO: check that this let is not in the generated binary.
         {
             let _tql_closure = || {
-                let mut #ident = <#table_ident as #trait_ident>::default();
+                let mut #ident = <#table_ident as #trait_ident>::_tql_default();
                 #({
                     #fns
                     #assigns

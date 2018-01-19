@@ -48,7 +48,7 @@ pub type PrimaryKey = types::StdI32;
 pub unsafe trait SqlTable {
     const FIELD_COUNT: usize;
 
-    fn default() -> Self;
+    fn _tql_default() -> Self;
 
     #[cfg(feature = "postgres")]
     fn from_row(row: &::postgres::rows::Row) -> Self;

@@ -125,11 +125,7 @@ struct QueryData {
 pub fn analyze(method_calls: MethodCalls) -> Result<Query> {
     let mut errors = vec![];
 
-    // TODO: Check if the table exists.
     let table_name = method_calls.name.expect("table name in method_calls").to_string();
-    /*if !sql_tables.contains_key(&table_name) {
-        unknown_table_error(&table_name, method_calls.position, sql_tables, &mut errors);
-    }*/
 
     check_methods(&method_calls, &mut errors);
     check_method_calls_validity(&method_calls, &mut errors);

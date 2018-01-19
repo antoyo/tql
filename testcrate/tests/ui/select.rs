@@ -153,4 +153,6 @@ fn main() {
     //~| HELP did you mean field1?
 
     //to_sql!(Table.all().join(address, address)); // TODO: should span an error.
+
+    sql!(Table.get(1));
 }

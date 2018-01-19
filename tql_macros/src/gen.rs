@@ -56,6 +56,7 @@ use string::token_to_string;
 use types::{
     Type,
     get_type_parameter,
+    get_type_parameter_as_path,
     type_to_sql,
 };
 use {
@@ -107,8 +108,7 @@ pub fn table_methods(item_struct: &ItemStruct) -> Tokens {
             unsafe impl #trait_ident for #table_ident {
                 const FIELD_COUNT: usize = #field_count;
 
-                // TODO: rename to avoid clash.
-                fn default() -> Self {
+                fn _tql_default() -> Self {
                     unimplemented!()
                 }
 
@@ -135,10 +135,21 @@ pub fn table_methods(item_struct: &ItemStruct) -> Tokens {
 
 /// Add the postgres::types::ToSql implementation on the struct.
 /// Its SQL representation is the same as the primary key SQL representation.
-pub fn tosql_impl(item_struct: &ItemStruct, primary_key_field: &str) -> Tokens {
+pub fn tosql_impl(item_struct: &ItemStruct, primary_key_field: Option<String>) -> Tokens {
     let table_ident = &item_struct.ident;
     let debug_impl = create_debug_impl(item_struct);
-    let primary_key_ident = Ident::new(primary_key_field, Span::call_site());
+    let to_sql_code =
+        if let Some(pk) = primary_key_field {
+            let primary_key_ident = Ident::new(&pk, Span::call_site());
+            quote! {
+                self.#primary_key_ident.to_sql(ty, out)
+            }
+        }
+        else {
+            quote! {
+                panic!("No primary key for table {}", stringify!(#table_ident));
+            }
+        };
     let std_ident = quote_spanned! { table_ident.span() =>
         ::std
     };
@@ -152,9 +163,9 @@ pub fn tosql_impl(item_struct: &ItemStruct, primary_key_field: &str) -> Tokens {
         impl #postgres_ident::types::ToSql for #table_ident {
             fn to_sql(&self, ty: &#postgres_ident::types::Type, out: &mut Vec<u8>) ->
                 Result<#postgres_ident::types::IsNull, Box<#std_ident::error::Error + 'static + Sync + Send>>
-                {
-                    self.#primary_key_ident.to_sql(ty, out)
-                }
+            {
+                #to_sql_code
+            }
 
             fn accepts(ty: &#postgres_ident::types::Type) -> bool {
                 *ty == #postgres_ident::types::INT4
@@ -163,9 +174,9 @@ pub fn tosql_impl(item_struct: &ItemStruct, primary_key_field: &str) -> Tokens {
             fn to_sql_checked(&self, ty: &#postgres_ident::types::Type, out: &mut #std_ident::vec::Vec<u8>)
                 -> #std_ident::result::Result<#postgres_ident::types::IsNull,
                 Box<#std_ident::error::Error + #std_ident::marker::Sync + #std_ident::marker::Send>>
-                {
-                    #postgres_ident::types::__to_sql_checked(self, ty, out)
-                }
+            {
+                #postgres_ident::types::__to_sql_checked(self, ty, out)
+            }
         }
 
         impl #table_ident {
@@ -526,11 +537,11 @@ fn related_pks_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> T
                 if let syn::Type::Path(ref path) = field.ty {
                     let element = path.path.segments.first().expect("first segment of path");
                     let first_segment = element.value();
-                    let typ = get_type_parameter(&first_segment.arguments)
-                        .expect("ForeignKey inner type");
-                    related_table_names.push(ident);
-                    related_pk_macro_names.push(Ident::new(&format!("tql_{}_primary_key_field", typ),
-                        Span::call_site()));
+                    if let Some(typ) = get_type_parameter(&first_segment.arguments) {
+                        related_table_names.push(ident);
+                        related_pk_macro_names.push(Ident::new(&format!("tql_{}_primary_key_field", typ),
+                            Span::call_site()));
+                    }
                 }
             }
         }
@@ -567,7 +578,7 @@ fn pk_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> Tokens {
         }
         else {
             quote! {
-                unreachable!("no primary key")
+                ""
             }
         };
     quote! {
@@ -611,6 +622,7 @@ fn related_table_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) ->
     let mut related_table_names = vec![];
     let mut non_related_table_names = vec![];
     let mut related_tables = vec![];
+    let mut check_related_pk = vec![];
     let mut compiler_errors = vec![];
     for field in named {
         let typ = token_to_string(&field.ty);
@@ -619,10 +631,17 @@ fn related_table_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) ->
                 if let syn::Type::Path(ref path) = field.ty {
                     let element = path.path.segments.first().expect("first segment of path");
                     let first_segment = element.value();
-                    let typ = get_type_parameter(&first_segment.arguments)
-                        .expect("ForeignKey inner type");
-                    related_table_names.push(ident);
-                    related_tables.push(typ);
+                    if let Some(typ) = get_type_parameter(&first_segment.arguments) {
+                        related_table_names.push(ident);
+                        let span = get_type_parameter_as_path(&first_segment.arguments)
+                            .expect("ForeignKey inner type")
+                            .span();
+                        let macro_name = Ident::new(&format!("tql_{}_check_primary_key", typ), span);
+                        check_related_pk.push(quote_spanned! { span =>
+                            #macro_name!();
+                        });
+                        related_tables.push(typ);
+                    }
                 }
             }
             else {
@@ -636,8 +655,11 @@ expected type `ForeignKey<_>`
             }
         }
     }
+    let related_table_names2 = &related_table_names;
+    let related_table_names = &related_table_names;
     let macro_name = Ident::new(&format!("tql_{}_related_tables", table_ident), Span::call_site());
     let check_macro_name = Ident::new(&format!("tql_{}_check_related_tables", table_ident), Span::call_site());
+    let check_related_pk_macro_name = Ident::new(&format!("tql_{}_check_related_pks", table_ident), Span::call_site());
     quote! {
         #[macro_export]
         macro_rules! #macro_name {
@@ -652,6 +674,42 @@ expected type `ForeignKey<_>`
             #((#non_related_table_names) => { #compiler_errors };)*
             ($tt:tt) => {};
         }
+
+        #[macro_export]
+        macro_rules! #check_related_pk_macro_name {
+            #((#related_table_names2) => { #check_related_pk };)*
+            ($tt:tt) => {};
+        }
+    }
+}
+
+fn check_pk_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> Tokens {
+    let mut primary_key_found = false;
+    for field in named {
+        let typ = token_to_string(&field.ty);
+        if typ == "PrimaryKey" {
+            primary_key_found = true;
+        }
+    }
+    let macro_name = Ident::new(&format!("tql_{}_check_primary_key", table_ident), Span::call_site());
+    let pk_code =
+        if primary_key_found {
+            quote! {}
+        }
+        else {
+            let error = format!("No primary key found for table {} which is needed for a join", table_ident);
+            quote_spanned! { table_ident.span() =>
+                compile_error!(#error)
+            }
+        };
+    quote! {
+        #[macro_export]
+        macro_rules! #macro_name {
+            () => {
+                #pk_code
+            };
+        }
+
     }
 }
 
@@ -659,16 +717,12 @@ expected type `ForeignKey<_>`
 /// provided.
 pub fn table_macro(item_struct: &ItemStruct) -> Tokens {
     let table_ident = &item_struct.ident;
-    let mut primary_key_found = false;
     if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
         let mut mandatory_fields = vec![];
         let mut fk_patterns = vec![];
         for field in named {
             let typ = token_to_string(&field.ty);
             if let Some(ident) = field.ident {
-                if typ == "PrimaryKey" {
-                    primary_key_found = true;
-                }
                 if !typ.starts_with("Option") && typ != "PrimaryKey" {
                     mandatory_fields.push(ident);
                 }
@@ -676,27 +730,17 @@ pub fn table_macro(item_struct: &ItemStruct) -> Tokens {
                     if let syn::Type::Path(ref path) = field.ty {
                         let element = path.path.segments.first().expect("first segment of path");
                         let first_segment = element.value();
-                        let typ = get_type_parameter(&first_segment.arguments)
-                            .expect("ForeignKey inner type");
-                        let macro_name = Ident::new(&format!("tql_{}_field_list", typ), Span::call_site());
-                        fk_patterns.push(quote_spanned! { table_ident.span() =>
-                            (#ident) => { #macro_name!() };
-                        });
+                        if let Some(typ) = get_type_parameter(&first_segment.arguments) {
+                            let macro_name = Ident::new(&format!("tql_{}_field_list", typ), Span::call_site());
+                            fk_patterns.push(quote_spanned! { table_ident.span() =>
+                                (#ident) => { #macro_name!() };
+                            });
+                        }
                     }
                 }
             }
         }
 
-        let check_pk_macro_name = Ident::new(&format!("tql_{}_check_primary_key", table_ident), Span::call_site());
-        let pk_code =
-            if primary_key_found {
-                quote! {}
-            }
-            else {
-                quote! {
-                    compiler_error!("No primary key found")
-                }
-            };
         let related_field_list_macro_name = Ident::new(&format!("tql_{}_related_field_list", table_ident), Span::call_site());
         let check_missing_fields_macro = check_missing_fields_macro(named, table_ident);
         let field_list_macro = field_list_macro(named, table_ident);
@@ -704,20 +748,15 @@ pub fn table_macro(item_struct: &ItemStruct) -> Tokens {
         let pk_macro = pk_macro(named, table_ident);
         let related_pks_macro = related_pks_macro(named, table_ident);
         let related_table_macro = related_table_macro(named, table_ident);
+        let check_pk_macro = check_pk_macro(named, table_ident);
         quote! {
-            #[macro_export]
-            macro_rules! #check_pk_macro_name {
-                () => {
-                    #pk_code
-                };
-            }
-
             #[macro_export]
             macro_rules! #related_field_list_macro_name {
                 #(#fk_patterns)*
                 ($tt:tt) => { "" };
             }
 
+            #check_pk_macro
             #related_table_macro
             #check_missing_fields_macro
             #field_list_macro
