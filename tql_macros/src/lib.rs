@@ -25,6 +25,7 @@
  * TODO: allow using a model from another module without #[macro_use].
  * TODO: write multi-crate test.
  * TODO: write test for Option variable.
+ * TODO: show proper error instead of using expect() to parse the content of the macros.
  *
  * TODO: show a better error when using a type that is not a table (both in ForeignKey<_> and in
  * sql!(_.all())).
@@ -105,7 +106,7 @@ use std::iter::FromIterator;
 use proc_macro::TokenStream;
 #[cfg(feature = "unstable")]
 use proc_macro::{TokenNode, TokenTree};
-use proc_macro2::Span;
+use proc_macro2::{Spacing, Span};
 use quote::Tokens;
 #[cfg(feature = "unstable")]
 use quote::ToTokens;
@@ -117,6 +118,7 @@ use syn::{
     parse,
     parse2,
 };
+use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 
 use analyzer::{
@@ -177,11 +179,22 @@ struct SqlQueryWithArgs {
 #[cfg(feature = "unstable")]
 #[proc_macro]
 pub fn sql(input: TokenStream) -> TokenStream {
-    // TODO: if the first parameter is not provided, use "connection".
-    // TODO: to do so, try to parse() to a Punctuated(Comma, syn::Expr).
-    let sql_result = to_sql_query(input.into());
+    let arguments: Arguments = parse(input).expect("Expression in sql!()");
+    let (sql_expr, connection_ident) =
+        if arguments.0.len() == 2 {
+            let connection_expr = &arguments.0[0];
+            let connection_expr = quote! {
+                #connection_expr
+            };
+            (&arguments.0[1], connection_expr)
+        }
+        else {
+            (&arguments.0[0], default_connection_expr())
+        };
+    let sql_expr = quote! { #sql_expr };
+    let sql_result = to_sql_query(sql_expr.into());
     match sql_result {
-        Ok(sql_query_with_args) => gen_query(sql_query_with_args),
+        Ok(sql_query_with_args) => gen_query(sql_query_with_args, connection_ident),
         Err(errors) => generate_errors(errors),
     }
 }
@@ -485,6 +498,21 @@ pub fn check_missing_fields(input: TokenStream) -> TokenStream {
     gen_check_missing_fields(input)
 }
 
+struct Arguments(Punctuated<Expr, Token![,]>);
+
+impl syn::synom::Synom for Arguments {
+    // call!(Punctuated::parse_terminated) will parse a terminated sequence of
+    // Synom objects. Expr implements synom so we're good.
+    named!(parse -> Self, map!(call!(Punctuated::parse_terminated), Arguments));
+}
+
+fn default_connection_expr() -> Tokens {
+    let connection_ident = Ident::new("connection", Span::call_site());
+    quote! {
+        #connection_ident
+    }
+}
+
 // Stable implementation.
 
 #[proc_macro_derive(StableCheckMissingFields)]
@@ -523,9 +551,24 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
         if let Expr::Field(ref field) = variant.as_ref().unwrap().1 {
             if let Expr::Tuple(ref tuple) = *field.base {
                 if let Expr::Macro(ref macr) = **tuple.elems.first().unwrap().value() {
-                    let sql_result = to_sql_query(macr.mac.tts.clone());
+                    let tts: Vec<_> = macr.mac.tts.clone().into_iter().collect();
+                    let (sql_query, connection_expr) =
+                        if let proc_macro2::TokenNode::Op(',', Spacing::Alone) = tts[1].kind {
+                            let connection_expr = &tts[0];
+                            let connection_expr = quote! {
+                                #connection_expr
+                            };
+                            (&tts[2..], connection_expr)
+                        }
+                        else {
+                            (&tts[..], default_connection_expr())
+                        };
+                    let sql_query = sql_query.iter()
+                        .map(|tt| proc_macro2::TokenStream::from(tt.clone()));
+                    let sql_query = proc_macro2::TokenStream::from_iter(sql_query);
+                    let sql_result = to_sql_query(sql_query);
                     let code = match sql_result {
-                        Ok(sql_query_with_args) => gen_query(sql_query_with_args),
+                        Ok(sql_query_with_args) => gen_query(sql_query_with_args, connection_expr),
                         Err(errors) => generate_errors(errors),
                     };
                     let code = proc_macro2::TokenStream::from(code);
