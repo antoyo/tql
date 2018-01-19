@@ -218,14 +218,14 @@ impl FilterExpression {
             FilterExpression::NegFilter(ref filter) => {
                 let filter = filter.to_tokens(index);
                 quote! {
-                    concat!("NOT ", #filter)
+                    "NOT ", #filter
                 }
             },
             FilterExpression::NoFilters => quote! { "" }, // No filters result in no SQL code.
             FilterExpression::ParenFilter(ref filter) => {
                 let filter = filter.to_tokens(index);
                 quote! {
-                    concat!("(", #filter, ")")
+                    "(", #filter, ")"
                 }
             }
             FilterExpression::FilterValue(ref filter_value) => filter_value.node.to_tokens(),
@@ -283,7 +283,7 @@ impl FilterValue {
                 FilterValue::PrimaryKey(ref table) => {
                     let macro_name = Ident::new(&format!("tql_{}_primary_key_field", table), Span::call_site());
                     return quote! {
-                        concat!(#table, ".", #macro_name!())
+                        #table, ".", #macro_name!()
                     };
                 },
             };
@@ -315,8 +315,8 @@ impl Join {
             #related_table_macro_name!(#base_field_ident)
         };
         quote! {
-            concat!(" INNER JOIN ", #related_table_name, " ON ", #base_table, ".", #base_field, " = ",
-                    #related_table_name, ".", #related_pks_macro_name!(#base_field_ident))
+            " INNER JOIN ", #related_table_name, " ON ", #base_table, ".", #base_field, " = ",
+                    #related_table_name, ".", #related_pks_macro_name!(#base_field_ident)
         }
     }
 }
@@ -503,8 +503,8 @@ impl Query {
                 let limit = limit.to_sql(&mut 1);
                 quote_spanned! { Span::call_site() => {
                     #check_joins
-                    concat!("SELECT ", #macro_name!() #joined_fields, " FROM ", #table, #joins, #where_clause, #filter, #order_clause,
-                        #order, #limit)
+                    concat!("SELECT ", #macro_name!() #joined_fields, " FROM ", #table, #joins, #where_clause, #filter,
+                        #order_clause, #order, #limit)
                 }}
             },
             Query::Update { ref assignments, ref filter, ref table, use_pk: _use_pk } => {

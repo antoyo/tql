@@ -101,7 +101,7 @@ pub fn table_methods(item_struct: &ItemStruct) -> Tokens {
         let postgres_ident = quote_spanned! { table_ident.span() =>
             ::postgres
         };
-        let row_ident = Ident::new("row", Span::call_site());
+        let row_ident = Ident::new("__tql_item_row", Span::call_site());
 
         quote! {
             unsafe impl #trait_ident for #table_ident {
@@ -250,7 +250,7 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
                 result.query(&#args_expr).expect("execute query").iter()
             }};
             let call = quote! {
-                .map(|row| {
+                .map(|__tql_item_row| {
                     #aggregate_expr
                 }).collect::<Vec<_>>()
                 // TODO: return an iterator instead of a vector.
@@ -264,7 +264,7 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
             quote! {{
                 #aggregate_struct
                 let result = #connection_ident.prepare(#sql_query).expect("prepare query");
-                result.query(&#args_expr).expect("execute query").iter().next().map(|row| {
+                result.query(&#args_expr).expect("execute query").iter().next().map(|__tql_item_row| {
                     #aggregate_expr
                 })
             }}
@@ -282,8 +282,8 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
                         // NOTE: The query is not supposed to fail, hence expect().
                         let rows = result.query(&#args_expr).expect("execute query");
                         // NOTE: There is always one result (the inserted id), hence unwrap().
-                        let row = rows.iter().next().unwrap();
-                        let count: i32 = row.get(0);
+                        let __tql_item_row = rows.iter().next().unwrap();
+                        let count: i32 = __tql_item_row.get(0);
                         Ok(count)
                     })
             }}
@@ -296,7 +296,7 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
                     let results = #result_ident.iter();
                 };
             let call = quote! {
-                .map(|row| {
+                .map(|__tql_item_row| {
                     #struct_expr
                 }).collect::<Vec<_>>()
                 // TODO: return an iterator instead of a vector.
@@ -315,7 +315,7 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
                     let results = #result_ident.iter().next();
                 };
             let call = quote! {
-                .map(|row| {
+                .map(|__tql_item_row| {
                     #struct_expr
                 })
             };
@@ -335,7 +335,7 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
 
 /// Create the struct expression needed by the generated code.
 fn create_struct(table_ident: &Ident, joins: &[Join]) -> Tokens {
-    let row_ident = quote! { row };
+    let row_ident = quote! { __tql_item_row };
     let assign_related_fields =
         joins.iter()
             .map(|join| {
@@ -362,7 +362,7 @@ fn gen_aggregate_struct(aggregates: &[Aggregate]) -> (Tokens, Tokens) {
     for (index, aggregate) in aggregates.iter().enumerate() {
         let field_name = aggregate.result_name.clone();
         aggregate_field_idents.push(field_name.clone());
-        aggregate_field_values.push(quote! { row.get(#index) });
+        aggregate_field_values.push(quote! { __tql_item_row.get(#index) });
         def_field_idents.push(field_name);
     }
     let struct_ident = new_ident("Aggregate");
@@ -530,7 +530,7 @@ fn related_pks_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> T
                         .expect("ForeignKey inner type");
                     related_table_names.push(ident);
                     related_pk_macro_names.push(Ident::new(&format!("tql_{}_primary_key_field", typ),
-                    Span::call_site()));
+                        Span::call_site()));
                 }
             }
         }
@@ -756,7 +756,7 @@ fn to_row_get(typ: syn::Type, with_delta: bool, index: &mut usize) -> Tokens {
     // NOTE: this use the Span call_site() to work-around a privacy issue:
     // https://github.com/rust-lang/rust/issues/46635
     quote_spanned! { Span::call_site() =>
-        row.get(#index_lit)
+        __tql_item_row.get(#index_lit)
     }
 }
 

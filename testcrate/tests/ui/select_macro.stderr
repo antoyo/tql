@@ -2,7 +2,7 @@ error: cannot find macro `tql_Tble_field_list!` in this scope
   --> $DIR/select_macro.rs:49:5
    |
 49 |     sql!(Tble.filter(field1 == "value"));
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: you could try the macro: `tql_Table_field_list!`
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: you could try the macro: `tql_Table_field_list`
 
 error[E0412]: cannot find type `Tble` in this scope
   --> $DIR/select_macro.rs:49:10

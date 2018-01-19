@@ -20,16 +20,13 @@
  */
 
 /*
- * TODO: Use concat! to avoid creating a String.
- * TODO: remove nested (useless) concat!().
  * TODO: remove useless empty string ("") in generated code (concat!("", "")).
- * TODO: if there's an issue with macro ordering, use macro 2.0 on nightly.
  * TODO: avoid using quote_spanned and respan when possible and document all of their usage.
  * TODO: allow using a model from another module without #[macro_use].
  * TODO: write multi-crate test.
  * TODO: write test for Option variable.
- * FIXME: update all generated identifiers to avoid name clash (or maybe use Span::def_site()).
  *
+ * FIXME: escape name like `Table` to avoid error.
  * FIXME: error when having mutiple ForeignKey with the same table.
  * TODO: document the management of the connection.
  * TODO: improve the error handling of the generated code.
@@ -331,7 +328,7 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> Tokens {
     let mut assigns = vec![];
     let mut typechecks = vec![];
 
-    let ident = Ident::new("_table", Span::call_site());
+    let ident = Ident::from("_table");
     {
         let mut add_arg = |arg: &Arg| {
             if let Some(name) = arg.field_name.as_ref()
