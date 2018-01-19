@@ -24,15 +24,11 @@
 use std::fmt::{Display, Error, Formatter};
 
 use proc_macro2::{Span, TokenStream};
-use quote::ToTokens;
+use quote::{Tokens, ToTokens};
 use syn::{Expr, Ident};
 
-use state::tables_singleton;
-use types::Type;
-
 pub type Expression = Expr;
-pub type FieldList = Vec<Identifier>;
-pub type Groups = Vec<Identifier>;
+pub type Groups = Vec<Ident>;
 pub type Identifier = String;
 
 /// `Aggregate` for une in SQL Aggregate `Query`.
@@ -160,17 +156,16 @@ pub struct Filters {
 #[derive(Debug)]
 pub enum FilterValue {
     None,
-    Identifier(Ident),
+    Identifier(String, Ident),
     MethodCall(MethodCall),
+    PrimaryKey(String),
 }
 
-/// A `Join` with another `joined_table` via a specific `joined_field`.
-#[derive(Clone, Debug, Default)]
+/// A `Join` with another table via a specific `joined_field`.
+#[derive(Clone, Debug)]
 pub struct Join {
-    pub base_field: Identifier,
+    pub base_field: Ident,
     pub base_table: Identifier,
-    pub joined_field: Identifier,
-    pub joined_table: Identifier,
 }
 
 /// An SQL LIMIT clause.
@@ -205,21 +200,22 @@ pub enum LogicalOperator {
 }
 
 /// A method call is an abstraction of SQL function call.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MethodCall {
     pub arguments: Vec<Expression>,
-    pub method_name: Identifier,
+    pub method_name: Ident,
     pub object_name: Ident,
-    pub template: String,
+    pub position: Span,
 }
 
 /// An SQL ORDER BY clause.
 #[derive(Debug)]
 pub enum Order {
     /// Comes from `sort(field)`.
-    Ascending(Identifier),
+    Ascending(Ident),
     /// Comes from `sort(-field)`.
-    Descending(Identifier),
+    Descending(Ident),
+    NoOrder,
 }
 
 /// `RelationalOperator` to be used in a `Filter`.
@@ -245,12 +241,12 @@ pub enum Query {
         table: Identifier,
     },
     CreateTable {
-        fields: Vec<TypedField>,
         table: Identifier,
     },
     Delete {
         filter: FilterExpression,
         table: Identifier,
+        use_pk: bool,
     },
     Drop {
         table: Identifier,
@@ -260,17 +256,19 @@ pub enum Query {
         table: Identifier,
     },
     Select {
-        fields: FieldList,
         filter: FilterExpression,
+        get: bool,
         joins: Vec<Join>,
         limit: Limit,
         order: Vec<Order>,
         table: Identifier,
+        use_pk: bool,
     },
     Update {
         assignments: Vec<Assignment>,
         filter: FilterExpression,
         table: Identifier,
+        use_pk: bool,
     },
 }
 
@@ -278,6 +276,7 @@ pub enum Query {
 pub enum QueryType {
     AggregateMulti,
     AggregateOne,
+    Create,
     Exec,
     InsertOne,
     SelectMulti,
@@ -288,22 +287,7 @@ pub enum QueryType {
 #[derive(Debug)]
 pub struct TypedField {
     pub identifier: Identifier,
-    pub typ: String,
-}
-
-/// Get the query table name.
-pub fn query_table(query: &Query) -> Identifier {
-    let table_name =
-        match *query {
-            Query::Aggregate { ref table, .. } => table,
-            Query::CreateTable { ref table, .. } => table,
-            Query::Delete { ref table, .. } => table,
-            Query::Drop { ref table, .. } => table,
-            Query::Insert { ref table, .. } => table,
-            Query::Select { ref table, .. } => table,
-            Query::Update { ref table, .. } => table,
-        };
-    table_name.clone()
+    pub typ: Tokens,
 }
 
 /// Get the query type.
@@ -318,24 +302,18 @@ pub fn query_type(query: &Query) -> QueryType {
             }
         },
         Query::Insert { .. } => QueryType::InsertOne,
-        Query::Select { ref filter, ref limit, ref table, .. } => {
+        Query::Select { get, ref limit, .. } => {
             let mut typ = QueryType::SelectMulti;
-            if let FilterExpression::Filter(ref filter) = *filter {
-                let tables = tables_singleton();
-                // NOTE: At this stage (code generation), the table and the field exist, hence unwrap().
-                let table = tables.get(table).unwrap();
-                if let FilterValue::Identifier(ref identifier) = filter.operand1 {
-                    if table.fields.get(identifier).unwrap().ty.node == Type::Serial {
-                        typ = QueryType::SelectOne;
-                    }
-                }
+            if get {
+                typ = QueryType::SelectOne;
             }
             if let Limit::Index(_) = *limit {
                 typ = QueryType::SelectOne;
             }
             typ
         },
-        Query::CreateTable { .. } | Query::Delete { .. } | Query::Drop { .. } | Query::Update { .. } => QueryType::Exec,
+        Query::CreateTable { .. } => QueryType::Create,
+        Query::Delete { .. } | Query::Drop { .. } | Query::Update { .. } => QueryType::Exec,
     }
 }
 

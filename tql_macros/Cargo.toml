@@ -8,18 +8,17 @@ version = "0.1.0"
 rand = "^0.4.2"
 
 [dependencies.proc-macro2]
-version = "0.1"
+version = "0.2"
 
 [dependencies.quote]
-git = "https://github.com/dtolnay/quote"
+version = "0.4"
 
 [dependencies.syn]
 features = ["extra-traits", "printing", "full"]
-git = "https://github.com/dtolnay/syn"
-rev = "04c5dcac336460374438ddf160bd0cbb689adf7d"
+version = "0.12"
 
 [lib]
 proc-macro = true
 
 [features]
-unstable = ["proc-macro2/unstable"]
+unstable = ["proc-macro2/nightly"]

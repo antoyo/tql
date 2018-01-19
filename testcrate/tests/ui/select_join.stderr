@@ -1,0 +1,24 @@
+error: mismatched types
+expected type `ForeignKey<_>`
+   found type `String`
+  --> $DIR/select_join.rs:38:5
+   |
+38 |     field1: String,
+   |     ^^^^^^^^^^^^^^
+...
+54 |     sql!(Table.all().join(field1, i32_field));
+   |                           ------ in this macro invocation
+
+error: mismatched types
+expected type `ForeignKey<_>`
+   found type `i32`
+  --> $DIR/select_join.rs:39:5
+   |
+39 |     i32_field: i32,
+   |     ^^^^^^^^^^^^^^
+...
+54 |     sql!(Table.all().join(field1, i32_field));
+   |                                   --------- in this macro invocation
+
+error: aborting due to 2 previous errors
+

@@ -24,45 +24,24 @@
 use syn::spanned::Spanned;
 
 use ast::{Expression, Join};
-use error::{Result, res};
-use state::{SqlTable, get_primary_key_field, tables_singleton};
-use super::{check_field, mismatched_types, no_primary_key, path_expr_to_identifier};
-use types::Type;
+use error::{Error, Result, res};
+use super::path_expr_to_identifier;
 
 /// Convert an `Expression` to a `Join`
-pub fn argument_to_join(arg: &Expression, table: &SqlTable) -> Result<Join> {
+pub fn argument_to_join(arg: &Expression, table_name: &str) -> Result<Join> {
     let mut errors = vec![];
-    let mut join = Join::default();
+    let join;
 
-    if let Some(identifier) = path_expr_to_identifier(arg, &mut errors) {
-        let name = identifier.to_string();
-        check_field(&identifier, arg.span(), table, &mut errors);
-        match table.fields.get(&identifier) {
-            Some(types) => {
-                let field_type = &types.ty.node;
-                if let Type::Custom(ref related_table_name) = *field_type {
-                    let sql_tables = tables_singleton();
-                    if let Some(related_table) = sql_tables.get(related_table_name) {
-                        match get_primary_key_field(related_table) {
-                            Some(primary_key_field) =>
-                                join = Join {
-                                    base_field: name,
-                                    base_table: table.name.to_string(),
-                                    joined_field: primary_key_field.to_string(),
-                                    joined_table: related_table_name.clone(),
-                                },
-                            None => errors.push(no_primary_key(related_table_name, related_table.position)),
-                        }
-                    }
-                    // NOTE: if the field type is not an SQL table, an error is thrown by the
-                    // linter.
-                }
-                else {
-                    mismatched_types("ForeignKey<_>", field_type, arg.span(), &mut errors);
-                }
-            },
-            None => (), // NOTE: This case is handled by the check_field() call above.
-        }
+    if let Some(identifier) = path_expr_to_identifier(&arg, &mut errors) {
+        join = Some(Join {
+            base_field: identifier,
+            base_table: table_name.to_string(),
+        });
+        // NOTE: if the field type is not an SQL table, an error is thrown.
     }
-    res(join, errors)
+    else {
+        return Err(vec![Error::new("Expecting identifier, but got", arg.span())]); // TODO: improve error message.
+    }
+
+    res(join.expect("join"), errors)
 }

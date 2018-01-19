@@ -2,9 +2,12 @@ error[E0308]: mismatched types
   --> $DIR/delete_expr.rs:50:41
    |
 50 |     let _ = sql!(Table.filter(field1 == value).delete());
-   |                                         ^^^^^ expected &str, found integral variable
+   |                                         ^^^^^
+   |                                         |
+   |                                         expected struct `std::string::String`, found integral variable
+   |                                         help: try using a conversion method: `value.to_string()`
    |
-   = note: expected type `&str`
+   = note: expected type `std::string::String`
               found type `{integer}`
 
 error: aborting due to previous error

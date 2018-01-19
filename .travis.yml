@@ -24,15 +24,15 @@ matrix:
     include:
         - rust: stable
           script:
-              - cargo build --manifest-path examples/todo-stable/Cargo.toml
+              - cargo build --features chrono --manifest-path examples/todo-stable/Cargo.toml
         - rust: beta
           script:
-              - cargo build --manifest-path examples/todo-stable/Cargo.toml
+              - cargo build --features chrono --manifest-path examples/todo-stable/Cargo.toml
         - rust: nightly
           script:
               - cargo build
-              - cargo test
-              - cargo test --manifest-path testcrate/Cargo.toml
+              - cargo test --features chrono,postgres
+              - cargo test --features tql/postgres,tql/chrono --manifest-path testcrate/Cargo.toml
           env: RUSTFLAGS="--cfg procmacro2_semver_exempt"
     allow_failures:
         - rust: beta

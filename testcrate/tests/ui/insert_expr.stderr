@@ -2,9 +2,12 @@ error[E0308]: mismatched types
   --> $DIR/insert_expr.rs:52:32
    |
 52 |     sql!(Table.insert(field1 = value, i32_field = 91, field2 = "test")).unwrap();
-   |                                ^^^^^ expected &str, found integral variable
+   |                                ^^^^^
+   |                                |
+   |                                expected struct `std::string::String`, found integral variable
+   |                                help: try using a conversion method: `value.to_string()`
    |
-   = note: expected type `&str`
+   = note: expected type `std::string::String`
               found type `{integer}`
 
 error: aborting due to previous error

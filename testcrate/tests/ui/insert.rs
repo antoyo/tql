@@ -23,10 +23,12 @@
 
 #![feature(proc_macro)]
 
+extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
+use postgres::{Connection, TlsMode};
 use tql::{ForeignKey, PrimaryKey};
 use tql_macros::sql;
 
@@ -44,25 +46,20 @@ struct RelatedTable {
     id: PrimaryKey,
 }
 
+fn get_connection() -> Connection {
+    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
+}
+
 fn main() {
-    sql!(Table.insert(field1 = 42, i32_field = 91));
-    //~^ ERROR missing fields: `field2`, `related_field`
-
-    sql!(Table.insert(field1 = 42, i32_fild = 91));
-    //~^ ERROR attempted access of field `i32_fild` on type `Table`, but no field with that name was found
-    //~| HELP did you mean i32_field?
-
-    sql!(Table.insert(i32_field += 42, field1 = "Test"));
-    //~^ ERROR expected = but got +=
-    //~| ERROR missing fields: `field2`, `related_field`
-
-    sql!(Table.insert(i32_field = 42, field1 -= "Test"));
-    //~^ ERROR expected = but got -=
-    //~| ERROR missing fields: `field2`, `related_field`
+    let connection = get_connection();
 
     let related_field = RelatedTable {
         id: 1,
     };
+    sql!(Table.insert(field1 = 42, field2 = "", related_field = related_field, i32_field = 91, i32_fild = 91));
+    //~^ ERROR attempted access of field `i32_fild` on type `Table`, but no field with that name was found
+    //~| HELP did you mean i32_field?
+
     sql!(Table.insert(field1 = 42, i32_field = 91, field2 = "test", related_field = related_field));
     //~^ ERROR mismatched types:
     //~| expected `String`,

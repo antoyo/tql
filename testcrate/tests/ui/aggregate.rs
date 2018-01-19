@@ -23,10 +23,12 @@
 
 #![feature(proc_macro)]
 
+extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
+use postgres::{Connection, TlsMode};
 use tql::PrimaryKey;
 use tql_macros::sql;
 
@@ -37,27 +39,13 @@ struct Table {
     i32_field: i32,
 }
 
+fn get_connection() -> Connection {
+    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
+}
+
 fn main() {
-    sql!(Table.aggregate(avh(i32_field)));
-    //~^ ERROR unresolved name `avh`
-    //~| HELP did you mean avg?
+    let connection = get_connection();
 
     sql!(Table.values(test).aggregate(avg(i32_field)));
     //~^ ERROR attempted access of field `test` on type `Table`, but no field with that name was found
-
-    sql!(Table.values("test").aggregate(avg(i32_field)));
-    //~^ ERROR Expected identifier
-
-    sql!(Table.aggregate(avg(i32_field, field1)));
-    //~^ ERROR this function takes 1 parameter but 2 parameters were supplied
-
-    sql!(Table.values(i32_field).aggregate(average = avg(i32_field)).filter(avg < 20));
-    //~^ ERROR no aggregate field named `avg` found
-
-    //sql!(Table.values(i32_field).aggregate(average = avg(i32_field)).filter(avrage < 20));
-    // TODO: propose similar names.
-
-    if let Some(aggregate) = sql!(Table.aggregate(average = avg(field2))) {
-        println!("{}", aggregate.averag);
-    }
 }

@@ -1,60 +1,41 @@
-error: missing fields: `field2`, `related_field`
-  --> $DIR/insert.rs:48:16
+error[E0308]: mismatched types
+  --> $DIR/insert.rs:59:32
    |
-48 |     sql!(Table.insert(field1 = 42, i32_field = 91));
-   |                ^^^^^^
-
-error: attempted access of field `i32_fild` on type `Table`, but no field with that name was found
-  --> $DIR/insert.rs:51:36
-   |
-51 |     sql!(Table.insert(field1 = 42, i32_fild = 91));
-   |                                    ^^^^^^^^
-   |
-   = help: did you mean i32_field?
-
-error: expected = but got +=
-  --> $DIR/insert.rs:55:33
-   |
-55 |     sql!(Table.insert(i32_field += 42, field1 = "Test"));
-   |                                 ^^
-
-error: missing fields: `field2`, `related_field`
-  --> $DIR/insert.rs:55:16
-   |
-55 |     sql!(Table.insert(i32_field += 42, field1 = "Test"));
-   |                ^^^^^^
-
-error: expected = but got -=
-  --> $DIR/insert.rs:59:46
-   |
-59 |     sql!(Table.insert(i32_field = 42, field1 -= "Test"));
-   |                                              ^^
-
-error: missing fields: `field2`, `related_field`
-  --> $DIR/insert.rs:59:16
-   |
-59 |     sql!(Table.insert(i32_field = 42, field1 -= "Test"));
-   |                ^^^^^^
-
-error: mismatched types:
- expected `String`,
-    found `integral variable`
-  --> $DIR/insert.rs:66:32
-   |
-66 |     sql!(Table.insert(field1 = 42, i32_field = 91, field2 = "test", related_field = related_field));
+59 |     sql!(Table.insert(field1 = 42, field2 = "", related_field = related_field, i32_field = 91, i32_fild = 91));
    |                                ^^
+   |                                |
+   |                                expected struct `std::string::String`, found integral variable
+   |                                help: try using a conversion method: `42.to_string()`
    |
-   = note: in this expansion of sql! (defined in tql)
+   = note: expected type `std::string::String`
+              found type `{integer}`
 
-error: mismatched types:
- expected `RelatedTable`,
-    found `integral variable`
-  --> $DIR/insert.rs:72:89
+error[E0609]: no field `i32_fild` on type `Table`
+  --> $DIR/insert.rs:59:96
    |
-72 |     sql!(Table.insert(field1 = "test", i32_field = 91, field2 = "test", related_field = 1));
-   |                                                                                         ^
-   |
-   = note: in this expansion of sql! (defined in tql)
+59 |     sql!(Table.insert(field1 = 42, field2 = "", related_field = related_field, i32_field = 91, i32_fild = 91));
+   |                                                                                                ^^^^^^^^ did you mean `i32_field`?
 
-error: aborting due to 8 previous errors
+error[E0308]: mismatched types
+  --> $DIR/insert.rs:63:32
+   |
+63 |     sql!(Table.insert(field1 = 42, i32_field = 91, field2 = "test", related_field = related_field));
+   |                                ^^
+   |                                |
+   |                                expected struct `std::string::String`, found integral variable
+   |                                help: try using a conversion method: `42.to_string()`
+   |
+   = note: expected type `std::string::String`
+              found type `{integer}`
+
+error[E0308]: mismatched types
+  --> $DIR/insert.rs:69:89
+   |
+69 |     sql!(Table.insert(field1 = "test", i32_field = 91, field2 = "test", related_field = 1));
+   |                                                                                         ^ expected enum `std::option::Option`, found integral variable
+   |
+   = note: expected type `std::option::Option<RelatedTable>`
+              found type `{integer}`
+
+error: aborting due to 4 previous errors
 

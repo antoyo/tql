@@ -32,28 +32,17 @@ use ast::{
     Assignment,
     AssignementOperator,
     Expression,
-    FilterValue,
     WithSpan,
 };
 use error::{Error, Result, res};
 use plugin::number_literal;
-use state::SqlTable;
-use super::{check_field, check_field_type, path_expr_to_identifier};
-
-/// Analyze the types of the `Assignment`s.
-pub fn analyze_assignments_types(assignments: &[Assignment], table_name: &str, errors: &mut Vec<Error>) {
-    for assignment in assignments {
-        let filter_value = FilterValue::Identifier(assignment.identifier.expect("Assignment identifier").clone());
-        check_field_type(table_name, &filter_value, &assignment.value, errors);
-    }
-}
+use super::path_expr_to_identifier;
 
 /// Convert an `Expression` to an `Assignment`.
-pub fn argument_to_assignment(arg: &Expression, table: &SqlTable) -> Result<Assignment> {
-    fn assign_values(assignment: &mut Assignment, expr1: &Expression, expr2: &Expression, table: &SqlTable, errors: &mut Vec<Error>) {
+pub fn argument_to_assignment(arg: &Expression) -> Result<Assignment> {
+    fn assign_values(assignment: &mut Assignment, expr1: &Expression, expr2: &Expression, errors: &mut Vec<Error>) {
         assignment.value = expr2.clone();
         if let Some(identifier) = path_expr_to_identifier(expr1, errors) {
-            check_field(&identifier, expr1.span(), table, errors);
             assignment.identifier = Some(identifier);
         }
     }
@@ -69,7 +58,7 @@ pub fn argument_to_assignment(arg: &Expression, table: &SqlTable) -> Result<Assi
     };
     match *arg {
         Expr::Assign(ref oper) => {
-            assign_values(&mut assignment, &oper.left, &oper.right, table, &mut errors);
+            assign_values(&mut assignment, &oper.left, &oper.right, &mut errors);
         },
         Expr::AssignOp(ref oper) => {
             let (node, span) = binop_to_assignment_operator(&oper.op);
@@ -77,7 +66,7 @@ pub fn argument_to_assignment(arg: &Expression, table: &SqlTable) -> Result<Assi
                 node,
                 span,
             };
-            assign_values(&mut assignment, &oper.left, &oper.right, table, &mut errors);
+            assign_values(&mut assignment, &oper.left, &oper.right, &mut errors);
         },
         _ => {
             errors.push(Error::new(

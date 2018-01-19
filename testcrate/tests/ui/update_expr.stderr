@@ -2,9 +2,12 @@ error[E0308]: mismatched types
   --> $DIR/update_expr.rs:50:56
    |
 50 |     let _ = sql!(Table.filter(id == 1).update(field1 = value, i32_field = value));
-   |                                                        ^^^^^ expected &str, found integral variable
+   |                                                        ^^^^^
+   |                                                        |
+   |                                                        expected struct `std::string::String`, found integral variable
+   |                                                        help: try using a conversion method: `value.to_string()`
    |
-   = note: expected type `&str`
+   = note: expected type `std::string::String`
               found type `{integer}`
 
 error: aborting due to previous error

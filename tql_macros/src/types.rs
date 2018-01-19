@@ -21,6 +21,8 @@
 
 use std::fmt::{self, Display, Formatter};
 
+use proc_macro2::Span;
+use quote::Tokens;
 use syn::{
     self,
     AngleBracketedGenericArguments,
@@ -28,17 +30,16 @@ use syn::{
     ExprLit,
     FloatSuffix,
     GenericArgument,
+    Ident,
     IntSuffix,
     Lit,
     Path,
     PathArguments,
     TypePath,
-    parse,
 };
 
 use ast::Expression;
-use gen::ToSql;
-use state::{get_primary_key_field, tables_singleton};
+use plugin::string_literal;
 
 /// A field type.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -63,26 +64,6 @@ pub enum Type {
     String,
     UnsupportedType(String),
     UtcDateTime,
-}
-
-impl Type {
-    // TODO: not sure it's a good idea. We already lost the Span.
-    pub fn to_syn(&self) -> syn::Type {
-        let code =
-            match *self {
-                Type::I32 => {
-                    quote! { i32 }
-                },
-                Type::I64 => {
-                    quote! { i64 }
-                },
-                Type::String => {
-                    quote! { String }
-                },
-                _ => unimplemented!("Type::to_syn({:?})", self),
-            };
-        parse(code.into()).expect("parse to_syn()")
-    }
 }
 
 impl Display for Type {
@@ -115,54 +96,56 @@ impl Display for Type {
 }
 
 /// Convert a `Type` to its SQL representation.
-fn type_to_sql(typ: &Type, mut nullable: bool) -> String {
-    let sql_type =
-        match *typ {
-            Type::Bool => "BOOLEAN".to_string(),
-            Type::ByteString => "BYTEA".to_string(),
-            Type::I8 | Type::Char => "CHARACTER(1)".to_string(),
-            Type::Custom(ref related_table_name) => {
-                let tables = tables_singleton();
-                if let Some(table) = tables.get(related_table_name) {
-                    let primary_key_field: String = get_primary_key_field(table).unwrap().to_string();
-                    "INTEGER REFERENCES ".to_string() + &related_table_name + "(" + &primary_key_field + ")"
-                }
-                else {
-                    "".to_string()
-                }
-                // NOTE: if the field type is not an SQL table, an error is thrown by the linter.
-            },
-            Type::F32 => "REAL".to_string(),
-            Type::F64 => "DOUBLE PRECISION".to_string(),
-            Type::Generic => "".to_string(),
-            Type::I16 => "SMALLINT".to_string(),
-            Type::I32 => "INTEGER".to_string(),
-            Type::I64 => "BIGINT".to_string(),
-            Type::LocalDateTime => "TIMESTAMP WITH TIME ZONE".to_string(),
-            Type::NaiveDate => "DATE".to_string(),
-            Type::NaiveDateTime => "TIMESTAMP".to_string(),
-            Type::NaiveTime => "TIME".to_string(),
-            Type::Nullable(ref typ) => {
-                nullable = true;
-                type_to_sql(&*typ, true)
-            },
-            Type::Serial => "SERIAL PRIMARY KEY".to_string(),
-            Type::String => "CHARACTER VARYING".to_string(),
-            Type::UnsupportedType(_) => "".to_string(), // TODO: should panic.
-            Type::UtcDateTime => "TIMESTAMP WITH TIME ZONE".to_string(),
-        };
-
-    if nullable {
-        sql_type
-    }
-    else {
-        sql_type + " NOT NULL"
-    }
+pub fn type_to_sql(typ: &Type) -> Tokens {
+    _type_to_sql(typ, false)
 }
 
-impl ToSql for Type {
-    fn to_sql(&self) -> String {
-        type_to_sql(self, false)
+fn _type_to_sql(typ: &Type, nullable: bool) -> Tokens {
+    let sql_type =
+        match *typ {
+            Type::Bool => "BOOLEAN",
+            Type::ByteString => "BYTEA",
+            Type::I8 | Type::Char => "CHARACTER(1)",
+            Type::Custom(ref related_table_name) => {
+                let pk_macro_name = Ident::new(&format!("tql_{}_primary_key_field", related_table_name),
+                    Span::call_site());
+                return quote! {
+                    "INTEGER REFERENCES ", #related_table_name, "(", #pk_macro_name!(), ") NOT NULL"
+                };
+                // NOTE: if the field type is not an SQL table, an error is thrown.
+            },
+            Type::F32 => "REAL",
+            Type::F64 => "DOUBLE PRECISION",
+            Type::Generic => "", // TODO: document why this is empty.
+            Type::I16 => "SMALLINT",
+            Type::I32 => "INTEGER",
+            Type::I64 => "BIGINT",
+            Type::LocalDateTime => "TIMESTAMP WITH TIME ZONE",
+            Type::NaiveDate => "DATE",
+            Type::NaiveDateTime => "TIMESTAMP",
+            Type::NaiveTime => "TIME",
+            Type::Nullable(ref typ) => {
+                let sql = _type_to_sql(&*typ, true);
+                return quote! {
+                    #sql
+                };
+            },
+            Type::Serial => "SERIAL PRIMARY KEY",
+            Type::String => "CHARACTER VARYING",
+            Type::UnsupportedType(_) => "", // TODO: should panic. TODO: document why.
+            Type::UtcDateTime => "TIMESTAMP WITH TIME ZONE",
+        };
+
+    let expr = string_literal(sql_type);
+    if nullable {
+        quote! {
+            #expr
+        }
+    }
+    else {
+        quote! {
+            #expr, " NOT NULL"
+        }
     }
 }
 
@@ -215,7 +198,7 @@ impl<'a> From<&'a Path> for Type {
         let unsupported = Type::UnsupportedType("".to_string());
         if segments.len() == 1 {
             let element = segments.first().expect("first segment of path");
-            let first_segment = element.item();
+            let first_segment = element.value();
             let ident = first_segment.ident.to_string();
             match &ident[..] {
                 "bool" => Type::Bool,
@@ -279,17 +262,17 @@ impl<'a> From<&'a Path> for Type {
 }
 
 /// Get the type between < and > as a String.
-fn get_type_parameter(parameters: &PathArguments) -> Option<String> {
+pub fn get_type_parameter(parameters: &PathArguments) -> Option<String> {
     get_type_parameter_as_path(parameters).map(|path| path.segments.first()
-        .expect("first segment in path").item().ident.to_string())
+        .expect("first segment in path").value().ident.to_string())
 }
 
 /// Get the type between < and > as a Path.
-fn get_type_parameter_as_path(parameters: &PathArguments) -> Option<&Path> {
+pub fn get_type_parameter_as_path(parameters: &PathArguments) -> Option<&Path> {
     if let PathArguments::AngleBracketed(AngleBracketedGenericArguments { ref args, .. }) = *parameters {
         args.first()
             .and_then(|ty| {
-                if let GenericArgument::Type(syn::Type::Path(TypePath { ref path, .. })) = **ty.item() {
+                if let GenericArgument::Type(syn::Type::Path(TypePath { ref path, .. })) = **ty.value() {
                     Some(path)
                 }
                 else {

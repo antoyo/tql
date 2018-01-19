@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ * Copyright (c) 2017-2018 Boucher, Antoni <bouanto@zoho.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -23,18 +23,61 @@
 //!
 //! It type check your expression at compile time and converts it to SQL.
 
+#[cfg(feature = "chrono")]
+extern crate chrono;
+#[cfg(feature = "postgres")]
+extern crate postgres;
+
+mod methods;
+mod types;
+
+pub use types::{Date, DateTime, Time, ToTqlType};
+pub use types::numbers::{i16, i32, i64, i8, u16, u32, u64, u8};
+
 /// The `ForeignKey` is optional.
 ///
 /// There is no value when the `join()` method is not called.
 pub type ForeignKey<T> = Option<T>;
 
 /// A `PrimaryKey` is a 4-byte integer.
-pub type PrimaryKey = i32;
+pub type PrimaryKey = types::StdI32;
 
 #[doc(hidden)]
 // Marker trait used for error reporting:
 // when a struct is used in a ForeignKey, but it is not annotated with #[derive(SqlTable)].
 pub unsafe trait SqlTable {
+    const FIELD_COUNT: usize;
+
+    fn _tql_default() -> Self;
+
+    #[cfg(feature = "postgres")]
+    fn from_row(row: &::postgres::rows::Row) -> Self;
+
+    #[cfg(feature = "postgres")]
+    fn from_related_row(row: &::postgres::rows::Row, delta: usize) -> Self;
+}
+
+#[cfg(feature = "postgres")]
+#[doc(hidden)]
+pub fn from_related_row<T: SqlTable>(field: &mut Option<T>, row: &::postgres::rows::Row, delta: usize) -> usize
+{
+    *field = Some(T::from_related_row(row, delta));
+    T::FIELD_COUNT
+}
+
+// Stable implementation.
+
+#[cfg(not(unstable))]
+#[macro_export]
+macro_rules! check_missing_fields {
+    ($($tt:tt)*) => {{
+        #[derive(StableCheckMissingFields)]
+        enum __TqlStableCheckMissingFieldEnum {
+            Input = (stringify!($($tt)*), 0).1,
+        }
+
+        __tql_call_macro_missing_fields!()
+    }};
 }
 
 #[cfg(not(unstable))]

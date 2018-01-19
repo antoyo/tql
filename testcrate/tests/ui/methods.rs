@@ -23,12 +23,15 @@
 
 #![feature(proc_macro)]
 
+extern crate chrono;
+extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
-use chrono::datetime::DateTime;
+use chrono::DateTime;
 use chrono::offset::Utc;
+use postgres::{Connection, TlsMode};
 use tql::PrimaryKey;
 use tql_macros::sql;
 
@@ -41,7 +44,13 @@ struct Table {
     option_field: Option<i32>,
 }
 
+fn get_connection() -> Connection {
+    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
+}
+
 fn main() { // FIXME: bad span in stderr for line 59.
+    let connection = get_connection();
+
     sql!(Table.filter(i32_field.year() == 2015));
     //~^ ERROR no method named `year` found for type `i32`
 

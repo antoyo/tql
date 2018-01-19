@@ -46,7 +46,7 @@ struct TodoItem {
 
 fn add_todo_item(connection: &Connection, text: String) {
     // Insert the new item.
-    let result = sql!(TodoItem.insert(text = &text, date_added = Utc::now(), done = false));
+    let result = sql!(TodoItem.insert(text = text, date_added = Utc::now(), done = false));
     if let Err(err) = result {
         println!("Failed to add the item ({})", err);
     }

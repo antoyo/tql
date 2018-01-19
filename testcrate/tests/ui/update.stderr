@@ -1,18 +1,22 @@
-error: mismatched types:
- expected `String`,
-    found `integral variable`
-  --> $DIR/update.rs:42:56
+error[E0308]: mismatched types
+  --> $DIR/update.rs:49:56
    |
-42 |     let _ = sql!(Table.filter(id == 1).update(field1 = 42, i32_field = value));
+49 |     let _ = sql!(Table.filter(id == 1).update(field1 = 42, i32_field = value));
    |                                                        ^^
+   |                                                        |
+   |                                                        expected struct `std::string::String`, found integral variable
+   |                                                        help: try using a conversion method: `42.to_string()`
    |
-   = note: in this expansion of sql! (defined in tql)
+   = note: expected type `std::string::String`
+              found type `{integer}`
 
-error: attempted access of field `value` on type `Table`, but no field with that name was found
-  --> $DIR/update.rs:48:30
+error[E0609]: no field `value` on type `Table`
+  --> $DIR/update.rs:55:30
    |
-48 |     sql!(Table.get(1).update(value += " test"));
-   |                              ^^^^^
+55 |     sql!(Table.get(1).update(value += " test"));
+   |                              ^^^^^ unknown field
+   |
+   = note: available fields are: `id`, `field1`, `i32_field`
 
 error: aborting due to 2 previous errors
 

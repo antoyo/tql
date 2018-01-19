@@ -53,7 +53,7 @@ struct TableInsertExpr {
 
 #[derive(SqlTable)]
 struct RelatedTableInsertExpr {
-    id: PrimaryKey,
+    primary_key: PrimaryKey,
     field1: i32,
 }
 
@@ -97,7 +97,7 @@ fn test_insert() {
     assert_eq!("value1", table.field1);
     assert_eq!(55, table.field2);
     let related_table = table.related_field.unwrap();
-    assert_eq!(related_id, related_table.id);
+    assert_eq!(related_id, related_table.primary_key);
     assert_eq!(42, related_table.field1);
     assert!(table.optional_field.is_none());
 
@@ -114,10 +114,10 @@ fn test_insert() {
     let new_field1 = "value3".to_string();
     let new_field2 = 24;
     let id = sql!(TableInsertExpr.insert(
-        field1 = &new_field1,
+        field1 = new_field1,
         field2 = new_field2,
         related_field = related_field,
-        optional_field = 12,
+        optional_field = Some(12),
     )).unwrap();
     assert_eq!(3, id);
 
@@ -135,17 +135,17 @@ fn test_insert() {
     let int16 = 42i16;
     let int64 = 42i64;
     let id = sql!(TableInsertExpr.insert(
-        field1 = &new_field1,
+        field1 = new_field1,
         field2 = new_field2,
         related_field = related_field,
-        optional_field = 12,
-        boolean = boolean_value,
+        optional_field = Some(12),
+        boolean = Some(boolean_value),
         /*character = character,*/
-        float32 = float32,
-        float64 = float64,
+        float32 = Some(float32),
+        float64 = Some(float64),
         /*int8 = int8,*/
-        int16 = int16,
-        int64 = int64
+        int16 = Some(int16),
+        int64 = Some(int64)
     )).unwrap();
     assert_eq!(4, id);
 }

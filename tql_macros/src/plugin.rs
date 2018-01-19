@@ -23,6 +23,7 @@ use proc_macro2::Span;
 use syn::{
     Expr,
     ExprLit,
+    Ident,
     IntSuffix,
     Lit,
     LitInt,
@@ -30,10 +31,17 @@ use syn::{
     parse,
 };
 
+pub fn usize_literal(num: usize) -> Expr {
+    Expr::Lit(ExprLit {
+        attrs: vec![],
+        lit: Lit::Int(LitInt::new(num as u64, IntSuffix::Usize, Span::call_site())),
+    })
+}
+
 pub fn number_literal(num: i64) -> Expr {
     let lit = Expr::Lit(ExprLit {
         attrs: vec![],
-        lit: Lit::Int(LitInt::new(num.abs() as u64, IntSuffix::I64, Span::default())),
+        lit: Lit::Int(LitInt::new(num.abs() as u64, IntSuffix::I64, Span::call_site())),
     });
     if num < 0 {
         parse(quote! {
@@ -48,6 +56,10 @@ pub fn number_literal(num: i64) -> Expr {
 pub fn string_literal(string: &str) -> Expr {
     Expr::Lit(ExprLit {
         attrs: vec![],
-        lit: Lit::Str(LitStr::new(string, Span::default())),
+        lit: Lit::Str(LitStr::new(string, Span::call_site())),
     })
+}
+
+pub fn new_ident(string: &str) -> Ident {
+    Ident::new(string, Span::call_site())
 }

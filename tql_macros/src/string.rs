@@ -23,6 +23,8 @@
 
 use std::cmp;
 
+use quote::ToTokens;
+
 /// Variadic minimum macro. It returns the minimum of its arguments.
 macro_rules! min {
     ( $e:expr ) => {
@@ -94,4 +96,9 @@ pub fn plural_verb<'a>(count: usize) -> &'a str {
     else {
         "s were"
     }
+}
+
+/// Convert a syn object to a string.
+pub fn token_to_string<T: ToTokens>(token: &T) -> String {
+    (quote! { #token }).to_string()
 }

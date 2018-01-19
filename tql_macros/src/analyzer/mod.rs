@@ -30,7 +30,6 @@ mod join;
 mod limit;
 mod sort;
 
-use std::borrow::Cow;
 use std::fmt::Display;
 use std::result;
 
@@ -47,40 +46,40 @@ use syn::spanned::Spanned;
 use syn::token::Comma;
 
 use ast::{
-    self,
     Aggregate,
     AggregateFilterExpression,
     Assignment,
     Expression,
-    FieldList,
     FilterExpression,
-    FilterValue,
     Groups,
-    Identifier,
     Join,
     Limit,
     Order,
     Query,
-    TypedField,
-    WithSpan,
 };
 use error::{Error, Result, res};
-use gen::ToSql;
 use parser::{MethodCall, MethodCalls};
 use plugin::number_literal;
 use self::aggregate::{argument_to_aggregate, argument_to_group, expression_to_aggregate_filter_expression};
-use self::assignment::{analyze_assignments_types, argument_to_assignment};
+pub use self::aggregate::get_values_idents;
+use self::assignment::argument_to_assignment;
 use self::filter::{analyze_filter_types, expression_to_filter_expression};
+pub use self::filter::get_method_calls;
 use self::get::get_expression_to_filter_expression;
 use self::insert::check_insert_arguments;
+pub use self::insert::get_insert_idents;
+#[cfg(feature = "unstable")]
+pub use self::insert::get_insert_position;
 use self::join::argument_to_join;
 use self::limit::{analyze_limit_types, argument_to_limit};
+pub use self::limit::get_limit_args;
 use self::sort::argument_to_order;
-use state::{SqlTable, SqlTables, get_field_type, methods_singleton, tables_singleton};
+pub use self::sort::get_sort_idents;
 use string::{find_near, plural_verb};
 use types::Type;
 
 /// The type of the SQL query.
+#[derive(PartialEq)]
 enum SqlQueryType {
     Aggregate,
     CreateTable,
@@ -88,6 +87,7 @@ enum SqlQueryType {
     Drop,
     Insert,
     Select,
+    SelectOne,
     Update,
 
 }
@@ -111,47 +111,30 @@ struct QueryData {
     filter: FilterExpression,
     // Aggregate / Select
     joins: Vec<Join>,
-    // Create
-    fields_to_create: Vec<TypedField>,
     // Insert / Update
     assignments: Vec<Assignment>,
     // Select
-    fields: FieldList,
     limit: Limit,
     order: Vec<Order>,
+    use_pk: bool,
     // All
     query_type: SqlQueryType,
 }
 
 /// Analyze and transform the AST.
-pub fn analyze(method_calls: MethodCalls, sql_tables: &SqlTables) -> Result<Query> {
+pub fn analyze(method_calls: MethodCalls) -> Result<Query> {
     let mut errors = vec![];
 
-    // Check if the table exists.
     let table_name = method_calls.name.expect("table name in method_calls").to_string();
-    if !sql_tables.contains_key(&table_name) {
-        unknown_table_error(&table_name, method_calls.position, sql_tables, &mut errors);
-    }
 
     check_methods(&method_calls, &mut errors);
     check_method_calls_validity(&method_calls, &mut errors);
 
-    let table = sql_tables.get(&table_name);
     let calls = &method_calls.calls;
     let mut delete_position = None;
 
     // Get all the data from the query.
-    let query_data =
-        match table {
-            Some(table) => {
-                let mut query_data = process_methods(&calls, table, &mut delete_position)?;
-                let fields = get_query_fields(table, &query_data.joins, sql_tables);
-                query_data.fields = fields;
-                query_data
-
-            },
-            None => QueryData::default(),
-        };
+    let query_data = process_methods(&calls, &table_name, &mut delete_position)?;
 
     let query = new_query(query_data, table_name);
 
@@ -168,20 +151,17 @@ pub fn analyze_types(query: Query) -> Result<Query> {
             analyze_filter_types(filter, &table, &mut errors);
         },
         Query::CreateTable { .. } => (), // Nothing to analyze.
-        Query::Delete { ref filter, ref table } => {
+        Query::Delete { ref filter, ref table, .. } => {
             analyze_filter_types(filter, &table, &mut errors);
         },
         Query::Drop { .. } => (), // Nothing to analyze.
-        Query::Insert { ref assignments, ref table } => {
-            analyze_assignments_types(assignments, &table, &mut errors);
-        },
+        Query::Insert { .. } => (),
         Query::Select { ref filter, ref limit, ref table, .. } => {
             analyze_filter_types(filter, &table, &mut errors);
             analyze_limit_types(limit, &mut errors);
         },
-        Query::Update { ref assignments, ref filter, ref table } => {
+        Query::Update { ref filter, ref table, .. } => {
             analyze_filter_types(filter, &table, &mut errors);
-            analyze_assignments_types(assignments, &table, &mut errors);
         },
     }
     res(query, errors)
@@ -216,29 +196,6 @@ fn check_delete_without_filters(query: &Query, delete_position: Option<Span>, er
     }
 }
 
-/// Check if the `identifier` is a field in the struct `table_name`.
-pub fn check_field(identifier: &Ident, position: Span, table: &SqlTable, errors: &mut Vec<Error>) {
-    if !table.fields.contains_key(identifier) {
-        let field_names = table.fields.keys()
-            .map(|ident| ident.as_ref());
-        let mut error = Error::new(
-            &format!("attempted access of field `{field}` on type `{table}`, but no field with that name was found",
-                field = identifier,
-                table = table.name
-            ),
-            position
-        );
-        propose_similar_name(identifier.as_ref(), field_names, &mut error);
-        errors.push(error);
-    }
-}
-
-/// Check if the type of `identifier` matches the type of the `value` expression.
-fn check_field_type(table_name: &str, filter_value: &FilterValue, value: &Expression, errors: &mut Vec<Error>) {
-    let field_type = get_field_type_by_filter_value(table_name, filter_value);
-    check_type(field_type, value, errors);
-}
-
 /// Check if the method calls sequence is valid.
 /// For instance, one cannot call both insert() and delete() methods in the same query.
 fn check_method_calls_validity(method_calls: &MethodCalls, errors: &mut Vec<Error>) {
@@ -254,9 +211,9 @@ fn check_method_calls_validity(method_calls: &MethodCalls, errors: &mut Vec<Erro
         };
 
     let main_method = method_calls.calls.iter()
-        .filter(|call| method_map.contains_key(&*call.name) )
+        .filter(|call| method_map.contains_key(&call.name.as_ref()) )
         .next()
-        .map_or("all", |call| call.name.as_str());
+        .map_or("all", |call| call.name.as_ref());
 
     // TODO: check that the insert, update or delete methods are not called more than once.
     let mut valid_methods = vec![main_method];
@@ -264,7 +221,7 @@ fn check_method_calls_validity(method_calls: &MethodCalls, errors: &mut Vec<Erro
 
     let methods = get_methods();
     let invalid_methods = method_calls.calls.iter()
-        .filter(|call| methods.contains(&call.name) && !valid_methods.contains(&&*call.name));
+        .filter(|call| methods.contains(&call.name.to_string()) && !valid_methods.contains(&call.name.as_ref()));
 
     for method in invalid_methods {
         errors.push(Error::new(
@@ -272,7 +229,7 @@ fn check_method_calls_validity(method_calls: &MethodCalls, errors: &mut Vec<Erro
                 method = method.name,
                 main_method = main_method
             ),
-            method.position,
+            method.name.span(),
         ));
     }
 }
@@ -281,12 +238,12 @@ fn check_method_calls_validity(method_calls: &MethodCalls, errors: &mut Vec<Erro
 fn check_methods(method_calls: &MethodCalls, errors: &mut Vec<Error>) {
     let methods = get_methods();
     for method_call in &method_calls.calls {
-        if !methods.contains(&method_call.name) {
+        if !methods.contains(&method_call.name.to_string()) {
             let mut error = Error::new(
                 &format!("no method named `{}` found in tql", method_call.name),
-                method_call.position,
+                method_call.name.span(),
             );
-            propose_similar_name(&method_call.name, methods.iter().map(String::as_ref), &mut error);
+            propose_similar_name(method_call.name.as_ref(), methods.iter().map(String::as_ref), &mut error);
             errors.push(error);
         }
     }
@@ -314,7 +271,7 @@ fn check_no_arguments(method_call: &MethodCall, errors: &mut Vec<Error>) {
                     param_count = length,
                     plural = plural_verb(length)
                    ),
-            method_call.position, "E0061"
+            method_call.name.span(), "E0061"
        ));
     }
 }
@@ -327,55 +284,20 @@ pub fn check_type(field_type: &Type, expression: &Expression, errors: &mut Vec<E
     }
 }
 
-/// Check if the `field_type` is compatible with the `filter_value`'s type.
-fn check_type_filter_value(expected_type: &Type, filter_value: &WithSpan<FilterValue>, table_name: &str, errors: &mut Vec<Error>) {
-    let field_type = get_field_type_by_filter_value(table_name, &filter_value.node);
-    if *field_type != *expected_type {
-        mismatched_types(expected_type, &field_type, filter_value.span, errors);
-    }
-}
-
 /// Convert the `arguments` to the `Type`.
-fn convert_arguments<F, Type>(arguments: &[Expression], table: &SqlTable, convert_argument: F) -> Result<Vec<Type>>
-    where F: Fn(&Expression, &SqlTable) -> Result<Type>
+fn convert_arguments<F, Type>(arguments: &[Expression], convert_argument: F) -> Result<Vec<Type>>
+    where F: Fn(&Expression) -> Result<Type>
 {
     let mut items = vec![];
     let mut errors = vec![];
 
     for arg in arguments {
-        try(convert_argument(arg, table), &mut errors, |item| {
+        try(convert_argument(arg), &mut errors, |item| {
             items.push(item);
         });
     }
 
     res(items, errors)
-}
-
-/// Get the type of the field if it exists from an `FilterValue`.
-fn get_field_type_by_filter_value<'a>(table_name: &'a str, filter_value: &FilterValue) -> &'a Type {
-    // NOTE: At this stage (type analysis), the field exists, hence unwrap().
-    match *filter_value {
-        FilterValue::Identifier(ref identifier) => {
-            get_field_type(table_name, identifier).unwrap()
-        },
-        FilterValue::MethodCall(ast::MethodCall { ref method_name, ref object_name, .. }) => {
-            let tables = tables_singleton();
-            let table = tables.get(table_name).unwrap();
-            let methods = methods_singleton();
-            let types = table.fields.get(object_name).unwrap();
-            let typ =
-                match types.ty.node {
-                    // NOTE: return a Generic Type because Option methods work independently from
-                    // the nullable type (for instance, is_some()).
-                    Type::Nullable(_) => Cow::Owned(Type::Nullable(Box::new(Type::Generic))),
-                    ref typ => Cow::Borrowed(typ),
-                };
-            let type_methods = methods.get(&typ).unwrap();
-            let method = type_methods.get(method_name).unwrap();
-            &method.return_type
-        },
-        FilterValue::None => unreachable!("FilterValue::None in get_field_type_by_filter_value()"),
-    }
 }
 
 /// Get all the existing methods.
@@ -396,39 +318,6 @@ fn get_methods() -> Vec<String> {
         "update".to_string(),
         "values".to_string(),
     ]
-}
-
-/// Get the query field fully qualified names.
-fn get_query_fields(table: &SqlTable, joins: &[Join], sql_tables: &SqlTables) -> Vec<Identifier> {
-    let mut fields = vec![];
-    for (field, types) in &table.fields {
-        match types.ty.node {
-            // TODO: pay attention to name conflicts (join on same table twice).
-            Type::Custom(ref foreign_table) => {
-                let table_name = foreign_table;
-                if let Some(foreign_table) = sql_tables.get(foreign_table) {
-                    if has_joins(&joins, field) {
-                        for (field, types) in &foreign_table.fields {
-                            match types.ty.node {
-                                Type::Custom(_) | Type::UnsupportedType(_) => (), // NOTE: Do not add foreign key recursively.
-                                _ => {
-                                    fields.push(table_name.clone() + "." + field.as_ref());
-                                },
-                            }
-                        }
-                    }
-                }
-                // TODO: Check if the foreign table exists instead of doing this in the lint plugin
-                // (it is needed here because the related fields need to be included in the query.)
-                // Not sure about this. I think it is ok like this.
-            },
-            Type::UnsupportedType(_) => (),
-            _ => {
-                fields.push(table.name.to_string() + "." + field.as_ref());
-            },
-        }
-    }
-    fields
 }
 
 /// Get the string representation of an literal `Expression` type.
@@ -471,13 +360,6 @@ fn get_type(expression: &Expression) -> &str {
     }
 }
 
-/// Check if there is a join in `joins` on a field named `name`.
-pub fn has_joins(joins: &[Join], name: &Ident) -> bool {
-    joins.iter()
-        .map(|join| &join.base_field)
-        .any(|field_name| field_name == name.as_ref())
-}
-
 /// Add a mismatched types error to `errors`.
 fn mismatched_types<S: Display, T: Display>(expected_type: S, actual_type: &T, position: Span, errors: &mut Vec<Error>) {
     let mut error =
@@ -494,28 +376,28 @@ fn mismatched_types<S: Display, T: Display>(expected_type: S, actual_type: &T, p
 }
 
 /// Create a new query from all the data gathered by the method calls.
-fn new_query(QueryData { fields, filter, joins, limit, order, assignments, fields_to_create, aggregates, groups,
-    aggregate_filter, query_type }: QueryData, table_name: String) -> Query
+fn new_query(QueryData { filter, joins, limit, order, assignments, aggregates, groups,
+    aggregate_filter, query_type, use_pk }: QueryData, table_name: String) -> Query
 {
     match query_type {
         SqlQueryType::Aggregate =>
             Query::Aggregate {
-                aggregates: aggregates,
-                aggregate_filter: aggregate_filter,
-                filter: filter,
-                groups: groups,
-                joins: joins,
+                aggregates,
+                aggregate_filter,
+                filter,
+                groups,
+                joins,
                 table: table_name,
             },
         SqlQueryType::CreateTable =>
             Query::CreateTable {
-                fields: fields_to_create,
                 table: table_name,
             },
         SqlQueryType::Delete =>
             Query::Delete {
-                filter: filter,
+                filter,
                 table: table_name,
+                use_pk,
             },
         SqlQueryType::Drop =>
             Query::Drop {
@@ -523,42 +405,35 @@ fn new_query(QueryData { fields, filter, joins, limit, order, assignments, field
             },
         SqlQueryType::Insert =>
             Query::Insert {
-                assignments: assignments,
+                assignments,
                 table: table_name,
             },
-        SqlQueryType::Select =>
+        SqlQueryType::Select | SqlQueryType::SelectOne => {
             Query::Select {
-                fields: fields,
-                filter: filter,
-                joins: joins,
-                limit: limit,
-                order: order,
+                filter,
+                get: query_type == SqlQueryType::SelectOne,
+                joins,
+                limit,
+                order,
                 table: table_name,
-            },
+                use_pk,
+            }
+        },
         SqlQueryType::Update =>
             Query::Update {
-                assignments: assignments,
-                filter: filter,
+                assignments,
+                filter,
                 table: table_name,
+                use_pk,
             },
     }
-}
-
-/// Create an error about a table not having a primary key.
-pub fn no_primary_key(table_name: &str, position: Span) -> Error {
-    Error::new(
-        &format!("Table {table} does not have a primary key", // TODO: improve this message.
-            table = table_name
-        ),
-        position
-    )
 }
 
 /// Convert an `Expression` to an `Ident` if `expression` is an `ExprPath`.
 /// It adds an error to `errors` if `expression` is not an `ExprPath`.
 fn path_expr_to_identifier(expression: &Expression, errors: &mut Vec<Error>) -> Option<Ident> {
     if let Expr::Path(ref path) = *expression {
-        let identifier = path.path.segments.first().unwrap().into_item().ident.clone();
+        let identifier = path.path.segments.first().unwrap().into_value().ident.clone();
         Some(identifier)
     }
     else {
@@ -579,14 +454,14 @@ fn path_expr_to_string(expression: &Expression, errors: &mut Vec<Error>) -> Opti
 
 /// Gather data about the query in the method `calls`.
 /// Also analyze the types.
-fn process_methods(calls: &[MethodCall], table: &SqlTable, delete_position: &mut Option<Span>) -> Result<QueryData> {
+fn process_methods(calls: &[MethodCall], table_name: &str, delete_position: &mut Option<Span>) -> Result<QueryData> {
     let mut errors = vec![];
     let mut query_data = QueryData::default();
 
     for method_call in calls {
-        match &method_call.name[..] {
+        match method_call.name.as_ref() {
             "aggregate" => {
-                try(convert_arguments(&method_call.args, table, argument_to_aggregate), &mut errors, |aggrs| {
+                try(convert_arguments(&method_call.args, argument_to_aggregate), &mut errors, |aggrs| {
                     query_data.aggregates = aggrs;
                 });
                 query_data.query_type = SqlQueryType::Aggregate;
@@ -597,17 +472,11 @@ fn process_methods(calls: &[MethodCall], table: &SqlTable, delete_position: &mut
             "create" => {
                 check_no_arguments(&method_call, &mut errors);
                 query_data.query_type = SqlQueryType::CreateTable;
-                for (field, types) in &table.fields {
-                    query_data.fields_to_create.push(TypedField {
-                        identifier: field.to_string(),
-                        typ: types.ty.node.to_sql(),
-                    });
-                }
             },
             "delete" => {
                 check_no_arguments(&method_call, &mut errors);
                 query_data.query_type = SqlQueryType::Delete;
-                *delete_position = Some(method_call.position);
+                *delete_position = Some(method_call.name.span());
             },
             "drop" => {
                 check_no_arguments(&method_call, &mut errors);
@@ -617,14 +486,14 @@ fn process_methods(calls: &[MethodCall], table: &SqlTable, delete_position: &mut
                 if query_data.aggregates.is_empty() {
                     // If the aggregate() method was not called, filter() filters on the values
                     // (WHERE).
-                    try(expression_to_filter_expression(&method_call.args[0], table), &mut errors, |filter| {
+                    try(expression_to_filter_expression(&method_call.args[0], table_name), &mut errors, |filter| {
                         query_data.filter = filter;
                     });
                 }
                 else {
                     // If the aggregate() method was called, filter() filters on the aggregated
                     // values (HAVING).
-                    try(expression_to_aggregate_filter_expression(&method_call.args[0], &query_data.aggregates, table), &mut errors, |filter| {
+                    try(expression_to_aggregate_filter_expression(&method_call.args[0], &query_data.aggregates), &mut errors, |filter| {
                         query_data.aggregate_filter = filter;
                     });
                 }
@@ -634,26 +503,32 @@ fn process_methods(calls: &[MethodCall], table: &SqlTable, delete_position: &mut
                     query_data.limit = Limit::Index(number_literal(0));
                 }
                 else {
-                    try(get_expression_to_filter_expression(&method_call.args[0], table), &mut errors, |(filter, new_limit)| {
-                        query_data.filter = filter;
-                        query_data.limit = new_limit;
-                    });
+                    try(get_expression_to_filter_expression(&method_call.args[0], table_name), &mut errors,
+                        |(filter, use_pk, new_limit)| {
+                            query_data.filter = filter;
+                            query_data.use_pk = use_pk;
+                            query_data.limit = new_limit;
+                        });
                 }
+                query_data.query_type = SqlQueryType::SelectOne;
             },
             "insert" => {
-                try(convert_arguments(&method_call.args, table, argument_to_assignment), &mut errors, |assigns| {
+                try(convert_arguments(&method_call.args, argument_to_assignment), &mut errors, |assigns| {
                     query_data.assignments = assigns;
                 });
                 if !query_data.assignments.is_empty() {
                     // TODO: check even if there are errors in the assignation types.
-                    check_insert_arguments(&query_data.assignments, method_call.position, &table, &mut errors);
+                    check_insert_arguments(&query_data.assignments, &mut errors);
                 }
                 query_data.query_type = SqlQueryType::Insert;
             },
             "join" => {
-                try(convert_arguments(&method_call.args, table, argument_to_join), &mut errors, |mut new_joins| {
-                    query_data.joins.append(&mut new_joins);
-                });
+                try(convert_arguments(&method_call.args, |expr| argument_to_join(expr, table_name)), &mut errors,
+                    |result| {
+                        for new_join in result {
+                            query_data.joins.push(new_join);
+                        }
+                    });
             },
             "limit" => {
                 try(argument_to_limit(&method_call.args[0]), &mut errors, |new_limit| {
@@ -661,18 +536,18 @@ fn process_methods(calls: &[MethodCall], table: &SqlTable, delete_position: &mut
                 });
             },
             "sort" => {
-                try(convert_arguments(&method_call.args, table, argument_to_order), &mut errors, |new_order| {
+                try(convert_arguments(&method_call.args, argument_to_order), &mut errors, |new_order| {
                     query_data.order = new_order;
                 });
             },
             "update" => {
-                try(convert_arguments(&method_call.args, table, argument_to_assignment), &mut errors, |assigns| {
+                try(convert_arguments(&method_call.args, argument_to_assignment), &mut errors, |assigns| {
                     query_data.assignments = assigns;
                 });
                 query_data.query_type = SqlQueryType::Update;
             },
             "values" => {
-                try(convert_arguments(&method_call.args, table, argument_to_group), &mut errors, |new_groups| {
+                try(convert_arguments(&method_call.args, argument_to_group), &mut errors, |new_groups| {
                     query_data.groups = new_groups;
                 });
             },
@@ -705,6 +580,7 @@ fn try<F: FnMut(T), T>(mut result: result::Result<T, Vec<Error>>, errors: &mut V
     }
 }
 
+/*
 /// Add an error to the vector `errors` about an unknown SQL table.
 /// It suggests a similar name if there is one.
 pub fn unknown_table_error(table_name: &str, position: Span, sql_tables: &SqlTables, errors: &mut Vec<Error>) {
@@ -723,3 +599,4 @@ pub fn unknown_table_error(table_name: &str, position: Span, sql_tables: &SqlTab
     }
     errors.push(error);
 }
+*/

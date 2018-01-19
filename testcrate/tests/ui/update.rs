@@ -23,10 +23,12 @@
 
 #![feature(proc_macro)]
 
+extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
+use postgres::{Connection, TlsMode};
 use tql::PrimaryKey;
 use tql_macros::sql;
 
@@ -37,7 +39,12 @@ struct Table {
     i32_field: i32,
 }
 
+fn get_connection() -> Connection {
+    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
+}
+
 fn main() {
+    let connection = get_connection();
     let value = 42;
     let _ = sql!(Table.filter(id == 1).update(field1 = 42, i32_field = value));
     //~^ ERROR mismatched types:

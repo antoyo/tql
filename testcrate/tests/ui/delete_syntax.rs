@@ -19,41 +19,25 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+//! Tests of the delete() method.
+
 #![feature(proc_macro)]
 
-extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
-use tql::{ForeignKey, PrimaryKey};
-use tql_macros::to_sql;
+use tql::PrimaryKey;
+use tql_macros::sql;
 
 #[derive(SqlTable)]
-#[allow(dead_code)]
 struct Table {
     id: PrimaryKey,
     field1: String,
-    field2: i32,
-    field3: Option<i32>,
-    related_field: ForeignKey<RelatedTable>,
+    i32_field: i32,
 }
 
-#[derive(SqlTable)]
-#[allow(dead_code)]
-struct RelatedTable {
-    id: PrimaryKey,
-    field1: String,
-}
-
-#[test]
-fn test_drop() {
-    assert_eq!(
-        "DROP TABLE Table",
-        to_sql!(Table.drop())
-    );
-    assert_eq!(
-        "DROP TABLE RelatedTable",
-        to_sql!(RelatedTable.drop())
-    );
+fn main() {
+    let _ = sql!(Table.filter(id == 1).delete(id == 1));
+    //~^ ERROR this method takes 0 parameters but 1 parameter was supplied
 }

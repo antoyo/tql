@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ * Copyright (c) 2018 Boucher, Antoni <bouanto@zoho.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -19,24 +19,24 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-//! Tests of the syntax extension errors.
-
-#![feature(proc_macro)]
-
-extern crate tql;
-#[macro_use]
-extern crate tql_macros;
+use tql::{ForeignKey, PrimaryKey};
 
 #[derive(SqlTable)]
-struct Table {
-    //~^ WARNING No primary key found
-    field1: String,
+pub struct TableInsertExpr {
+    pub primary_key: PrimaryKey,
+    pub field1: String,
+    pub field2: i32,
+    pub related_field: ForeignKey<RelatedTableInsertExpr>,
+    pub optional_field: Option<i32>,
+    pub boolean: Option<bool>,
+    pub float32: Option<f32>,
+    pub float64: Option<f64>,
+    pub int16: Option<i16>,
+    pub int64: Option<i64>,
 }
 
-mod inner {
-    #[derive(SqlTable)]
-    struct Table {
-        //~^ ERROR duplicate definition of table `Table`
-        //~| WARNING No primary key found
-    }
+#[derive(SqlTable)]
+pub struct RelatedTableInsertExpr {
+    pub primary_key: PrimaryKey,
+    pub field1: i32,
 }

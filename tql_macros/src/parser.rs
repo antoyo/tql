@@ -33,7 +33,7 @@ use error::{Error, Result, res};
 #[derive(Debug)]
 pub struct MethodCall {
     pub args: Vec<Expr>,
-    pub name: String,
+    pub name: Ident,
     pub position: Span,
 }
 
@@ -87,24 +87,24 @@ impl Parser {
                         .collect();
 
                     calls.push(MethodCall {
-                        name: call.method.to_string(),
+                        name: call.method,
                         args,
-                        position: call.method.span,
+                        position: expr.span(),
                     });
                 },
                 Expr::Path(ref path) => {
                     if path.path.segments.len() == 1 {
                         calls.name = Some(path.path.segments.first()
-                            .expect("first segment in path").into_item()
+                            .expect("first segment in path").into_value()
                             .ident);
                     }
                 },
                 Expr::Index(ref index) => {
                     add_calls(&index.expr, calls, errors);
                     calls.push(MethodCall {
-                        name: "limit".to_owned(),
+                        name: Ident::new("limit", index.index.span()),
                         args: vec![*index.index.clone()],
-                        position: index.index.span(),
+                        position: expr.span(),
                     });
                 }
                 _ => {

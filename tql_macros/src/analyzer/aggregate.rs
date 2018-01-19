@@ -26,6 +26,7 @@ use syn::{
     BinOp,
     Expr,
     ExprUnary,
+    Ident,
     UnOp,
 };
 use syn::spanned::Spanned;
@@ -36,16 +37,15 @@ use ast::{
     AggregateFilterExpression,
     AggregateFilters,
     Expression,
-    Identifier,
+    Query,
     WithSpan,
     first_token_span,
 };
 use error::{Error, Result, res};
-use new_ident;
-use state::{SqlTable, aggregates_singleton};
+use plugin::new_ident;
+use state::aggregates_singleton;
 use super::{
     check_argument_count,
-    check_field,
     path_expr_to_identifier,
     path_expr_to_string,
     propose_similar_name,
@@ -53,7 +53,7 @@ use super::{
 use super::filter::{binop_to_logical_operator, binop_to_relational_operator, is_logical_operator, is_relational_operator};
 
 /// Convert an `Expression` to an `Aggregate`.
-pub fn argument_to_aggregate(arg: &Expression, _table: &SqlTable) -> Result<Aggregate> {
+pub fn argument_to_aggregate(arg: &Expression) -> Result<Aggregate> {
     let mut errors = vec![];
     let mut aggregate = Aggregate::default();
     let aggregates = aggregates_singleton();
@@ -79,8 +79,8 @@ pub fn argument_to_aggregate(arg: &Expression, _table: &SqlTable) -> Result<Aggr
         }
 
         if check_argument_count(&call.args, 1, arg.span(), &mut errors) {
-            if let Expr::Path(ref path) = **call.args.first().expect("first argument").item() {
-                let path_ident = path.path.segments.first().unwrap().into_item().ident;
+            if let Expr::Path(ref path) = **call.args.first().expect("first argument").value() {
+                let path_ident = path.path.segments.first().unwrap().into_value().ident;
                 aggregate.field = Some(path_ident);
 
                 if aggregate.result_name.is_none() {
@@ -108,29 +108,34 @@ pub fn argument_to_aggregate(arg: &Expression, _table: &SqlTable) -> Result<Aggr
     res(aggregate, errors)
 }
 
-/// Convert an `Expression` to a group `Identifier`.
-pub fn argument_to_group(arg: &Expression, table: &SqlTable) -> Result<Identifier> {
+/// Convert an `Expression` to a group `Ident`.
+pub fn argument_to_group(arg: &Expression) -> Result<Ident> {
     let mut errors = vec![];
-    let mut group = "".to_string();
+    let mut group = Ident::from("dummy_ident");
 
     if let Some(identifier) = path_expr_to_identifier(arg, &mut errors) {
-        check_field(&identifier, arg.span(), table, &mut errors);
-        group = identifier.to_string();
+        group = identifier;
+    }
+    else {
+        errors.push(Error::new(
+            "Expected identifier", // TODO: improve this message.
+            arg.span(),
+        ));
     }
 
     res(group, errors)
 }
 
 /// Convert a Rust binary expression to an `AggregateFilterExpression` for an aggregate filter.
-fn binary_expression_to_aggregate_filter_expression(expr1: &Expression, op: &BinOp, expr2: &Expression, aggregates: &[Aggregate], table: &SqlTable) -> Result<AggregateFilterExpression> {
+fn binary_expression_to_aggregate_filter_expression(expr1: &Expression, op: &BinOp, expr2: &Expression, aggregates: &[Aggregate]) -> Result<AggregateFilterExpression> {
     // TODO: accumulate the errors instead of stopping at the first one.
-    let filter1 = expression_to_aggregate_filter_expression(expr1, aggregates, table)?;
+    let filter1 = expression_to_aggregate_filter_expression(expr1, aggregates)?;
     // TODO: return errors instead of dummy.
     let dummy = AggregateFilterExpression::NoFilters;
 
     let filter =
         if is_logical_operator(op) {
-            let filter2 = expression_to_aggregate_filter_expression(expr2, aggregates, table)?;
+            let filter2 = expression_to_aggregate_filter_expression(expr2, aggregates)?;
             AggregateFilterExpression::Filters(AggregateFilters {
                 operand1: Box::new(filter1),
                 operator: binop_to_logical_operator(op),
@@ -169,16 +174,16 @@ fn check_aggregate_field<'a>(identifier: &str, aggregates: &'a [Aggregate], posi
 }
 
 /// Convert a Rust expression to an `AggregateFilterExpression` for an aggregate filter.
-pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &[Aggregate], table: &SqlTable) -> Result<AggregateFilterExpression> {
+pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &[Aggregate]) -> Result<AggregateFilterExpression> {
     let mut errors = vec![];
 
     let filter =
         match *arg {
             Expr::Binary(ref bin) => {
-                binary_expression_to_aggregate_filter_expression(&bin.left, &bin.op, &bin.right, aggregates, table)?
+                binary_expression_to_aggregate_filter_expression(&bin.left, &bin.op, &bin.right, aggregates)?
             },
             Expr::Path(ref path) => {
-                let segment_ident = path.path.segments.first().unwrap().into_item().ident;
+                let segment_ident = path.path.segments.first().unwrap().into_value().ident;
                 let identifier = segment_ident.to_string();
                 let aggregate = check_aggregate_field(&identifier, aggregates, segment_ident.span, &mut errors);
                 if let Some(aggregate) = aggregate {
@@ -193,11 +198,11 @@ pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &
                 }
             },
             Expr::Paren(ref paren) => {
-                let filter = expression_to_aggregate_filter_expression(&paren.expr, aggregates, table)?;
+                let filter = expression_to_aggregate_filter_expression(&paren.expr, aggregates)?;
                 AggregateFilterExpression::ParenFilter(Box::new(filter))
             },
             Expr::Unary(ExprUnary { op: UnOp::Not(_), ref expr, .. }) => {
-                let filter = expression_to_aggregate_filter_expression(expr, aggregates, table)?;
+                let filter = expression_to_aggregate_filter_expression(expr, aggregates)?;
                 AggregateFilterExpression::NegFilter(Box::new(filter))
             },
             _ => {
@@ -224,4 +229,15 @@ fn get_call_from_aggregate<'a>(arg: &'a Expression, aggregate: &mut Aggregate, e
     else {
         arg
     }
+}
+
+/// Get the identifier in the group by clause to be able to check that they exist.
+pub fn get_values_idents(query: &Query) -> Vec<Ident> {
+    let mut idents = vec![];
+    if let Query::Aggregate { ref groups, ..} = *query {
+        for group in groups {
+            idents.push(group.clone());
+        }
+    }
+    idents
 }
