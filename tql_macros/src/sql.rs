@@ -295,6 +295,15 @@ impl FilterValue {
 }
 
 impl Join {
+    fn to_check(&self) -> Tokens {
+        let macro_name =
+            Ident::new(&format!("tql_{}_check_related_tables", self.base_table), self.base_field.span);
+        let base_field_ident = &self.base_field;
+        quote_spanned! { self.base_field.span =>
+            #macro_name!(#base_field_ident);
+        }
+    }
+
     fn to_tokens(&self) -> Tokens {
         let related_table_macro_name =
             Ident::new(&format!("tql_{}_related_tables", self.base_table), Span::call_site());
@@ -329,6 +338,13 @@ fn sep_by<I: Iterator<Item=Tokens>>(elements: I, sep: &str) -> Tokens {
         quote! {
             ""
         }
+    }
+}
+
+fn joins_to_check(joins: &[Join]) -> Tokens {
+    let checks = joins.iter().map(|join| join.to_check());
+    quote! {
+        #(#checks)*
     }
 }
 
@@ -419,15 +435,17 @@ impl Query {
                         " HAVING "
                     };
                 let aggregates = aggregates.to_sql(&mut 1);
+                let check_joins = joins_to_check(&joins);
                 let joins = joins_to_tokens(&joins);
                 let index = &mut 1;
                 let filter = filter.to_tokens(index);
                 let groups = groups.to_sql(&mut 1);
                 let aggregate_filter = aggregate_filter.to_sql(index);
-                quote! {
+                quote! {{
+                    #check_joins
                     concat!("SELECT ", #aggregates, " FROM ", #table, #joins, #where_clause, #filter, #group_clause,
                             #groups, #having_clause, #aggregate_filter)
-                }
+                }}
             },
             Query::CreateTable { ref table } => {
                 let macro_name = Ident::new(&format!("tql_{}_create_query", table), Span::call_site());
@@ -476,19 +494,18 @@ impl Query {
                         ""
                     };
                 let macro_name = Ident::new(format!("tql_{}_field_list", table).as_str(), Span::call_site());
-                // TODO: add related fields (SELECT {related_fields} FROM}.
-                // TODO: add the joins (INNER JOIN {} ON {}).
-                // TODO: the pk could come be in a WHERE.
                 let joined_fields = joined_fields(&joins, table);
+                let check_joins = joins_to_check(&joins);
                 let joins = joins_to_tokens(&joins);
                 let index = &mut 1;
                 let filter = filter.to_tokens(index);
                 let order = order.to_sql(&mut 1);
                 let limit = limit.to_sql(&mut 1);
-                quote_spanned! { Span::call_site() =>
+                quote_spanned! { Span::call_site() => {
+                    #check_joins
                     concat!("SELECT ", #macro_name!() #joined_fields, " FROM ", #table, #joins, #where_clause, #filter, #order_clause,
                         #order, #limit)
-                }
+                }}
             },
             Query::Update { ref assignments, ref filter, ref table, use_pk: _use_pk } => {
                 let where_clause = filter_to_where_clause(filter);

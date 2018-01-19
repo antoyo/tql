@@ -637,14 +637,20 @@ expected type `ForeignKey<_>`
         }
     }
     let macro_name = Ident::new(&format!("tql_{}_related_tables", table_ident), Span::call_site());
+    let check_macro_name = Ident::new(&format!("tql_{}_check_related_tables", table_ident), Span::call_site());
     quote! {
         #[macro_export]
         macro_rules! #macro_name {
             #((#related_table_names) => { #related_tables };)*
-            #((#non_related_table_names) => { #compiler_errors };)*
             // NOTE: the check for the field name is done elsewhere, hence it is okay to return
             // "" here.
             ($tt:tt) => { "" };
+        }
+
+        #[macro_export]
+        macro_rules! #check_macro_name {
+            #((#non_related_table_names) => { #compiler_errors };)*
+            ($tt:tt) => {};
         }
     }
 }

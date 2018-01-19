@@ -145,10 +145,6 @@ fn main() {
     //~| found `bool`
     //~| NOTE in this expansion of sql! (defined in tql)
 
-    sql!(Tble.filter(field1 == "value"));
-    //~^ ERROR `Tble` does not name an SQL table
-    //~| HELP did you mean Table?
-
     sql!(Table.all().join(test));
     //~^ ERROR attempted access of field `test` on type `Table`, but no field with that name was found
 
