@@ -30,6 +30,7 @@ extern crate postgres;
 #[cfg(feature = "rusqlite")]
 extern crate rusqlite;
 
+pub mod aggregates;
 mod methods;
 mod types;
 

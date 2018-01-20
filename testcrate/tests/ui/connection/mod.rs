@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ * Copyright (c) 2018 Boucher, Antoni <bouanto@zoho.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -19,39 +19,40 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-//! Tests of the type analyzer lint for a `Query::Aggregate`.
+#[cfg(feature = "pg")]
+extern crate postgres;
+#[cfg(feature = "sqlite")]
+extern crate rusqlite;
 
-#![feature(proc_macro)]
+#[cfg(feature = "pg")]
+macro_rules! backend_extern_crate {
+    () => { extern crate postgres; };
+}
 
-extern crate tql;
-#[macro_use]
-extern crate tql_macros;
+#[cfg(feature = "sqlite")]
+macro_rules! backend_extern_crate {
+    () => { extern crate rusqlite; };
+}
 
-#[macro_use]
-mod connection;
-backend_extern_crate!();
+#[cfg(feature = "pg")]
+use postgres::TlsMode;
+#[cfg(feature = "pg")]
+pub use postgres::Connection;
 
-use tql::PrimaryKey;
-use tql_macros::sql;
+#[cfg(feature = "pg")]
+#[allow(dead_code)]
+pub fn get_connection() -> Connection {
+    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
+}
 
-use connection::{Connection, get_connection};
+#[cfg(feature = "sqlite")]
+pub use rusqlite::Connection;
 
-#[derive(SqlTable)]
-struct Table {
-    id: PrimaryKey,
-    field1: String,
-    i32_field: i32,
+#[cfg(feature = "sqlite")]
+#[allow(dead_code)]
+pub fn get_connection() -> Connection {
+    Connection::open_in_memory().unwrap()
 }
 
 fn main() {
-    let connection = get_connection();
-    if let Some(aggregate) = sql!(Table.aggregate(average = avg(field2))) {
-        println!("{}", aggregate.averag);
-        //~^ ERROR no field `averag` on type `main::Aggregate`
-        //~| did you mean `average`?
-    }
-
-    if let Some(aggregate) = sql!(Table.aggregate(average = avg(field2))) {
-        println!("{}", aggregate.average);
-    }
 }

@@ -1,0 +1,13 @@
+[package]
+name = "todo"
+version = "0.1.0"
+authors = ["Antoni Boucher <bouanto@zoho.com>"]
+
+[dependencies]
+chrono = "^0.4.0"
+tql = { path = "../..", features = ["chrono", "pg"] }
+tql_macros = { path = "../../tql_macros" }
+
+[dependencies.postgres]
+features = ["with-chrono"]
+version = "^0.15.1"

@@ -61,7 +61,7 @@ use error::{Error, Result, res};
 use parser::{MethodCall, MethodCalls};
 use plugin::number_literal;
 use self::aggregate::{argument_to_aggregate, argument_to_group, expression_to_aggregate_filter_expression};
-pub use self::aggregate::get_values_idents;
+pub use self::aggregate::{get_aggregate_calls, get_values_idents};
 use self::assignment::argument_to_assignment;
 use self::filter::{analyze_filter_types, expression_to_filter_expression};
 pub use self::filter::get_method_calls;

@@ -21,6 +21,9 @@
 
 /*
  * TODO: error for unsupported types and methods (like regex()) in backends (or add implementation?).
+ * TODO: refactor to separator the postgres and sqlite code in different modules.
+ * TODO: refactor to reuse the common code between postgres and sqlite.
+ *
  * TODO: remove useless empty string ("") in generated code (concat!("", "")).
  * TODO: avoid using quote_spanned and respan when possible and document all of their usage.
  * TODO: allow using a model from another module without #[macro_use].
@@ -126,6 +129,7 @@ use syn::spanned::Spanned;
 use analyzer::{
     analyze,
     analyze_types,
+    get_aggregate_calls,
     get_insert_idents,
     get_limit_args,
     get_method_calls,
@@ -160,6 +164,7 @@ use optimizer::optimize;
 use parser::Parser;
 
 struct SqlQueryWithArgs {
+    aggregate_calls: Vec<(String, Expr)>,
     aggregates: Vec<Aggregate>,
     arguments: Args,
     idents: Vec<Ident>,
@@ -259,9 +264,11 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
     let insert_idents = get_insert_idents(&query);
     let limit_exprs = get_limit_args(&query);
     let method_calls = get_method_calls(&query);
+    let aggregate_calls = get_aggregate_calls(&query);
     let (arguments, literal_arguments) = arguments(query);
     Ok(SqlQueryWithArgs {
         aggregates,
+        aggregate_calls,
         arguments,
         idents,
         #[cfg(feature = "unstable")]
@@ -461,6 +468,17 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> Tokens {
             let #field = #ident.#field.#method_name();
             #comparison_expr
         }});
+    }
+
+    let tql_ident = quote_spanned! { Span::call_site() =>
+        ::tql
+    };
+    for &(ref function, ref expr) in &args.aggregate_calls {
+        let function = Ident::new(function, Span::call_site());
+        typechecks.push(quote! {
+            let mut _data = #tql_ident::aggregates::#function();
+            _data = #expr;
+        });
     }
 
     let trait_ident = quote_spanned! { table_ident.span() =>

@@ -31,11 +31,12 @@ pub type Expression = Expr;
 pub type Groups = Vec<Ident>;
 pub type Identifier = String;
 
-/// `Aggregate` for une in SQL Aggregate `Query`.
+/// `Aggregate` for use in SQL Aggregate `Query`.
 #[derive(Clone, Debug, Default)]
 pub struct Aggregate {
     pub field: Option<Ident>,
-    pub function: Identifier,
+    pub function: String,
+    pub sql_function: Identifier,
     pub result_name: Option<Ident>,
 }
 

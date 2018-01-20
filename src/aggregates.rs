@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ * Copyright (c) 2018 Boucher, Antoni <bouanto@zoho.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -19,39 +19,6 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-//! Tests of the type analyzer lint for a `Query::Aggregate`.
-
-#![feature(proc_macro)]
-
-extern crate tql;
-#[macro_use]
-extern crate tql_macros;
-
-#[macro_use]
-mod connection;
-backend_extern_crate!();
-
-use tql::PrimaryKey;
-use tql_macros::sql;
-
-use connection::{Connection, get_connection};
-
-#[derive(SqlTable)]
-struct Table {
-    id: PrimaryKey,
-    field1: String,
-    i32_field: i32,
-}
-
-fn main() {
-    let connection = get_connection();
-    if let Some(aggregate) = sql!(Table.aggregate(average = avg(field2))) {
-        println!("{}", aggregate.averag);
-        //~^ ERROR no field `averag` on type `main::Aggregate`
-        //~| did you mean `average`?
-    }
-
-    if let Some(aggregate) = sql!(Table.aggregate(average = avg(field2))) {
-        println!("{}", aggregate.average);
-    }
+pub fn avg() -> f64 {
+    unreachable!()
 }

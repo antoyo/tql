@@ -49,7 +49,11 @@ use ast::{
 };
 use attribute::{field_ty_to_type, fields_vec_to_hashmap};
 use error::{Error, Result, res};
-use plugin::{i32_literal, new_ident, string_literal, usize_literal};
+use plugin::{new_ident, string_literal};
+#[cfg(feature = "rusqlite")]
+use plugin::i32_literal;
+#[cfg(feature = "postgres")]
+use plugin::usize_literal;
 use sql::fields_to_sql;
 use state::SqlFields;
 use string::token_to_string;
@@ -424,7 +428,7 @@ fn gen_query_expr(connection_expr: Tokens, args: SqlQueryWithArgs, args_expr: To
                     })
                     .expect("execute query")
                     .next();
-                result.expect("next row") // TODO: do better error handling.
+                result.map(|__tql_item| __tql_item.expect("next row")) // TODO: do better error handling.
             }}
         },
         QueryType::Create => {
@@ -510,14 +514,14 @@ fn gen_aggregate_struct(aggregates: &[Aggregate]) -> (Tokens, Tokens) {
     let struct_ident = new_ident("Aggregate");
     (quote! {
         struct #struct_ident {
-            #(#def_field_idents: f64),* // TODO: choose the type from the field?
+            #(#def_field_idents: f64),* // TODO: choose the type from the aggregate function?
         }
     },
-    quote! {
+    quote! {{
         #struct_ident {
             #(#aggregate_field_idents: #aggregate_field_values),*
         }
-    })
+    }})
 }
 
 /// Get the fields from the struct (also returns the ToSql implementations to check that the types

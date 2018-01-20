@@ -31,6 +31,7 @@ use syn::{
     parse,
 };
 
+#[cfg(feature = "rusqlite")]
 pub fn i32_literal(num: usize) -> Expr {
     Expr::Lit(ExprLit {
         attrs: vec![],
@@ -38,6 +39,7 @@ pub fn i32_literal(num: usize) -> Expr {
     })
 }
 
+#[cfg(feature = "postgres")]
 pub fn usize_literal(num: usize) -> Expr {
     Expr::Lit(ExprLit {
         attrs: vec![],

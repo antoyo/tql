@@ -23,10 +23,13 @@
 
 #![feature(proc_macro)]
 
-extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
+
+#[macro_use]
+mod connection;
+backend_extern_crate!();
 
 use tql::{ForeignKey, PrimaryKey};
 
@@ -49,4 +52,7 @@ struct Table {
 #[derive(SqlTable)]
 struct RelatedTable {
     id: PrimaryKey,
+}
+
+fn main() {
 }

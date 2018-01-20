@@ -28,6 +28,14 @@ fn run_mode(mode: &'static str) {
 
     config.mode = mode.parse().expect("Invalid mode");
     config.src_base = PathBuf::from(format!("tests/{}", mode));
+    #[cfg(feature = "sqlite")]
+    {
+        config.target_rustcflags = Some("--cfg feature=\"sqlite\"".to_string());
+    }
+    #[cfg(feature = "pg")]
+    {
+        config.target_rustcflags = Some("--cfg feature=\"pg\"".to_string());
+    }
     config.link_deps();
 
     compiletest::run_tests(&config);

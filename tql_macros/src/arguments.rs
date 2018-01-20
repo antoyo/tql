@@ -143,11 +143,11 @@ fn add_with_method(args: &mut Args, literals: &mut Args, expr: Expression)
     });
 }
 
-fn add_aggregate_filter_value_arguments(aggregate: &Aggregate, args: &mut Args, literals: &mut Args,
+fn add_aggregate_filter_value_arguments(_aggregate: &Aggregate, args: &mut Args, literals: &mut Args,
                                         expression: Option<Expression>)
 {
     if let Some(expr) = expression {
-        add(args, literals, aggregate.field.clone(), None, expr); // TODO: use the right type.
+        add(args, literals, None, None, expr);
     }
 }
 

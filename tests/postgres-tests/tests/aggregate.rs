@@ -21,14 +21,10 @@
 
 #![feature(proc_macro)]
 
+extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
-
-#[macro_use]
-mod connection;
-
-backend_extern_crate!();
 
 use tql::PrimaryKey;
 use tql_macros::to_sql;
@@ -44,31 +40,31 @@ struct Table {
 #[test]
 fn test_aggregate() {
     assert_eq!(
-        "SELECT AVG(field2) FROM Table",
+        "SELECT CAST(AVG(field2) AS DOUBLE PRECISION) FROM Table",
         to_sql!(Table.aggregate(avg(field2)))
     );
     assert_eq!(
-        "SELECT AVG(field2) FROM Table GROUP BY field1",
+        "SELECT CAST(AVG(field2) AS DOUBLE PRECISION) FROM Table GROUP BY field1",
         to_sql!(Table.values(field1).aggregate(avg(field2)))
     );
     assert_eq!(
-        "SELECT AVG(field2) FROM Table",
+        "SELECT CAST(AVG(field2) AS DOUBLE PRECISION) FROM Table",
         to_sql!(Table.aggregate(average = avg(field2)))
     );
     assert_eq!(
-        "SELECT AVG(field2) FROM Table GROUP BY field1 HAVING AVG(field2) < 20",
+        "SELECT CAST(AVG(field2) AS DOUBLE PRECISION) FROM Table GROUP BY field1 HAVING CAST(AVG(field2) AS DOUBLE PRECISION) < 20",
         to_sql!(Table.values(field1).aggregate(average = avg(field2)).filter(average < 20))
     );
     assert_eq!(
-        "SELECT AVG(field2) FROM Table GROUP BY field1 HAVING AVG(field2) < 20",
+        "SELECT CAST(AVG(field2) AS DOUBLE PRECISION) FROM Table GROUP BY field1 HAVING CAST(AVG(field2) AS DOUBLE PRECISION) < 20",
         to_sql!(Table.values(field1).aggregate(avg(field2)).filter(field2_avg < 20))
     );
     assert_eq!(
-        "SELECT AVG(field2) FROM Table WHERE Table.field2 > 10 GROUP BY field1 HAVING AVG(field2) < 20",
+        "SELECT CAST(AVG(field2) AS DOUBLE PRECISION) FROM Table WHERE Table.field2 > 10 GROUP BY field1 HAVING CAST(AVG(field2) AS DOUBLE PRECISION) < 20",
         to_sql!(Table.filter(field2 > 10).values(field1).aggregate(avg(field2)).filter(field2_avg < 20))
     );
     assert_eq!(
-        "SELECT AVG(field2) FROM Table WHERE Table.field2 > 10 GROUP BY field1 HAVING AVG(field2) < 20",
+        "SELECT CAST(AVG(field2) AS DOUBLE PRECISION) FROM Table WHERE Table.field2 > 10 GROUP BY field1 HAVING CAST(AVG(field2) AS DOUBLE PRECISION) < 20",
         to_sql!(Table.filter(field2 > 10).values(field1).aggregate(average = avg(field2)).filter(average < 20))
     );
 }

@@ -3,8 +3,9 @@ name = "testcrate"
 version = "0.1.0"
 authors = ["Antoni Boucher <bouanto@zoho.com>"]
 
-[dependencies]
-tql = { path = ".." }
+[dependencies.tql]
+features = ["chrono"]
+path = ".."
 
 [dependencies.postgres]
 features = ["with-chrono"]
@@ -12,3 +13,7 @@ version = "^0.15.1"
 
 [dev-dependencies]
 compiletest_rs = "^0.3.3"
+
+[features]
+sqlite = ["tql/sqlite"]
+pg = ["tql/pg"]

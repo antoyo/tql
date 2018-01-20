@@ -21,7 +21,6 @@
 
 use std::fmt::{self, Display, Formatter};
 
-use proc_macro2::Span;
 use quote::Tokens;
 use syn::{
     self,
@@ -30,7 +29,6 @@ use syn::{
     ExprLit,
     FloatSuffix,
     GenericArgument,
-    Ident,
     IntSuffix,
     Lit,
     Path,
@@ -40,7 +38,6 @@ use syn::{
 
 use ast::Expression;
 use sql;
-use plugin::string_literal;
 
 /// A field type.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

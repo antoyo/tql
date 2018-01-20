@@ -70,7 +70,7 @@ pub trait ToSql {
 impl ToSql for Aggregate {
     fn to_sql(&self, index: &mut usize) -> String {
         // TODO: do not hard-code the type.
-        self.function.to_sql(index) + "(" + &self.field.expect("Aggregate field").to_sql(index) + ")"
+        self.sql_function.to_sql(index) + "(" + &self.field.expect("Aggregate field").to_sql(index) + ")"
     }
 }
 

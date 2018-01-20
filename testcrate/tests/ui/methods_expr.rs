@@ -24,24 +24,24 @@
 
 #![feature(proc_macro)]
 
-extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
-use postgres::{Connection, TlsMode};
+#[macro_use]
+mod connection;
+backend_extern_crate!();
+
 use tql::PrimaryKey;
 use tql_macros::sql;
+
+use connection::{Connection, get_connection};
 
 #[derive(SqlTable)]
 struct Table {
     id: PrimaryKey,
     field1: String,
     i32_field: i32,
-}
-
-fn get_connection() -> Connection {
-    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
 }
 
 fn main() {
