@@ -31,22 +31,6 @@ use syn::{
     parse,
 };
 
-#[cfg(feature = "rusqlite")]
-pub fn i32_literal(num: usize) -> Expr {
-    Expr::Lit(ExprLit {
-        attrs: vec![],
-        lit: Lit::Int(LitInt::new(num as u64, IntSuffix::I32, Span::call_site())),
-    })
-}
-
-#[cfg(feature = "postgres")]
-pub fn usize_literal(num: usize) -> Expr {
-    Expr::Lit(ExprLit {
-        attrs: vec![],
-        lit: Lit::Int(LitInt::new(num as u64, IntSuffix::Usize, Span::call_site())),
-    })
-}
-
 pub fn number_literal(num: i64) -> Expr {
     let lit = Expr::Lit(ExprLit {
         attrs: vec![],

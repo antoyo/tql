@@ -19,6 +19,11 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#[cfg(feature = "postgres")]
+mod postgres;
+#[cfg(feature = "rusqlite")]
+mod sqlite;
+
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::Tokens;
@@ -44,16 +49,15 @@ use syn::token::Comma;
 use ast::{
     Aggregate,
     Join,
-    QueryType,
     TypedField,
 };
 use attribute::{field_ty_to_type, fields_vec_to_hashmap};
 use error::{Error, Result, res};
 use plugin::{new_ident, string_literal};
-#[cfg(feature = "rusqlite")]
-use plugin::i32_literal;
 #[cfg(feature = "postgres")]
-use plugin::usize_literal;
+use self::postgres::create_backend;
+#[cfg(feature = "rusqlite")]
+use self::sqlite::create_backend;
 use sql::fields_to_sql;
 use state::SqlFields;
 use string::token_to_string;
@@ -94,10 +98,8 @@ pub fn table_methods(item_struct: &ItemStruct) -> Tokens {
                 !typ.starts_with("ForeignKey")
             })
             .count();
-        #[cfg(feature = "postgres")]
-        let field_count = usize_literal(field_count);
-        #[cfg(feature = "rusqlite")]
-        let field_count = i32_literal(field_count);
+        let backend = create_backend();
+        let field_count = backend.int_literal(field_count);
 
         let field_idents = named.iter()
             .map(|field| field.ident.expect("field has name"));
@@ -107,18 +109,8 @@ pub fn table_methods(item_struct: &ItemStruct) -> Tokens {
         let trait_ident = quote_spanned! { table_ident.span() =>
             ::tql::SqlTable
         };
-        #[cfg(feature = "postgres")]
-        let row_type_ident = quote_spanned! { table_ident.span() =>
-            ::postgres::rows::Row
-        };
-        #[cfg(feature = "postgres")]
-        let delta_type = quote! { usize };
-        #[cfg(feature = "rusqlite")]
-        let row_type_ident = quote_spanned! { table_ident.span() =>
-            ::rusqlite::Row
-        };
-        #[cfg(feature = "rusqlite")]
-        let delta_type = quote! { i32 };
+        let row_type_ident = backend.row_type_ident(&table_ident);
+        let delta_type = backend.delta_type();
         let row_ident = Ident::new("__tql_item_row", Span::call_site());
 
         quote! {
@@ -150,29 +142,16 @@ pub fn table_methods(item_struct: &ItemStruct) -> Tokens {
     }
 }
 
-#[cfg(feature = "postgres")]
-fn to_sql(primary_key_ident: &Ident) -> Tokens {
-    quote! {
-        self.#primary_key_ident.to_sql(ty, out)
-    }
-}
-
-#[cfg(feature = "rusqlite")]
-fn to_sql(primary_key_ident: &Ident) -> Tokens {
-    quote! {
-        self.#primary_key_ident.to_sql()
-    }
-}
-
 /// Add the postgres::types::ToSql implementation on the struct.
 /// Its SQL representation is the same as the primary key SQL representation.
 pub fn tosql_impl(item_struct: &ItemStruct, primary_key_field: Option<String>) -> Tokens {
     let table_ident = &item_struct.ident;
     let debug_impl = create_debug_impl(item_struct);
+    let backend = create_backend();
     let to_sql_code =
         if let Some(pk) = primary_key_field {
             let primary_key_ident = Ident::new(&pk, Span::call_site());
-            to_sql(&primary_key_ident)
+            backend.to_sql(&primary_key_ident)
         }
         else {
             quote! {
@@ -180,54 +159,9 @@ pub fn tosql_impl(item_struct: &ItemStruct, primary_key_field: Option<String>) -
             }
         };
     let to_owned_ident = Ident::new("to_owned", Span::call_site());
-    #[cfg(feature = "postgres")]
-    let code = {
-        let std_ident = quote_spanned! { table_ident.span() =>
-            ::std
-        };
-        let postgres_ident = quote_spanned! { table_ident.span() =>
-            ::postgres
-        };
-        quote! {
-            #debug_impl
-
-            impl #postgres_ident::types::ToSql for #table_ident {
-                fn to_sql(&self, ty: &#postgres_ident::types::Type, out: &mut Vec<u8>) ->
-                    Result<#postgres_ident::types::IsNull, Box<#std_ident::error::Error + 'static + Sync + Send>>
-                    {
-                        #to_sql_code
-                    }
-
-                fn accepts(ty: &#postgres_ident::types::Type) -> bool {
-                    *ty == #postgres_ident::types::INT4
-                }
-
-                fn to_sql_checked(&self, ty: &#postgres_ident::types::Type, out: &mut #std_ident::vec::Vec<u8>)
-                    -> #std_ident::result::Result<#postgres_ident::types::IsNull,
-                    Box<#std_ident::error::Error + #std_ident::marker::Sync + #std_ident::marker::Send>>
-                    {
-                        #postgres_ident::types::__to_sql_checked(self, ty, out)
-                    }
-            }
-        }
-    };
-    #[cfg(feature = "rusqlite")]
-    let code = {
-        let rusqlite_ident = quote_spanned! { table_ident.span() =>
-            ::rusqlite
-        };
-        quote! {
-            #debug_impl
-
-            impl #rusqlite_ident::types::ToSql for #table_ident {
-                fn to_sql(&self) -> #rusqlite_ident::Result<#rusqlite_ident::types::ToSqlOutput>
-                {
-                    #to_sql_code
-                }
-            }
-        }
-    };
+    let code = backend.to_sql_impl(table_ident, to_sql_code);
     quote! {
+        #debug_impl
         #code
 
         impl #table_ident {
@@ -293,188 +227,10 @@ pub(crate) fn gen_query(args: SqlQueryWithArgs, connection_expr: Tokens) -> Toke
     let struct_expr = create_struct(&args.table_name, &args.joins);
     let (aggregate_struct, aggregate_expr) = gen_aggregate_struct(&args.aggregates);
     let args_expr = typecheck_arguments(&args);
-    let tokens = gen_query_expr(connection_expr, args, args_expr, struct_expr, aggregate_struct, aggregate_expr);
+    let backend = create_backend();
+    let tokens = backend.gen_query_expr(connection_expr, args, args_expr, struct_expr, aggregate_struct,
+                                        aggregate_expr);
     tokens.into()
-}
-
-/// Generate the Rust code using the `postgres` library depending on the `QueryType`.
-#[cfg(feature = "postgres")]
-fn gen_query_expr(connection_expr: Tokens, args: SqlQueryWithArgs, args_expr: Tokens, struct_expr: Tokens,
-                  aggregate_struct: Tokens, aggregate_expr: Tokens) -> Tokens
-{
-    let result_ident = Ident::from("result");
-    let sql_query = &args.sql;
-
-    match args.query_type {
-        QueryType::AggregateMulti => {
-            let result = quote! {{
-                let result = #connection_expr.prepare(#sql_query).expect("prepare query");
-                result.query(&#args_expr).expect("execute query").iter()
-            }};
-            let call = quote! {
-                .map(|__tql_item_row| {
-                    #aggregate_expr
-                }).collect::<Vec<_>>()
-                // TODO: return an iterator instead of a vector.
-            };
-            quote! {{
-                #aggregate_struct
-                #result#call
-            }}
-        },
-        QueryType::AggregateOne => {
-            quote! {{
-                #aggregate_struct
-                let result = #connection_expr.prepare(#sql_query).expect("prepare query");
-                result.query(&#args_expr).expect("execute query").iter().next().map(|__tql_item_row| {
-                    #aggregate_expr
-                })
-            }}
-        },
-        QueryType::Create => {
-            quote! {{
-                #connection_expr.prepare(#sql_query)
-                    .and_then(|result| result.execute(&[]))
-            }}
-        },
-        QueryType::InsertOne => {
-            quote! {{
-                #connection_expr.prepare(#sql_query)
-                    .and_then(|result| {
-                        // NOTE: The query is not supposed to fail, hence expect().
-                        let rows = result.query(&#args_expr).expect("execute query");
-                        // NOTE: There is always one result (the inserted id), hence unwrap().
-                        let __tql_item_row = rows.iter().next().unwrap();
-                        let count: i32 = __tql_item_row.get(0);
-                        Ok(count)
-                    })
-            }}
-        },
-        QueryType::SelectMulti => {
-            let result =
-                quote! {
-                    let #result_ident = #connection_expr.prepare(#sql_query).expect("prepare query");
-                    let #result_ident = #result_ident.query(&#args_expr).expect("execute query");
-                    let results = #result_ident.iter();
-                };
-            let call = quote! {
-                .map(|__tql_item_row| {
-                    #struct_expr
-                }).collect::<Vec<_>>()
-                // TODO: return an iterator instead of a vector.
-
-            };
-            quote! {{
-                #result
-                results#call
-            }}
-        },
-        QueryType::SelectOne => {
-            let result =
-                quote! {
-                    let #result_ident = #connection_expr.prepare(#sql_query).expect("prepare query");
-                    let #result_ident = #result_ident.query(&#args_expr).expect("execute query");
-                    let results = #result_ident.iter().next();
-                };
-            let call = quote! {
-                .map(|__tql_item_row| {
-                    #struct_expr
-                })
-            };
-            quote! {{
-                #result
-                results#call
-            }}
-        },
-        QueryType::Exec => {
-            quote! {{
-                #connection_expr.prepare(#sql_query)
-                    .and_then(|result| result.execute(&#args_expr))
-            }}
-        },
-    }
-}
-
-#[cfg(feature = "rusqlite")]
-fn gen_query_expr(connection_expr: Tokens, args: SqlQueryWithArgs, args_expr: Tokens, struct_expr: Tokens,
-                  aggregate_struct: Tokens, aggregate_expr: Tokens) -> Tokens
-{
-    let sql_query = &args.sql;
-
-    match args.query_type {
-        QueryType::AggregateMulti => {
-            quote! {{
-                #aggregate_struct
-
-                let mut statement = #connection_expr.prepare(#sql_query);
-                let mut statement = statement.expect("prepare query");
-                let mut result = statement.query_map(&#args_expr, |__tql_item_row| {
-                        #aggregate_expr
-                    });
-                let mut result = result.expect("execute query")
-                    .map(|item| item.expect("item selection")); // TODO: do better error handling.
-                result.collect::<Vec<_>>()
-                    // TODO: return an iterator instead of a vector.
-            }}
-        },
-        QueryType::AggregateOne => {
-            quote! {{
-                #aggregate_struct
-
-                let mut statement = #connection_expr.prepare(#sql_query)
-                    .expect("prepare query");
-                let mut result = statement.query_map(&#args_expr, |__tql_item_row| {
-                        #aggregate_expr
-                    })
-                    .expect("execute query")
-                    .next();
-                result.map(|__tql_item| __tql_item.expect("next row")) // TODO: do better error handling.
-            }}
-        },
-        QueryType::Create => {
-            quote! {{
-                #connection_expr.prepare(#sql_query)
-                    .and_then(|mut result| result.execute(&[]))
-            }}
-        },
-        QueryType::InsertOne => {
-            quote! {{
-                #connection_expr.prepare(#sql_query)
-                    .and_then(|mut result| result.execute(&#args_expr))
-                    .map(|_| #connection_expr.last_insert_rowid() as i32) // FIXME: don't cast?
-            }}
-        },
-        QueryType::SelectMulti => {
-            quote! {{
-                let mut statement = #connection_expr.prepare(#sql_query).expect("prepare query");
-                let mut result = statement.query_map(&#args_expr, |__tql_item_row| {
-                        #struct_expr
-                    });
-                let mut result = result.expect("execute query")
-                    .map(|item| item.expect("item selection")); // TODO: do better error handling.
-                result.collect::<Vec<_>>()
-                    // TODO: return an iterator instead of a vector.
-            }}
-        },
-        QueryType::SelectOne => {
-            quote! {{
-                let mut statement = #connection_expr.prepare(#sql_query)
-                    .expect("prepare query");
-                let mut result = statement.query_map(&#args_expr, |__tql_item_row| {
-                        #struct_expr
-                    })
-                    .expect("execute query")
-                    .next();
-                result.map(|__tql_item| __tql_item.expect("next row"))
-            }}
-        },
-        QueryType::Exec => {
-            quote! {{
-                #connection_expr.prepare(#sql_query)
-                    .and_then(|mut result| result.execute(&#args_expr))
-            }}
-        },
-    }
 }
 
 /// Create the struct expression needed by the generated code.
@@ -503,9 +259,9 @@ fn gen_aggregate_struct(aggregates: &[Aggregate]) -> (Tokens, Tokens) {
     let mut aggregate_field_idents = vec![];
     let mut aggregate_field_values = vec![];
     let mut def_field_idents = vec![];
+    let backend = create_backend();
     for (index, aggregate) in aggregates.iter().enumerate() {
-        #[cfg(feature = "rusqlite")]
-        let index = index as i32;
+        let index = backend.convert_index(index);
         let field_name = aggregate.result_name.clone();
         aggregate_field_idents.push(field_name.clone());
         aggregate_field_values.push(quote! { __tql_item_row.get(#index) });
@@ -916,10 +672,8 @@ fn to_row_get(typ: syn::Type, with_delta: bool, index: &mut usize) -> Tokens {
             };
         }
     }
-    #[cfg(feature = "postgres")]
-    let index_lit = usize_literal(*index);
-    #[cfg(feature = "rusqlite")]
-    let index_lit = i32_literal(*index);
+    let backend = create_backend();
+    let index_lit = backend.int_literal(*index);
     *index += 1;
     let index_lit =
         if with_delta {
@@ -998,4 +752,15 @@ pub fn gen_check_missing_fields(input: TokenStream) -> TokenStream {
 
 fn rand_string() -> String {
     rand::thread_rng().gen_ascii_chars().take(30).collect()
+}
+
+trait BackendGen {
+    fn convert_index(&self, index: usize) -> Tokens;
+    fn delta_type(&self) -> Tokens;
+    fn gen_query_expr(&self, connection_expr: Tokens, args: SqlQueryWithArgs, args_expr: Tokens, struct_expr: Tokens,
+                      aggregate_struct: Tokens, aggregate_expr: Tokens) -> Tokens;
+    fn int_literal(&self, num: usize) -> Expr;
+    fn row_type_ident(&self, table_ident: &Ident) -> Tokens;
+    fn to_sql(&self, primary_key_ident: &Ident) -> Tokens;
+    fn to_sql_impl(&self, table_ident: &Ident, to_sql_code: Tokens) -> Tokens;
 }

@@ -21,7 +21,6 @@
 
 /*
  * TODO: error for unsupported types in backends.
- * TODO: refactor to separator the postgres and sqlite code in different modules.
  * TODO: refactor to reuse the common code between postgres and sqlite.
  *
  * TODO: remove useless empty string ("") in generated code (concat!("", "")).

@@ -55,7 +55,6 @@ pub fn add_initial_methods() {
     // Date methods.
     let date_types = [Type::LocalDateTime, Type::NaiveDate, Type::NaiveDateTime, Type::UtcDateTime];
     for date_type in &date_types {
-        // TODO: put this code in the gen module.
         #[cfg(feature = "postgres")]
         add_method(date_type, Type::I32, vec![], "year", "EXTRACT(YEAR FROM $0)");
         #[cfg(feature = "rusqlite")]
