@@ -30,7 +30,8 @@ matrix:
               - cargo build --manifest-path examples/todo-stable/Cargo.toml
         - rust: nightly
           script:
-              - cargo build
+              - cargo build --features chrono,pg
+              - cargo build --features chrono,sqlite
               - cargo build --manifest-path examples/todo/Cargo.toml
               - cargo test --features chrono,pg
               - cargo test --features chrono,sqlite
