@@ -38,7 +38,7 @@ matrix:
               - cargo test --manifest-path tests/postgres-tests/Cargo.toml
               - cargo test --manifest-path tests/sqlite-tests/Cargo.toml
               - cargo test --features pg --manifest-path testcrate/Cargo.toml
-              - cargo clean
+              - cargo clean --manifest-path testcrate/Cargo.toml
               - cargo test --features sqlite --manifest-path testcrate/Cargo.toml
           env: RUSTFLAGS="--cfg procmacro2_semver_exempt"
     allow_failures:
