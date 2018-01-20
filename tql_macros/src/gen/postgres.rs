@@ -19,8 +19,16 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+use proc_macro2::Span;
 use quote::Tokens;
-use syn::{Expr, Ident};
+use syn::{
+    Expr,
+    ExprLit,
+    Ident,
+    IntSuffix,
+    Lit,
+    LitInt,
+};
 use syn::spanned::Spanned;
 
 use ast::QueryType;

@@ -21,7 +21,6 @@
 
 /*
  * TODO: error for unsupported types in backends.
- * TODO: refactor to reuse the common code between postgres and sqlite.
  *
  * TODO: remove useless empty string ("") in generated code (concat!("", "")).
  * TODO: avoid using quote_spanned and respan when possible and document all of their usage.
