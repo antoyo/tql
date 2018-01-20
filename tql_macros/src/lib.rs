@@ -179,17 +179,27 @@ struct SqlQueryWithArgs {
 #[cfg(feature = "unstable")]
 #[proc_macro]
 pub fn sql(input: TokenStream) -> TokenStream {
-    let arguments: Arguments = parse(input).expect("Expression in sql!()");
+    let arguments: Arguments =
+        match parse(input) {
+            Ok(args) => args,
+            Err(error) => return generate_errors(vec![Error::new(
+                    &format!("cannot parse expression in sql!(): {}", error), Span::call_site())]),
+        };
+    let arguments = arguments.0;
     let (sql_expr, connection_ident) =
-        if arguments.0.len() == 2 {
-            let connection_expr = &arguments.0[0];
-            let connection_expr = quote! {
-                #connection_expr
-            };
-            (&arguments.0[1], connection_expr)
-        }
-        else {
-            (&arguments.0[0], default_connection_expr())
+        match arguments.len() {
+            2 => {
+                let connection_expr = &arguments[0];
+                let connection_expr = quote! {
+                    #connection_expr
+                };
+                (&arguments[1], connection_expr)
+            }
+            1 => (&arguments[0], default_connection_expr()),
+            arg_count =>
+                return generate_errors(vec![Error::new_with_code(
+                        &format!("this macro takes 1 parameter but {} parameters were supplied", arg_count),
+                                                     Span::call_site(), "E0061")]),
         };
     let sql_expr = quote! { #sql_expr };
     let sql_result = to_sql_query(sql_expr.into());
@@ -213,10 +223,10 @@ pub fn to_sql(input: TokenStream) -> TokenStream {
 
 /// Convert the Rust code to an SQL string with its type, arguments, joins, and aggregate fields.
 fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
-    // TODO: use this when it becomes stable.
-    /*if input.is_empty() {
-        return Err(vec![Error::new_with_code("this macro takes 1 parameter but 0 parameters were supplied", cx.call_site(), "E0061")]);
-    }*/
+    if input.is_empty() {
+        return Err(vec![Error::new_with_code("this macro takes 1 parameter but 0 parameters were supplied",
+                                             input.span(), "E0061")]);
+    }
     let expr: Expr =
         match parse2(input) {
             Ok(expr) => expr,
@@ -269,7 +279,12 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
 /// This attribute must be used on structs to tell tql that it represents an SQL table.
 #[proc_macro_derive(SqlTable)]
 pub fn sql_table(input: TokenStream) -> TokenStream {
-    let item: Item = parse(input).expect("parse expression in sql_table()");
+    let item: Item =
+        match parse(input) {
+            Ok(item) => item,
+            Err(error) => return generate_errors(vec![Error::new(
+                    &format!("cannot parse expression in SqlTable: {}", error), Span::call_site())]),
+        };
 
     let gen =
         if let Item::Struct(item_struct) = item {
@@ -501,8 +516,6 @@ pub fn check_missing_fields(input: TokenStream) -> TokenStream {
 struct Arguments(Punctuated<Expr, Token![,]>);
 
 impl syn::synom::Synom for Arguments {
-    // call!(Punctuated::parse_terminated) will parse a terminated sequence of
-    // Synom objects. Expr implements synom so we're good.
     named!(parse -> Self, map!(call!(Punctuated::parse_terminated), Arguments));
 }
 

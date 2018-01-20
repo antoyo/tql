@@ -1,10 +1,10 @@
-error: failed to parse expression: failed to parse
+error: this macro takes 1 parameter but 0 parameters were supplied
   --> $DIR/macro.rs:46:5
    |
 46 |     to_sql!();
    |     ^^^^^^^^^^
 
-error: failed to parse expression: failed to parse
+error: this macro takes 1 parameter but 0 parameters were supplied
   --> $DIR/macro.rs:51:5
    |
 51 |     sql!();

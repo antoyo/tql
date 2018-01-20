@@ -24,10 +24,10 @@ matrix:
     include:
         - rust: stable
           script:
-              - cargo build --features chrono --manifest-path examples/todo-stable/Cargo.toml
+              - cargo build --manifest-path examples/todo-stable/Cargo.toml
         - rust: beta
           script:
-              - cargo build --features chrono --manifest-path examples/todo-stable/Cargo.toml
+              - cargo build --manifest-path examples/todo-stable/Cargo.toml
         - rust: nightly
           script:
               - cargo build
