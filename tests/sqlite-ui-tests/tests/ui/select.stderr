@@ -1,0 +1,14 @@
+error: The method regex is not available on this backend
+  --> $DIR/select.rs:49:30
+   |
+49 |     sql!(Table.filter(field1.regex(r"%3")));
+   |                              ^^^^^
+
+error: The method regex is not available on this backend
+  --> $DIR/select.rs:50:30
+   |
+50 |     sql!(Table.filter(field1.regex(r"%E3")));
+   |                              ^^^^^
+
+error: aborting due to 2 previous errors
+

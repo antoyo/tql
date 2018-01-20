@@ -1,19 +1,14 @@
 [package]
-name = "testcrate"
+name = "sqlite-ui-tests"
 version = "0.1.0"
 authors = ["Antoni Boucher <bouanto@zoho.com>"]
 
 [dependencies.tql]
 features = ["chrono"]
-path = ".."
-
-[dependencies.postgres]
-features = ["with-chrono"]
-version = "^0.15.1"
+path = "../.."
 
 [dev-dependencies]
 compiletest_rs = "^0.3.3"
 
 [features]
-sqlite = ["tql/sqlite"]
-pg = ["tql/pg"]
+default = ["tql/sqlite"]

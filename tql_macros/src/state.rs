@@ -57,7 +57,7 @@ pub struct SqlMethodTypes {
     pub argument_types: Vec<Type>,
     pub object_type: Type,
     pub return_type: Type,
-    pub template: String,
+    pub template: Option<String>,
 }
 
 /// Returns the global aggregate state.

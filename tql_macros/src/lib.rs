@@ -20,7 +20,7 @@
  */
 
 /*
- * TODO: error for unsupported types and methods (like regex()) in backends (or add implementation?).
+ * TODO: error for unsupported types in backends.
  * TODO: refactor to separator the postgres and sqlite code in different modules.
  * TODO: refactor to reuse the common code between postgres and sqlite.
  *
@@ -134,6 +134,7 @@ use syn::spanned::Spanned;
 
 use analyzer::{
     analyze,
+    analyze_methods,
     analyze_types,
     get_aggregate_calls,
     get_insert_idents,
@@ -251,6 +252,7 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
     #[cfg(feature = "unstable")]
     let insert_call_span = get_insert_position(&method_calls);
     let mut query = analyze(method_calls)?;
+    analyze_methods(&query)?;
     optimize(&mut query);
     query = analyze_types(query)?;
     let sql = query.to_tokens();

@@ -27,13 +27,15 @@ use types::Type;
 /// Add a new `method` on `object_type` of type `argument_types` -> `return_type`.
 /// The template is the resulting SQL with `$0` as a placeholder for `self` and `$1`, `$2`, … as
 /// placeholders for the arguments.
-pub fn add_method(object_type: &Type, return_type: Type, argument_types: Vec<Type>, method: &str, template: &str) {
+pub fn add_method<'a, T: Into<Option<&'a str>>>(object_type: &Type, return_type: Type, argument_types: Vec<Type>,
+                                                method: &str, template: T)
+{
     let methods = methods_singleton();
     methods.insert(method.to_string(), SqlMethodTypes {
         argument_types,
         object_type: object_type.clone(),
         return_type,
-        template: template.to_string(),
+        template: template.into().map(ToString::to_string),
     });
 }
 
@@ -89,21 +91,17 @@ pub fn add_initial_methods() {
         add_method(time_type, Type::I32, vec![], "second", "CAST(STRFTIME('%S', $0) AS INT)");
     }
 
-    // TODO: perhaps create a macro to ease the method creation.
-    // For instance:
-    // add_method!(impl Type::String {
-    //     fn contains(Type::String) -> Type::Bool {
-    //         "$0 LIKE '%' || $1 || '%'"
-    //     }
-    // });
-
     // String methods.
     add_method(&Type::String, Type::Bool, vec![Type::String], "contains", "$0 LIKE '%' || $1 || '%'");
     add_method(&Type::String, Type::Bool, vec![Type::String], "ends_with", "$0 LIKE '%' || $1");
     add_method(&Type::String, Type::Bool, vec![Type::String], "starts_with", "$0 LIKE $1 || '%'");
     add_method(&Type::String, Type::I32, vec![], "len", "LENGTH($0)");
+
     #[cfg(feature = "postgres")]
     add_method(&Type::String, Type::Bool, vec![Type::String], "regex", "$0 LIKE $1");
+    #[cfg(feature = "rusqlite")]
+    add_method(&Type::String, Type::Bool, vec![Type::String], "regex", None);
+
     #[cfg(feature = "postgres")]
     add_method(&Type::String, Type::Bool, vec![Type::String], "iregex", "$0 ILIKE $1");
     #[cfg(feature = "rusqlite")]

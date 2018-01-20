@@ -150,15 +150,6 @@ fn test_filter_method_call() {
         format!("{} FROM Table WHERE LENGTH(field1) = 6", SELECT),
         to_sql!(Table.filter(field1.len() == 6))
     );
-    // TODO: not yet supported.
-    /*assert_eq!(
-        format!("{} FROM Table WHERE field1 LIKE '%3'", SELECT),
-        to_sql!(Table.filter(field1.regex(r"%3")))
-    );
-    assert_eq!(
-        format!("{} FROM Table WHERE field1 LIKE '%E3'", SELECT),
-        to_sql!(Table.filter(field1.regex(r"%E3")))
-    );*/
     assert_eq!(
         format!("{} FROM Table WHERE field1 LIKE '%E3'", SELECT),
         to_sql!(Table.filter(field1.iregex(r"%E3")))

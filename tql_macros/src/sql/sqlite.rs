@@ -265,7 +265,10 @@ impl FilterValue {
                     if let Some(method) = methods.get(&method_name.to_string()) {
                         // In the template, $0 represents the object identifier and $1, $2, ... the
                         // arguments.
-                        let mut sql = method.template.replace("$0", &object_name.to_string());
+                        let mut sql = method.template.as_ref().map(|string| string.as_str()).unwrap_or_default()
+                            // NOTE: it's safe to use unwrap_or_default() because we check if the method exists for the
+                            // backend in the method analyzer.
+                            .replace("$0", &object_name.to_string());
                         let mut index = 1;
                         for argument in arguments {
                             sql = sql.replace(&format!("${}", index), &argument.to_sql(&mut 1));
