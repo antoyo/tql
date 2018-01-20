@@ -60,6 +60,7 @@ use types::{
     type_to_sql,
 };
 use {
+    Arguments,
     SqlQueryWithArgs,
     add_error,
     concat_token_stream,
@@ -238,17 +239,16 @@ pub fn generate_errors(errors: Vec<Error>) -> TokenStream {
 }
 
 /// Generate the Rust code from the SQL query.
-pub(crate) fn gen_query(args: SqlQueryWithArgs) -> TokenStream {
-    let ident = Ident::new("connection", args.table_name.span);
+pub(crate) fn gen_query(args: SqlQueryWithArgs, connection_expr: Tokens) -> TokenStream {
     let struct_expr = create_struct(&args.table_name, &args.joins);
     let (aggregate_struct, aggregate_expr) = gen_aggregate_struct(&args.aggregates);
     let args_expr = typecheck_arguments(&args);
-    let tokens = gen_query_expr(ident, args, args_expr, struct_expr, aggregate_struct, aggregate_expr);
+    let tokens = gen_query_expr(connection_expr, args, args_expr, struct_expr, aggregate_struct, aggregate_expr);
     tokens.into()
 }
 
 /// Generate the Rust code using the `postgres` library depending on the `QueryType`.
-fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: Tokens, struct_expr: Tokens,
+fn gen_query_expr(connection_expr: Tokens, args: SqlQueryWithArgs, args_expr: Tokens, struct_expr: Tokens,
                   aggregate_struct: Tokens, aggregate_expr: Tokens) -> Tokens
 {
     let result_ident = Ident::from("result");
@@ -257,7 +257,7 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
     match args.query_type {
         QueryType::AggregateMulti => {
             let result = quote! {{
-                let result = #connection_ident.prepare(#sql_query).expect("prepare query");
+                let result = #connection_expr.prepare(#sql_query).expect("prepare query");
                 result.query(&#args_expr).expect("execute query").iter()
             }};
             let call = quote! {
@@ -274,7 +274,7 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
         QueryType::AggregateOne => {
             quote! {{
                 #aggregate_struct
-                let result = #connection_ident.prepare(#sql_query).expect("prepare query");
+                let result = #connection_expr.prepare(#sql_query).expect("prepare query");
                 result.query(&#args_expr).expect("execute query").iter().next().map(|__tql_item_row| {
                     #aggregate_expr
                 })
@@ -282,13 +282,13 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
         },
         QueryType::Create => {
             quote! {{
-                #connection_ident.prepare(#sql_query)
+                #connection_expr.prepare(#sql_query)
                     .and_then(|result| result.execute(&[]))
             }}
         },
         QueryType::InsertOne => {
             quote! {{
-                #connection_ident.prepare(#sql_query)
+                #connection_expr.prepare(#sql_query)
                     .and_then(|result| {
                         // NOTE: The query is not supposed to fail, hence expect().
                         let rows = result.query(&#args_expr).expect("execute query");
@@ -302,7 +302,7 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
         QueryType::SelectMulti => {
             let result =
                 quote! {
-                    let #result_ident = #connection_ident.prepare(#sql_query).expect("prepare query");
+                    let #result_ident = #connection_expr.prepare(#sql_query).expect("prepare query");
                     let #result_ident = #result_ident.query(&#args_expr).expect("execute query");
                     let results = #result_ident.iter();
                 };
@@ -321,7 +321,7 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
         QueryType::SelectOne => {
             let result =
                 quote! {
-                    let #result_ident = #connection_ident.prepare(#sql_query).expect("prepare query");
+                    let #result_ident = #connection_expr.prepare(#sql_query).expect("prepare query");
                     let #result_ident = #result_ident.query(&#args_expr).expect("execute query");
                     let results = #result_ident.iter().next();
                 };
@@ -337,7 +337,7 @@ fn gen_query_expr(connection_ident: Ident, args: SqlQueryWithArgs, args_expr: To
         },
         QueryType::Exec => {
             quote! {{
-                #connection_ident.prepare(#sql_query)
+                #connection_expr.prepare(#sql_query)
                     .and_then(|result| result.execute(&#args_expr))
             }}
         },
@@ -797,14 +797,6 @@ fn to_row_get(typ: syn::Type, with_delta: bool, index: &mut usize) -> Tokens {
     quote_spanned! { Span::call_site() =>
         __tql_item_row.get(#index_lit)
     }
-}
-
-struct Arguments(Punctuated<Expr, Token![,]>);
-
-impl syn::synom::Synom for Arguments {
-    // call!(Punctuated::parse_terminated) will parse a terminated sequence of
-    // Synom objects. Expr implements synom so we're good.
-    named!(parse -> Self, map!(call!(Punctuated::parse_terminated), Arguments));
 }
 
 pub fn gen_check_missing_fields(input: TokenStream) -> TokenStream {

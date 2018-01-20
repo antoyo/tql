@@ -64,9 +64,9 @@ fn delete_todo_item(connection: Connection, id: i32) {
     }
 }
 
-fn do_todo_item(connection: Connection, id: i32) {
+fn do_todo_item(cx: Connection, id: i32) {
     // Update the item to make it done.
-    let result = sql!(TodoItem.get(id).update(done = true));
+    let result = sql!(cx, TodoItem.get(id).update(done = true));
     if let Err(err) = result {
         println!("Failed to do the item ({})", err);
     }
