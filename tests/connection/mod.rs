@@ -19,6 +19,10 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+use std::fmt::Debug;
+#[cfg(feature = "postgres")]
+use std::io;
+
 #[cfg(feature = "postgres")]
 macro_rules! backend_extern_crate {
     () => { extern crate postgres; };
@@ -32,7 +36,7 @@ macro_rules! backend_extern_crate {
 #[cfg(feature = "postgres")]
 use postgres::TlsMode;
 #[cfg(feature = "postgres")]
-pub use postgres::Connection;
+pub use postgres::{Connection, Result};
 
 #[cfg(feature = "postgres")]
 #[allow(dead_code)]
@@ -41,10 +45,30 @@ pub fn get_connection() -> Connection {
 }
 
 #[cfg(feature = "sqlite")]
-pub use rusqlite::Connection;
+pub use rusqlite::{Connection, Error, Result};
 
 #[cfg(feature = "sqlite")]
 #[allow(dead_code)]
 pub fn get_connection() -> Connection {
     Connection::open_in_memory().unwrap()
+}
+
+#[cfg(feature = "postgres")]
+#[allow(dead_code)]
+pub fn is_not_found<T: Debug>(result: Result<T>) -> bool {
+    if let Err(error) = result {
+        if let Some(io_error) = error.as_io() {
+            return io_error.kind() == io::ErrorKind::NotFound;
+        }
+    }
+    false
+}
+
+#[cfg(feature = "sqlite")]
+#[allow(dead_code)]
+pub fn is_not_found<T: Debug>(result: Result<T>) -> bool {
+    if let Err(Error::QueryReturnedNoRows) = result {
+        return true;
+    }
+    false
 }

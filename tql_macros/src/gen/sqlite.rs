@@ -59,79 +59,81 @@ impl BackendGen for SqliteBackend {
     {
         let result_ident = Ident::from("result");
         let sql_query = &args.sql;
+        let rusqlite_ident = quote_spanned! { connection_expr.span() =>
+            ::rusqlite
+        };
 
         match args.query_type {
             QueryType::AggregateMulti => {
                 quote! {{
                     #aggregate_struct
 
-                    let mut #result_ident = #connection_expr.prepare(#sql_query);
-                    let mut #result_ident = #result_ident.expect("prepare query");
-                    let mut #result_ident = #result_ident.query_map(&#args_expr, |__tql_item_row| {
-                            #aggregate_expr
-                        });
-                    let mut #result_ident = #result_ident.expect("execute query")
-                        .map(|item| item.expect("item selection")); // TODO: do better error handling.
-                    #result_ident.collect::<Vec<_>>()
-                        // TODO: return an iterator instead of a vector.
+                    #connection_expr.prepare(#sql_query)
+                        .and_then(|mut #result_ident| {
+                            let #result_ident = #result_ident.query_map(&#args_expr, |__tql_item_row| {
+                                    #aggregate_expr
+                                })?;
+                            #result_ident.collect::<Result<Vec<_>, _>>()
+                                // TODO: return an iterator instead of a vector.
+                        })
                 }}
             },
             QueryType::AggregateOne => {
                 quote! {{
                     #aggregate_struct
 
-                    let mut #result_ident = #connection_expr.prepare(#sql_query)
-                        .expect("prepare query");
-                    let mut #result_ident = #result_ident.query_map(&#args_expr, |__tql_item_row| {
-                            #aggregate_expr
+                    #connection_expr.prepare(#sql_query)
+                        .and_then(|mut #result_ident| {
+                            #result_ident.query_map(&#args_expr, |__tql_item_row| {
+                                    #aggregate_expr
+                                })?
+                                .next()
+                                .ok_or_else(|| #rusqlite_ident::Error::QueryReturnedNoRows)?
                         })
-                        .expect("execute query")
-                        .next();
-                    #result_ident.map(|__tql_item| __tql_item.expect("next row")) // TODO: do better error handling.
                 }}
             },
             QueryType::Create => {
-                quote! {{
+                quote! {
                     #connection_expr.prepare(#sql_query)
                         .and_then(|mut result| result.execute(&[]))
-                }}
+                }
             },
             QueryType::InsertOne => {
-                quote! {{
+                quote! {
                     #connection_expr.prepare(#sql_query)
                         .and_then(|mut result| result.execute(&#args_expr))
                         .map(|_| #connection_expr.last_insert_rowid() as i32) // FIXME: don't cast?
-                }}
+                }
             },
             QueryType::SelectMulti => {
-                quote! {{
-                    let mut #result_ident = #connection_expr.prepare(#sql_query).expect("prepare query");
-                    let mut #result_ident = #result_ident.query_map(&#args_expr, |__tql_item_row| {
-                            #struct_expr
-                        });
-                    let mut #result_ident = #result_ident.expect("execute query")
-                        .map(|item| item.expect("item selection")); // TODO: do better error handling.
-                    #result_ident.collect::<Vec<_>>()
-                        // TODO: return an iterator instead of a vector.
-                }}
+                quote! {
+                    #connection_expr.prepare(#sql_query)
+                        .and_then(|mut #result_ident| {
+                            let #result_ident = #result_ident.query_map(&#args_expr, |__tql_item_row| {
+                                    #struct_expr
+                                })?;
+                            #result_ident.collect::<Result<Vec<_>, _>>()
+                            // TODO: return an iterator instead of a vector.
+                        })
+                }
             },
             QueryType::SelectOne => {
-                quote! {{
-                    let mut #result_ident = #connection_expr.prepare(#sql_query)
-                        .expect("prepare query");
-                    let mut #result_ident = #result_ident.query_map(&#args_expr, |__tql_item_row| {
-                            #struct_expr
+                quote! {
+                    #connection_expr.prepare(#sql_query)
+                        .and_then(|mut #result_ident| {
+                            #result_ident.query_map(&#args_expr, |__tql_item_row| {
+                                    #struct_expr
+                                })?
+                                .next()
+                                .ok_or_else(|| #rusqlite_ident::Error::QueryReturnedNoRows)?
                         })
-                        .expect("execute query")
-                        .next();
-                    #result_ident.map(|__tql_item| __tql_item.expect("next row"))
-                }}
+                }
             },
             QueryType::Exec => {
-                quote! {{
+                quote! {
                     #connection_expr.prepare(#sql_query)
                         .and_then(|mut result| result.execute(&#args_expr))
-                }}
+                }
             },
         }
     }

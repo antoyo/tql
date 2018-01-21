@@ -45,13 +45,13 @@ struct Table {
 
 fn main() {
     let connection = get_connection();
-    if let Some(aggregate) = sql!(Table.aggregate(average = avg(field2))) {
+    if let Ok(aggregate) = sql!(Table.aggregate(average = avg(field2))) {
         println!("{}", aggregate.averag);
         //~^ ERROR no field `averag` on type `main::Aggregate`
         //~| did you mean `average`?
     }
 
-    if let Some(aggregate) = sql!(Table.aggregate(average = avg(field2))) {
+    if let Ok(aggregate) = sql!(Table.aggregate(average = avg(field2))) {
         println!("{}", aggregate.average);
     }
 }

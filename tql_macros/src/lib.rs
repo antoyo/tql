@@ -20,13 +20,16 @@
  */
 
 /*
- * TODO: error for unsupported types in backends.
+ * TODO: write test for Option variable.
+ * TODO: ManyToMany.
+ * TODO: support the missing types
+ * (https://docs.rs/postgres/0.15.1/postgres/types/trait.ToSql.html).
  *
+ * TODO: error for unsupported types in backends.
  * TODO: remove useless empty string ("") in generated code (concat!("", "")).
  * TODO: avoid using quote_spanned and respan when possible and document all of their usage.
  * TODO: allow using a model from another module without #[macro_use].
  * TODO: write multi-crate test.
- * TODO: write test for Option variable.
  * TODO: show proper error instead of using expect() to parse the content of the macros.
  *
  * TODO: show a better error when using a type that is not a table (both in ForeignKey<_> and in
@@ -35,20 +38,12 @@
  * FIXME: error when having mutiple ForeignKey with the same table (then support having multiple
  * ForeignKey).
  * TODO: document the management of the connection.
- * TODO: improve the error handling of the generated code.
  * TODO: use as_ref() for Ident instead of &ident.to_string().
  * TODO: support recursive foreign key.
  * TODO: write fail tests for stable using include!().
  * TODO: try to hide Option in the mismatched type error message for ForeignKey.
  * TODO: use fully-qualified name everywhere in the query (aggregate, …).
- * TODO: check errors for joined tables.
- * TODO: for the tests of the other backend, create a new crate and include!() the _expr test files
- * and create a new test to check that all the files are included, so that the tests fail when we
- * forget to include!() a file.
  *
- * TODO: ManyToMany.
- * TODO: support the missing types
- * (https://docs.rs/postgres/0.15.1/postgres/types/trait.ToSql.html).
  * TODO: support other types (uuid, string) for the primary key, possibly by making it generic.
  * TODO: allow using other fields in filter(), update(), … like F() expressions in Django
  ** Table.filter(field1 > Table.field2) may not work.

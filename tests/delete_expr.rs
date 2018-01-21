@@ -34,7 +34,7 @@ backend_extern_crate!();
 use tql::PrimaryKey;
 use tql_macros::sql;
 
-use connection::get_connection;
+use connection::{get_connection, is_not_found};
 use teardown::TearDown;
 
 #[derive(SqlTable)]
@@ -58,7 +58,7 @@ fn test_delete() {
     let id = sql!(TableDeleteExpr.insert(field1 = "", field2 = 0)).unwrap();
 
     let table = sql!(TableDeleteExpr.get(id));
-    assert!(table.is_some());
+    assert!(table.is_ok());
 
     //assert_eq!(
         //"DELETE FROM TableDeleteExpr",
@@ -70,32 +70,32 @@ fn test_delete() {
     assert_eq!(1, num_deleted);
 
     let table = sql!(TableDeleteExpr.get(id));
-    assert!(table.is_none());
+    assert!(is_not_found(table));
 
     let id1 = sql!(TableDeleteExpr.insert(field1 = "", field2 = 1)).unwrap();
     let id2 = sql!(TableDeleteExpr.insert(field1 = "", field2 = 2)).unwrap();
     let id3 = sql!(TableDeleteExpr.insert(field1 = "", field2 = 3)).unwrap();
 
     let table = sql!(TableDeleteExpr.get(id1));
-    assert!(table.is_some());
+    assert!(table.is_ok());
 
     let table = sql!(TableDeleteExpr.get(id2));
-    assert!(table.is_some());
+    assert!(table.is_ok());
 
     let table = sql!(TableDeleteExpr.get(id3));
-    assert!(table.is_some());
+    assert!(table.is_ok());
 
     let num_deleted = sql!(TableDeleteExpr.filter(field2 < 5).delete()).unwrap();
     assert_eq!(3, num_deleted);
 
     let table = sql!(TableDeleteExpr.get(id1));
-    assert!(table.is_none());
+    assert!(is_not_found(table));
 
     let table = sql!(TableDeleteExpr.get(id2));
-    assert!(table.is_none());
+    assert!(is_not_found(table));
 
     let table = sql!(TableDeleteExpr.get(id3));
-    assert!(table.is_none());
+    assert!(is_not_found(table));
 
     let id = sql!(TableDeleteExpr.insert(field1 = "", field2 = 1)).unwrap();
 
@@ -103,11 +103,11 @@ fn test_delete() {
     assert_eq!(0, num_deleted);
 
     let table = sql!(TableDeleteExpr.get(id));
-    assert!(table.is_some());
+    assert!(table.is_ok());
 
     let num_deleted = sql!(TableDeleteExpr.get(id).delete()).unwrap();
     assert_eq!(1, num_deleted);
 
     let table = sql!(TableDeleteExpr.get(id));
-    assert!(table.is_none());
+    assert!(is_not_found(table));
 }
