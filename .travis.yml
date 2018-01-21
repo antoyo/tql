@@ -33,6 +33,7 @@ matrix:
               - cargo build --features chrono,pg
               - cargo build --features chrono,sqlite
               - cargo build --manifest-path examples/todo/Cargo.toml
+              - cargo build --example chat --features chrono,pg
               - cargo test --features chrono,pg
               - cargo test --features chrono,sqlite
               - cargo test --manifest-path tests/postgres-tests/Cargo.toml
