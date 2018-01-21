@@ -121,7 +121,7 @@ fn main() {
     let mut chain = Chain::new(chat);
     chain.link(persistent::Read::<AppDb>::both(pool));
     let mut handlebars = HandlebarsEngine::new();
-    handlebars.add(Box::new(DirectorySource::new("./examples/templates/", ".hbs")));
+    handlebars.add(Box::new(DirectorySource::new("./templates/", ".hbs")));
     // TODO: maybe load?
     if let Err(error) = handlebars.reload() {
         panic!("{}", error);
