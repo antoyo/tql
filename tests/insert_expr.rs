@@ -149,7 +149,6 @@ fn test_insert() {
     assert!(table.related_field.is_none());
     assert_eq!(Some(12), table.optional_field);
 
-    let boolean_value = true;
     //let character = 'a';
     #[cfg(feature = "postgres")]
     let float32 = 3.14f32;
@@ -157,13 +156,14 @@ fn test_insert() {
     //let int8 = 42i8;
     let int16 = 42i16;
     let int64 = 42i64;
+    let optional_bool = Some(true);
     #[cfg(feature = "postgres")]
     let id = sql!(TableInsertExpr.insert(
         field1 = new_field1,
         field2 = new_field2,
         related_field = related_field,
         optional_field = Some(12),
-        boolean = Some(boolean_value),
+        boolean = optional_bool,
         /*character = character,*/
         float32 = Some(float32),
         float64 = Some(float64),
@@ -177,7 +177,7 @@ fn test_insert() {
         field2 = new_field2,
         related_field = related_field,
         optional_field = Some(12),
-        boolean = Some(boolean_value),
+        boolean = optional_bool,
         /*character = character,*/
         float64 = Some(float64),
         /*int8 = int8,*/

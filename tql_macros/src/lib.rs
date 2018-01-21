@@ -20,7 +20,6 @@
  */
 
 /*
- * TODO: write test for Option variable.
  * TODO: return an iterator instead of a Vec.
  * TODO: ManyToMany.
  * TODO: support the missing types
