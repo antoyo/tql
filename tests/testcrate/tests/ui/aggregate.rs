@@ -48,4 +48,6 @@ fn main() {
 
     sql!(Table.values(test).aggregate(avg(i32_field)));
     //~^ ERROR attempted access of field `test` on type `Table`, but no field with that name was found
+
+    sql!(Table.values(i32_field).aggregate(average = avg(i32_field)).filter(average < 20));
 }

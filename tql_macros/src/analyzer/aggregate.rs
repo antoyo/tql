@@ -260,7 +260,7 @@ fn get_calls_from_aggregate_filter(filter: &AggregateFilterExpression) -> Vec<(S
             calls.extend(get_calls_from_aggregate_filter(&filters.operand1));
             calls.extend(get_calls_from_aggregate_filter(&filters.operand2));
         },
-        AggregateFilterExpression::FilterValue(_) => (), // FIXME: Not sure if we should add something.
+        AggregateFilterExpression::FilterValue(ref val) => (),
         AggregateFilterExpression::NegFilter(ref filter) =>
             calls.extend(get_calls_from_aggregate_filter(filter)),
         AggregateFilterExpression::NoFilters => (),
