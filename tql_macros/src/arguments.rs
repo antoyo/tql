@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ * Copyright (c) 2017-2018 Boucher, Antoni <bouanto@zoho.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -120,7 +120,6 @@ fn add_limit_arguments(limit: Limit, arguments: &mut Args, literals: &mut Args) 
         Limit::NoLimit => (),
         Limit::Range(expression1, expression2) => {
             let offset = expression1.clone();
-            add(arguments, literals, None, None, expression1);
             let expression = parse((quote! { #expression2 - #offset }).into())
                 .expect("Subtraction quoted expression");
             add_expr(arguments, literals, Arg {
@@ -128,6 +127,7 @@ fn add_limit_arguments(limit: Limit, arguments: &mut Args, literals: &mut Args) 
                 field_name: None,
                 field_name_prefix: None,
             });
+            add(arguments, literals, None, None, expression1);
         },
         Limit::StartRange(expression) => add(arguments, literals, None, None, expression),
     }
@@ -143,11 +143,11 @@ fn add_with_method(args: &mut Args, literals: &mut Args, expr: Expression)
     });
 }
 
-fn add_aggregate_filter_value_arguments(aggregate: &Aggregate, args: &mut Args, literals: &mut Args,
+fn add_aggregate_filter_value_arguments(_aggregate: &Aggregate, args: &mut Args, literals: &mut Args,
                                         expression: Option<Expression>)
 {
     if let Some(expr) = expression {
-        add(args, literals, aggregate.field.clone(), None, expr); // TODO: use the right type.
+        add(args, literals, None, None, expr);
     }
 }
 

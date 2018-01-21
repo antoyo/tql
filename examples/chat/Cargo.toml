@@ -1,0 +1,21 @@
+[package]
+name = "todo"
+version = "0.1.0"
+authors = ["Antoni Boucher <bouanto@zoho.com>"]
+
+[dependencies]
+chrono = "^0.4.0"
+handlebars-iron = "^0.26.0"
+iron = "^0.6.0"
+persistent = "^0.4.0"
+r2d2 = "^0.8.1"
+r2d2_postgres = "^0.14.0"
+serde = "^1.0.24"
+serde_derive = "^1.0.24"
+tql = { path = "../..", features = ["chrono", "pg"] }
+tql_macros = { path = "../../tql_macros" }
+urlencoded = "^0.6.0"
+
+[dependencies.postgres]
+features = ["with-chrono"]
+version = "^0.15.1"

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ * Copyright (c) 2017-2018 Boucher, Antoni <bouanto@zoho.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -30,13 +30,6 @@ use syn::{
     LitStr,
     parse,
 };
-
-pub fn usize_literal(num: usize) -> Expr {
-    Expr::Lit(ExprLit {
-        attrs: vec![],
-        lit: Lit::Int(LitInt::new(num as u64, IntSuffix::Usize, Span::call_site())),
-    })
-}
 
 pub fn number_literal(num: i64) -> Expr {
     let lit = Expr::Lit(ExprLit {

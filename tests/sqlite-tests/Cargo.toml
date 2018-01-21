@@ -1,0 +1,20 @@
+[package]
+authors = ["Antoni Boucher <bouanto@zoho.com>"]
+name = "sqlite-tests"
+version = "0.1.0"
+
+[dependencies]
+chrono = "^0.4.0"
+
+[dependencies.rusqlite]
+features = ["chrono"]
+version = "^0.13.0"
+
+[dependencies.tql]
+default-features = false
+features = ["chrono", "sqlite"]
+path = "../.."
+
+[dependencies.tql_macros]
+features = ["unstable"]
+path = "../../tql_macros"

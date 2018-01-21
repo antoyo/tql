@@ -1,0 +1,19 @@
+error[E0609]: no field `test` on type `Table`
+  --> $DIR/aggregate.rs:49:23
+   |
+49 |     sql!(Table.values(test).aggregate(avg(i32_field)));
+   |                       ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `field1`, `i32_field`
+
+error[E0308]: mismatched types
+  --> $DIR/aggregate.rs:52:87
+   |
+52 |     sql!(Table.values(i32_field).aggregate(average = avg(i32_field)).filter(average < 20));
+   |                                                                                       ^^ expected f64, found integral variable
+   |
+   = note: expected type `f64`
+              found type `{integer}`
+
+error: aborting due to 2 previous errors
+

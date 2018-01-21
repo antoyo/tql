@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ * Copyright (c) 2017-2018 Boucher, Antoni <bouanto@zoho.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -21,17 +21,20 @@
 
 #![feature(proc_macro)]
 
-extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
+#[macro_use]
+mod connection;
 mod teardown;
 
-use postgres::{Connection, TlsMode};
+backend_extern_crate!();
+
 use tql::PrimaryKey;
 use tql_macros::sql;
 
+use connection::get_connection;
 use teardown::TearDown;
 
 #[derive(SqlTable)]
@@ -40,10 +43,6 @@ struct TableDeleteExpr {
     id: PrimaryKey,
     field1: String,
     field2: i32,
-}
-
-fn get_connection() -> Connection {
-    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
 }
 
 #[test]

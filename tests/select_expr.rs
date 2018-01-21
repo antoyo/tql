@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ * Copyright (c) 2017-2018 Boucher, Antoni <bouanto@zoho.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -30,19 +30,22 @@ macro_rules! let_vec {
 use std::str::FromStr;
 
 extern crate chrono;
-extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
+#[macro_use]
+mod connection;
+mod teardown;
+
+backend_extern_crate!();
+
 use chrono::DateTime;
 use chrono::offset::Utc;
-use postgres::{Connection, TlsMode};
 use tql::{ForeignKey, PrimaryKey};
 use tql_macros::sql;
 
-mod teardown;
-
+use connection::get_connection;
 use teardown::TearDown;
 
 #[derive(SqlTable)]
@@ -90,10 +93,6 @@ struct Table4 {
     id: PrimaryKey,
     field1: i32,
     field2: i32,
-}
-
-fn get_connection() -> Connection {
-    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
 }
 
 #[test]
@@ -269,7 +268,8 @@ fn test_select() {
     assert_eq!(id5, table5.id);
 
     // NOTE: the hour is 20 instead of 15 because of the timezone.
-    let mut tables = sql!(TableSelectExpr.filter(datetime.year() == 2015 && datetime.month() == 11 && datetime.day() == 16 && datetime.hour() == 20 && datetime.minute() == 51 && datetime.second() > 0));
+    let mut tables = sql!(TableSelectExpr.filter(datetime.year() == 2015 && datetime.month() == 11 &&
+        datetime.day() == 16 && datetime.hour() == 20 && datetime.minute() == 51 && datetime.second() > 0));
     assert_eq!(1, tables.len());
     let_vec!(table1 = tables);
     assert_eq!(id4, table1.id);
@@ -327,13 +327,16 @@ fn test_select() {
     assert_eq!(id4, table4.id);
     assert_eq!(id5, table5.id);
 
-    let mut tables = sql!(TableSelectExpr.filter(field1.regex("%3")));
-    assert_eq!(1, tables.len());
-    let_vec!(table1 = tables);
-    assert_eq!(id3, table1.id);
+    #[cfg(feature = "postgres")]
+    {
+        let mut tables = sql!(TableSelectExpr.filter(field1.regex("%3")));
+        assert_eq!(1, tables.len());
+        let_vec!(table1 = tables);
+        assert_eq!(id3, table1.id);
 
-    let tables = sql!(TableSelectExpr.filter(field1.regex("%E3")));
-    assert_eq!(0, tables.len());
+        let tables = sql!(TableSelectExpr.filter(field1.regex("%E3")));
+        assert_eq!(0, tables.len());
+    }
 
     let mut tables = sql!(TableSelectExpr.filter(field1.iregex("%E3")));
     assert_eq!(1, tables.len());

@@ -22,21 +22,20 @@
 use tql::{ForeignKey, PrimaryKey};
 
 #[derive(SqlTable)]
-pub struct TableInsertExpr {
+pub struct TableModuleExpr {
     pub primary_key: PrimaryKey,
     pub field1: String,
     pub field2: i32,
-    pub related_field: ForeignKey<RelatedTableInsertExpr>,
+    pub related_field: ForeignKey<RelatedTableModuleExpr>,
     pub optional_field: Option<i32>,
     pub boolean: Option<bool>,
-    pub float32: Option<f32>,
     pub float64: Option<f64>,
     pub int16: Option<i16>,
     pub int64: Option<i64>,
 }
 
 #[derive(SqlTable)]
-pub struct RelatedTableInsertExpr {
+pub struct RelatedTableModuleExpr {
     pub primary_key: PrimaryKey,
     pub field1: i32,
 }

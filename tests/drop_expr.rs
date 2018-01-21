@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ * Copyright (c) 2017-2018 Boucher, Antoni <bouanto@zoho.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -21,18 +21,22 @@
 
 #![feature(proc_macro)]
 
-extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
-use postgres::{Connection, TlsMode};
+#[cfg(feature = "postgres")]
 use postgres::error::UNDEFINED_TABLE;
 use tql::PrimaryKey;
 use tql_macros::sql;
 
+#[macro_use]
+mod connection;
 mod teardown;
 
+backend_extern_crate!();
+
+use connection::get_connection;
 use teardown::TearDown;
 
 #[derive(SqlTable)]
@@ -41,10 +45,6 @@ struct TableDropExpr {
     primary_key: PrimaryKey,
     field1: String,
     field2: i32,
-}
-
-fn get_connection() -> Connection {
-    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
 }
 
 #[test]
@@ -64,7 +64,12 @@ fn test_drop() {
 
     let result = sql!(TableDropExpr.insert(field1 = "value1", field2 = 55));
     match result {
-        Err(db_error) => assert_eq!(Some(&UNDEFINED_TABLE), db_error.code()),
+        Err(db_error) => {
+            #[cfg(feature = "postgres")]
+            assert_eq!(Some(&UNDEFINED_TABLE), db_error.code());
+            #[cfg(feature = "sqlite")]
+            assert_eq!(db_error.to_string(), "no such table: TableDropExpr");
+        },
         Ok(_) => assert!(false),
     }
 }

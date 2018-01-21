@@ -30,9 +30,18 @@ matrix:
               - cargo build --manifest-path examples/todo-stable/Cargo.toml
         - rust: nightly
           script:
-              - cargo build
-              - cargo test --features chrono,postgres
-              - cargo test --features tql/postgres,tql/chrono --manifest-path testcrate/Cargo.toml
+              - cargo build --features chrono,pg
+              - cargo build --features chrono,sqlite
+              - cargo build --manifest-path examples/todo/Cargo.toml
+              - cargo build --manifest-path examples/chat/Cargo.toml
+              - cargo test --features chrono,pg
+              - cargo test --features chrono,sqlite
+              - cargo test --manifest-path tests/postgres-tests/Cargo.toml
+              - cargo test --manifest-path tests/sqlite-tests/Cargo.toml
+              - cargo test --features pg --manifest-path tests/testcrate/Cargo.toml
+              - cargo clean --manifest-path tests/testcrate/Cargo.toml
+              - cargo test --features sqlite --manifest-path tests/testcrate/Cargo.toml
+              - cargo test --manifest-path tests/sqlite-ui-tests/Cargo.toml
           env: RUSTFLAGS="--cfg procmacro2_semver_exempt"
     allow_failures:
         - rust: beta

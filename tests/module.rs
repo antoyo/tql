@@ -21,59 +21,65 @@
 
 #![feature(proc_macro)]
 
-extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
-use postgres::{Connection, TlsMode};
-use postgres::error::UNDEFINED_TABLE;
-use tql_macros::sql;
-
+#[macro_use]
+mod connection;
 #[macro_use]
 mod models;
 mod teardown;
 
-use models::{TableInsertExpr, RelatedTableInsertExpr};
-use teardown::TearDown;
+backend_extern_crate!();
 
-fn get_connection() -> Connection {
-    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
-}
+use connection::get_connection;
+
+#[cfg(feature = "postgres")]
+use postgres::error::UNDEFINED_TABLE;
+use tql_macros::sql;
+
+use models::{TableModuleExpr, RelatedTableModuleExpr};
+use teardown::TearDown;
 
 #[test]
 fn test_insert() {
     let connection = get_connection();
 
     let _teardown = TearDown::new(|| {
-        let _ = sql!(TableInsertExpr.drop());
-        let _ = sql!(RelatedTableInsertExpr.drop());
+        let _ = sql!(TableModuleExpr.drop());
+        let _ = sql!(RelatedTableModuleExpr.drop());
     });
 
-    let _ = sql!(RelatedTableInsertExpr.create());
-    let _ = sql!(TableInsertExpr.drop());
+    let _ = sql!(RelatedTableModuleExpr.create());
+    let _ = sql!(TableModuleExpr.drop());
 
-    let related_id = sql!(RelatedTableInsertExpr.insert(field1 = 42)).unwrap();
-    let related_field = sql!(RelatedTableInsertExpr.get(related_id)).unwrap();
+    let related_id = sql!(RelatedTableModuleExpr.insert(field1 = 42)).unwrap();
+    let related_field = sql!(RelatedTableModuleExpr.get(related_id)).unwrap();
 
-    let result = sql!(TableInsertExpr.insert(field1 = "value1", field2 = 55, related_field = related_field));
+    let result = sql!(TableModuleExpr.insert(field1 = "value1", field2 = 55, related_field = related_field));
     match result {
-        Err(db_error) => assert_eq!(Some(&UNDEFINED_TABLE), db_error.code()),
+        Err(db_error) => {
+            #[cfg(feature = "postgres")]
+            assert_eq!(Some(&UNDEFINED_TABLE), db_error.code());
+            #[cfg(feature = "sqlite")]
+            assert_eq!(db_error.to_string(), "no such table: TableModuleExpr");
+        },
         Ok(_) => assert!(false),
     }
 
-    let _ = sql!(TableInsertExpr.create());
+    let _ = sql!(TableModuleExpr.create());
 
-    let id = sql!(TableInsertExpr.insert(field1 = "value1", field2 = 55, related_field = related_field)).unwrap();
+    let id = sql!(TableModuleExpr.insert(field1 = "value1", field2 = 55, related_field = related_field)).unwrap();
     assert_eq!(1, id);
 
-    let table = sql!(TableInsertExpr.get(id)).unwrap();
+    let table = sql!(TableModuleExpr.get(id)).unwrap();
     assert_eq!("value1", table.field1);
     assert_eq!(55, table.field2);
     assert!(table.related_field.is_none());
     assert!(table.optional_field.is_none());
 
-    let table = sql!(TableInsertExpr.get(id).join(related_field)).unwrap();
+    let table = sql!(TableModuleExpr.get(id).join(related_field)).unwrap();
     assert_eq!("value1", table.field1);
     assert_eq!(55, table.field2);
     let related_table = table.related_field.unwrap();
@@ -82,10 +88,10 @@ fn test_insert() {
     assert!(table.optional_field.is_none());
 
     let new_field2 = 42;
-    let id = sql!(TableInsertExpr.insert(field1 = "value2", field2 = new_field2, related_field = related_field)).unwrap();
+    let id = sql!(TableModuleExpr.insert(field1 = "value2", field2 = new_field2, related_field = related_field)).unwrap();
     assert_eq!(2, id);
 
-    let table = sql!(TableInsertExpr.get(id)).unwrap();
+    let table = sql!(TableModuleExpr.get(id)).unwrap();
     assert_eq!("value2", table.field1);
     assert_eq!(42, table.field2);
     assert!(table.related_field.is_none());
@@ -93,7 +99,7 @@ fn test_insert() {
 
     let new_field1 = "value3".to_string();
     let new_field2 = 24;
-    let id = sql!(TableInsertExpr.insert(
+    let id = sql!(TableModuleExpr.insert(
         field1 = new_field1,
         field2 = new_field2,
         related_field = related_field,
@@ -101,7 +107,7 @@ fn test_insert() {
     )).unwrap();
     assert_eq!(3, id);
 
-    let table = sql!(TableInsertExpr.get(id)).unwrap();
+    let table = sql!(TableModuleExpr.get(id)).unwrap();
     assert_eq!("value3", table.field1);
     assert_eq!(24, table.field2);
     assert!(table.related_field.is_none());
@@ -109,19 +115,17 @@ fn test_insert() {
 
     let boolean_value = true;
     //let character = 'a';
-    let float32 = 3.14f32;
     let float64 = 3.14f64;
     //let int8 = 42i8;
     let int16 = 42i16;
     let int64 = 42i64;
-    let id = sql!(TableInsertExpr.insert(
+    let id = sql!(TableModuleExpr.insert(
         field1 = new_field1,
         field2 = new_field2,
         related_field = related_field,
         optional_field = Some(12),
         boolean = Some(boolean_value),
         /*character = character,*/
-        float32 = Some(float32),
         float64 = Some(float64),
         /*int8 = int8,*/
         int16 = Some(int16),

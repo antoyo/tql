@@ -21,4 +21,6 @@ version = "0.12"
 proc-macro = true
 
 [features]
+postgres = []
+rusqlite = []
 unstable = ["proc-macro2/nightly"]

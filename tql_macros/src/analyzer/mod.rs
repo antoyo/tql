@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ * Copyright (c) 2017-2018 Boucher, Antoni <bouanto@zoho.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -26,6 +26,7 @@ mod assignment;
 mod filter;
 mod get;
 mod insert;
+mod method;
 mod join;
 mod limit;
 mod sort;
@@ -61,7 +62,7 @@ use error::{Error, Result, res};
 use parser::{MethodCall, MethodCalls};
 use plugin::number_literal;
 use self::aggregate::{argument_to_aggregate, argument_to_group, expression_to_aggregate_filter_expression};
-pub use self::aggregate::get_values_idents;
+pub use self::aggregate::{get_aggregate_calls, get_values_idents};
 use self::assignment::argument_to_assignment;
 use self::filter::{analyze_filter_types, expression_to_filter_expression};
 pub use self::filter::get_method_calls;
@@ -73,6 +74,7 @@ pub use self::insert::get_insert_position;
 use self::join::argument_to_join;
 use self::limit::{analyze_limit_types, argument_to_limit};
 pub use self::limit::get_limit_args;
+pub use self::method::analyze_methods;
 use self::sort::argument_to_order;
 pub use self::sort::get_sort_idents;
 use string::{find_near, plural_verb};
@@ -579,24 +581,3 @@ fn try<F: FnMut(T), T>(mut result: result::Result<T, Vec<Error>>, errors: &mut V
         Err(ref mut errs) => errors.append(errs),
     }
 }
-
-/*
-/// Add an error to the vector `errors` about an unknown SQL table.
-/// It suggests a similar name if there is one.
-pub fn unknown_table_error(table_name: &str, position: Span, sql_tables: &SqlTables, errors: &mut Vec<Error>) {
-    let mut error = Error::new_with_code(
-        &format!("`{table}` does not name an SQL table",
-                 table = table_name
-        ),
-        position,
-        "E0422",
-    );
-    let tables = sql_tables.keys().map(String::as_ref);
-    if !propose_similar_name(&table_name, tables, &mut error) {
-        error.add_help(
-            &format!("did you forget to add the #[derive(SqlTable)] attribute on the {} struct?", table_name),
-        );
-    }
-    errors.push(error);
-}
-*/

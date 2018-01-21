@@ -1,0 +1,14 @@
+[package]
+name = "sqlite-ui-tests"
+version = "0.1.0"
+authors = ["Antoni Boucher <bouanto@zoho.com>"]
+
+[dependencies.tql]
+features = ["chrono"]
+path = "../.."
+
+[dev-dependencies]
+compiletest_rs = "^0.3.3"
+
+[features]
+default = ["tql/sqlite"]

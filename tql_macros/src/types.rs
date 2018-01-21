@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ * Copyright (c) 2017-2018 Boucher, Antoni <bouanto@zoho.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -21,7 +21,6 @@
 
 use std::fmt::{self, Display, Formatter};
 
-use proc_macro2::Span;
 use quote::Tokens;
 use syn::{
     self,
@@ -30,7 +29,6 @@ use syn::{
     ExprLit,
     FloatSuffix,
     GenericArgument,
-    Ident,
     IntSuffix,
     Lit,
     Path,
@@ -39,7 +37,7 @@ use syn::{
 };
 
 use ast::Expression;
-use plugin::string_literal;
+use sql;
 
 /// A field type.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -97,56 +95,7 @@ impl Display for Type {
 
 /// Convert a `Type` to its SQL representation.
 pub fn type_to_sql(typ: &Type) -> Tokens {
-    _type_to_sql(typ, false)
-}
-
-fn _type_to_sql(typ: &Type, nullable: bool) -> Tokens {
-    let sql_type =
-        match *typ {
-            Type::Bool => "BOOLEAN",
-            Type::ByteString => "BYTEA",
-            Type::I8 | Type::Char => "CHARACTER(1)",
-            Type::Custom(ref related_table_name) => {
-                let pk_macro_name = Ident::new(&format!("tql_{}_primary_key_field", related_table_name),
-                    Span::call_site());
-                return quote! {
-                    "INTEGER REFERENCES ", #related_table_name, "(", #pk_macro_name!(), ") NOT NULL"
-                };
-                // NOTE: if the field type is not an SQL table, an error is thrown.
-            },
-            Type::F32 => "REAL",
-            Type::F64 => "DOUBLE PRECISION",
-            Type::Generic => "", // TODO: document why this is empty.
-            Type::I16 => "SMALLINT",
-            Type::I32 => "INTEGER",
-            Type::I64 => "BIGINT",
-            Type::LocalDateTime => "TIMESTAMP WITH TIME ZONE",
-            Type::NaiveDate => "DATE",
-            Type::NaiveDateTime => "TIMESTAMP",
-            Type::NaiveTime => "TIME",
-            Type::Nullable(ref typ) => {
-                let sql = _type_to_sql(&*typ, true);
-                return quote! {
-                    #sql
-                };
-            },
-            Type::Serial => "SERIAL PRIMARY KEY",
-            Type::String => "CHARACTER VARYING",
-            Type::UnsupportedType(_) => "", // TODO: should panic. TODO: document why.
-            Type::UtcDateTime => "TIMESTAMP WITH TIME ZONE",
-        };
-
-    let expr = string_literal(sql_type);
-    if nullable {
-        quote! {
-            #expr
-        }
-    }
-    else {
-        quote! {
-            #expr, " NOT NULL"
-        }
-    }
+    sql::type_to_sql(typ, false)
 }
 
 impl PartialEq<Expression> for Type {

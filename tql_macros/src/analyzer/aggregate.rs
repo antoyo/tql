@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ * Copyright (c) 2017-2018 Boucher, Antoni <bouanto@zoho.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -62,16 +62,17 @@ pub fn argument_to_aggregate(arg: &Expression) -> Result<Aggregate> {
 
     if let Expr::Call(ref call) = *call {
         if let Some(identifier) = path_expr_to_string(&call.func, &mut errors) {
+            aggregate.function = identifier.to_string();
             if let Some(sql_function) = aggregates.get(&identifier) {
-                aggregate.function = sql_function.clone();
+                aggregate.sql_function = sql_function.clone();
             }
             else {
                 let mut error = Error::new_with_code(
                     &format!("unresolved name `{}`", identifier),
-                    // NOTE: we only want the position of the function name, not the parenthesis
-                    // and the arguments, hence, we only fetch the position of the first token.
-                    first_token_span(arg),
-                    "E0425",
+                        // NOTE: we only want the position of the function name, not the parenthesis
+                        // and the arguments, hence, we only fetch the position of the first token.
+                        first_token_span(arg),
+                        "E0425",
                 );
                 propose_similar_name(&identifier, aggregates.keys().map(String::as_ref), &mut error);
                 errors.push(error);
@@ -85,7 +86,7 @@ pub fn argument_to_aggregate(arg: &Expression) -> Result<Aggregate> {
 
                 if aggregate.result_name.is_none() {
                     let result_name = aggregate.field.expect("Aggregate identifier").to_string() + "_" +
-                        &aggregate.function.to_lowercase();
+                        &aggregate.sql_function.to_lowercase();
                     let mut ident = new_ident(&result_name);
                     // NOTE: violate the hygiene by assigning a known context to this new
                     // identifier.
@@ -240,4 +241,31 @@ pub fn get_values_idents(query: &Query) -> Vec<Ident> {
         }
     }
     idents
+}
+
+/// Get the aggregate function calls to typecheck the query.
+pub fn get_aggregate_calls(query: &Query) -> Vec<(String, Expr)> {
+    if let Query::Aggregate { ref aggregate_filter, ..} = *query {
+        return get_calls_from_aggregate_filter(aggregate_filter);
+    }
+    vec![]
+}
+
+fn get_calls_from_aggregate_filter(filter: &AggregateFilterExpression) -> Vec<(String, Expr)> {
+    let mut calls = vec![];
+    match *filter {
+        AggregateFilterExpression::Filter(ref filter) =>
+            calls.push((filter.operand1.function.clone(), filter.operand2.clone())),
+        AggregateFilterExpression::Filters(ref filters) => {
+            calls.extend(get_calls_from_aggregate_filter(&filters.operand1));
+            calls.extend(get_calls_from_aggregate_filter(&filters.operand2));
+        },
+        AggregateFilterExpression::FilterValue(_) => (),
+        AggregateFilterExpression::NegFilter(ref filter) =>
+            calls.extend(get_calls_from_aggregate_filter(filter)),
+        AggregateFilterExpression::NoFilters => (),
+        AggregateFilterExpression::ParenFilter(ref filter) =>
+            calls.extend(get_calls_from_aggregate_filter(filter)),
+    }
+    calls
 }

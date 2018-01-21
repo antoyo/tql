@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Boucher, Antoni <bouanto@zoho.com>
+ * Copyright (c) 2017-2018 Boucher, Antoni <bouanto@zoho.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -27,13 +27,15 @@ use types::Type;
 /// Add a new `method` on `object_type` of type `argument_types` -> `return_type`.
 /// The template is the resulting SQL with `$0` as a placeholder for `self` and `$1`, `$2`, … as
 /// placeholders for the arguments.
-pub fn add_method(object_type: &Type, return_type: Type, argument_types: Vec<Type>, method: &str, template: &str) {
+pub fn add_method<'a, T: Into<Option<&'a str>>>(object_type: &Type, return_type: Type, argument_types: Vec<Type>,
+                                                method: &str, template: T)
+{
     let methods = methods_singleton();
     methods.insert(method.to_string(), SqlMethodTypes {
         argument_types,
         object_type: object_type.clone(),
         return_type,
-        template: template.to_string(),
+        template: template.into().map(ToString::to_string),
     });
 }
 
@@ -53,35 +55,56 @@ pub fn add_initial_methods() {
     // Date methods.
     let date_types = [Type::LocalDateTime, Type::NaiveDate, Type::NaiveDateTime, Type::UtcDateTime];
     for date_type in &date_types {
-        // TODO: put this code in the gen module.
+        #[cfg(feature = "postgres")]
         add_method(date_type, Type::I32, vec![], "year", "EXTRACT(YEAR FROM $0)");
+        #[cfg(feature = "rusqlite")]
+        add_method(date_type, Type::I32, vec![], "year", "CAST(STRFTIME('%Y', $0) AS INT)");
+
+        #[cfg(feature = "postgres")]
         add_method(date_type, Type::I32, vec![], "month", "EXTRACT(MONTH FROM $0)"); // TODO: use the U32 type.
+        #[cfg(feature = "rusqlite")]
+        add_method(date_type, Type::I32, vec![], "month", "CAST(STRFTIME('%m', $0) AS INT)"); // TODO: use the U32 type.
+
+        #[cfg(feature = "postgres")]
         add_method(date_type, Type::I32, vec![], "day", "EXTRACT(DAY FROM $0)");
+        #[cfg(feature = "rusqlite")]
+        add_method(date_type, Type::I32, vec![], "day", "CAST(STRFTIME('%d', $0) AS INT)");
     }
 
     // Time methods.
     let time_types = [Type::LocalDateTime, Type::NaiveDateTime, Type::NaiveTime, Type::UtcDateTime];
     for time_type in &time_types {
+        #[cfg(feature = "postgres")]
         add_method(time_type, Type::I32, vec![], "hour", "EXTRACT(HOUR FROM $0)");
-        add_method(time_type, Type::I32, vec![], "minute", "EXTRACT(MINUTE FROM $0)");
-        add_method(time_type, Type::I32, vec![], "second", "EXTRACT(SECOND FROM $0)");
-    }
+        #[cfg(feature = "rusqlite")]
+        add_method(time_type, Type::I32, vec![], "hour", "CAST(STRFTIME('%H', $0) AS INT)");
 
-    // TODO: perhaps create a macro to ease the method creation.
-    // For instance :
-    // add_method!(impl Type::String {
-    //     fn contains(Type::String) -> Type::Bool {
-    //         "$0 LIKE '%' || $1 || '%'"
-    //     }
-    // });
+        #[cfg(feature = "postgres")]
+        add_method(time_type, Type::I32, vec![], "minute", "EXTRACT(MINUTE FROM $0)");
+        #[cfg(feature = "rusqlite")]
+        add_method(time_type, Type::I32, vec![], "minute", "CAST(STRFTIME('%M', $0) AS INT)");
+
+        #[cfg(feature = "postgres")]
+        add_method(time_type, Type::I32, vec![], "second", "EXTRACT(SECOND FROM $0)");
+        #[cfg(feature = "rusqlite")]
+        add_method(time_type, Type::I32, vec![], "second", "CAST(STRFTIME('%S', $0) AS INT)");
+    }
 
     // String methods.
     add_method(&Type::String, Type::Bool, vec![Type::String], "contains", "$0 LIKE '%' || $1 || '%'");
     add_method(&Type::String, Type::Bool, vec![Type::String], "ends_with", "$0 LIKE '%' || $1");
     add_method(&Type::String, Type::Bool, vec![Type::String], "starts_with", "$0 LIKE $1 || '%'");
-    add_method(&Type::String, Type::I32, vec![], "len", "CHAR_LENGTH($0)");
+    add_method(&Type::String, Type::I32, vec![], "len", "LENGTH($0)");
+
+    #[cfg(feature = "postgres")]
     add_method(&Type::String, Type::Bool, vec![Type::String], "regex", "$0 LIKE $1");
+    #[cfg(feature = "rusqlite")]
+    add_method(&Type::String, Type::Bool, vec![Type::String], "regex", None);
+
+    #[cfg(feature = "postgres")]
     add_method(&Type::String, Type::Bool, vec![Type::String], "iregex", "$0 ILIKE $1");
+    #[cfg(feature = "rusqlite")]
+    add_method(&Type::String, Type::Bool, vec![Type::String], "iregex", "$0 LIKE $1");
 
     // Option methods.
     add_method(&Type::Nullable(Box::new(Type::Generic)), Type::Bool, vec![], "is_some", "$0 IS NOT NULL");
