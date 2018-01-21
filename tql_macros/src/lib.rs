@@ -21,6 +21,7 @@
 
 /*
  * TODO: write test for Option variable.
+ * TODO: return an iterator instead of a Vec.
  * TODO: ManyToMany.
  * TODO: support the missing types
  * (https://docs.rs/postgres/0.15.1/postgres/types/trait.ToSql.html).
