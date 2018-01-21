@@ -45,7 +45,6 @@ use ast::{
     FilterExpression,
     Filters,
     FilterValue,
-    Identifier,
     Join,
     Limit,
     LogicalOperator,
@@ -274,7 +273,7 @@ fn joined_fields(joins: &[Join], table: &str) -> Tokens {
     }
 }
 
-impl ToSql for Identifier {
+impl ToSql for String {
     fn to_sql(&self, _index: &mut usize) -> String {
         self.clone()
     }

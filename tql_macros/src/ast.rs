@@ -29,14 +29,13 @@ use syn::{Expr, Ident};
 
 pub type Expression = Expr;
 pub type Groups = Vec<Ident>;
-pub type Identifier = String;
 
 /// `Aggregate` for use in SQL Aggregate `Query`.
 #[derive(Clone, Debug, Default)]
 pub struct Aggregate {
     pub field: Option<Ident>,
     pub function: String,
-    pub sql_function: Identifier,
+    pub sql_function: String,
     pub result_name: Option<Ident>,
 }
 
@@ -166,7 +165,7 @@ pub enum FilterValue {
 #[derive(Clone, Debug)]
 pub struct Join {
     pub base_field: Ident,
-    pub base_table: Identifier,
+    pub base_table: String,
 }
 
 /// An SQL LIMIT clause.
@@ -239,22 +238,22 @@ pub enum Query {
         filter: FilterExpression,
         groups: Groups,
         joins: Vec<Join>,
-        table: Identifier,
+        table: String,
     },
     CreateTable {
-        table: Identifier,
+        table: String,
     },
     Delete {
         filter: FilterExpression,
-        table: Identifier,
+        table: String,
         use_pk: bool,
     },
     Drop {
-        table: Identifier,
+        table: String,
     },
     Insert {
         assignments: Vec<Assignment>,
-        table: Identifier,
+        table: String,
     },
     Select {
         filter: FilterExpression,
@@ -262,13 +261,13 @@ pub enum Query {
         joins: Vec<Join>,
         limit: Limit,
         order: Vec<Order>,
-        table: Identifier,
+        table: String,
         use_pk: bool,
     },
     Update {
         assignments: Vec<Assignment>,
         filter: FilterExpression,
-        table: Identifier,
+        table: String,
         use_pk: bool,
     },
 }
@@ -287,7 +286,7 @@ pub enum QueryType {
 /// An SQL field with its type.
 #[derive(Debug)]
 pub struct TypedField {
-    pub identifier: Identifier,
+    pub identifier: String,
     pub typ: Tokens,
 }
 
