@@ -45,7 +45,7 @@ use chrono::offset::Utc;
 use tql::{ForeignKey, PrimaryKey};
 use tql_macros::sql;
 
-use connection::get_connection;
+use connection::{get_connection, is_not_found};
 use teardown::TearDown;
 
 #[derive(SqlTable)]
@@ -129,13 +129,16 @@ fn test_select() {
         datetime = datetime2,
     )).unwrap();
     let new_field2 = 42;
-    let id2 = sql!(TableSelectExpr.insert(field1 = "value2", field2 = new_field2, related_field = related_field, datetime = datetime2)).unwrap();
-    let id3 = sql!(TableSelectExpr.insert(field1 = "value3", field2 = 12, related_field = related_field2, datetime = datetime2)).unwrap();
+    let id2 = sql!(TableSelectExpr.insert(field1 = "value2", field2 = new_field2, related_field = related_field,
+                                          datetime = datetime2)).unwrap();
+    let id3 = sql!(TableSelectExpr.insert(field1 = "value3", field2 = 12, related_field = related_field2,
+                                          datetime = datetime2)).unwrap();
     let id4 = sql!(TableSelectExpr.insert(field1 = "value4", field2 = 22, related_field = related_field2,
                                           optional_field = Some(42), datetime = datetime)).unwrap();
-    let id5 = sql!(TableSelectExpr.insert(field1 = "value5", field2 = 134, related_field = related_field2, datetime = datetime2)).unwrap();
+    let id5 = sql!(TableSelectExpr.insert(field1 = "value5", field2 = 134, related_field = related_field2,
+                                          datetime = datetime2)).unwrap();
 
-    let mut tables = sql!(TableSelectExpr.all());
+    let mut tables = sql!(TableSelectExpr.all()).unwrap();
     assert_eq!(5, tables.len());
     let_vec!(table1, table2, table3, table4, table5 = tables);
     assert_eq!(id1, table1.id);
@@ -154,13 +157,13 @@ fn test_select() {
     assert_eq!("value5", table5.field1);
     assert_eq!(134, table5.field2);
 
-    let mut tables = sql!(TableSelectExpr.filter(field1 == "value1"));
+    let mut tables = sql!(TableSelectExpr.filter(field1 == "value1")).unwrap();
     assert_eq!(1, tables.len());
     let_vec!(table1 = tables);
     assert_eq!("value1", table1.field1);
     assert_eq!(55, table1.field2);
 
-    let mut tables = sql!(TableSelectExpr.filter(field2 >= 42 || field1 == "te'\"\\st"));
+    let mut tables = sql!(TableSelectExpr.filter(field2 >= 42 || field1 == "te'\"\\st")).unwrap();
     assert_eq!(3, tables.len());
     let_vec!(table1, table2, table3 = tables);
     assert_eq!("value1", table1.field1);
@@ -171,13 +174,13 @@ fn test_select() {
     assert_eq!(134, table3.field2);
 
     let value = 42;
-    let mut tables = sql!(TableSelectExpr.filter(field2 == value));
+    let mut tables = sql!(TableSelectExpr.filter(field2 == value)).unwrap();
     assert_eq!(1, tables.len());
     let_vec!(table1 = tables);
     assert_eq!("value2", table1.field1);
     assert_eq!(42, table1.field2);
 
-    let mut tables = sql!(TableSelectExpr.filter(field2 > value));
+    let mut tables = sql!(TableSelectExpr.filter(field2 > value)).unwrap();
     assert_eq!(2, tables.len());
     let_vec!(table1, table2 = tables);
     assert_eq!("value1", table1.field1);
@@ -186,46 +189,46 @@ fn test_select() {
     assert_eq!(134, table2.field2);
 
     let value2 = "value1";
-    let mut tables = sql!(TableSelectExpr.filter(field2 > value && field1 == value2));
+    let mut tables = sql!(TableSelectExpr.filter(field2 > value && field1 == value2)).unwrap();
     assert_eq!(1, tables.len());
     let_vec!(table1 = tables);
     assert_eq!("value1", table1.field1);
     assert_eq!(55, table1.field2);
 
     let value2 = "value2";
-    let tables = sql!(TableSelectExpr.filter(field2 > value && field1 == value2));
+    let tables = sql!(TableSelectExpr.filter(field2 > value && field1 == value2)).unwrap();
     assert_eq!(0, tables.len());
 
-    let mut tables = sql!(TableSelectExpr.filter(related_field == related_field));
+    let mut tables = sql!(TableSelectExpr.filter(related_field == related_field)).unwrap();
     assert_eq!(2, tables.len());
     let_vec!(table1, table2 = tables);
     assert_eq!(id1, table1.id);
     assert_eq!(id2, table2.id);
 
-    let mut tables = sql!(TableSelectExpr.filter(related_field == related_field2));
+    let mut tables = sql!(TableSelectExpr.filter(related_field == related_field2)).unwrap();
     assert_eq!(3, tables.len());
     let_vec!(table1, table2, table3 = tables);
     assert_eq!(id3, table1.id);
     assert_eq!(id4, table2.id);
     assert_eq!(id5, table3.id);
 
-    let mut tables = sql!(TableSelectExpr.filter(field1 == "value2" || field2 < 100 && field1 == "value1"));
+    let mut tables = sql!(TableSelectExpr.filter(field1 == "value2" || field2 < 100 && field1 == "value1")).unwrap();
     assert_eq!(2, tables.len());
     let_vec!(table1, table2 = tables);
     assert_eq!(id1, table1.id);
     assert_eq!(id2, table2.id);
 
-    let mut tables = sql!(TableSelectExpr.filter((field1 == "value2" || field2 < 100) && field1 == "value1"));
+    let mut tables = sql!(TableSelectExpr.filter((field1 == "value2" || field2 < 100) && field1 == "value1")).unwrap();
     assert_eq!(1, tables.len());
     let_vec!(table1 = tables);
     assert_eq!(id1, table1.id);
 
-    let mut tables = sql!(TableSelectExpr.filter((field1 == "value3" && field2 == 12)));
+    let mut tables = sql!(TableSelectExpr.filter((field1 == "value3" && field2 == 12))).unwrap();
     assert_eq!(1, tables.len());
     let_vec!(table1 = tables);
     assert_eq!(id3, table1.id);
 
-    let mut tables = sql!(TableSelectExpr.filter(!(field1 == "value3" && field2 == 12)));
+    let mut tables = sql!(TableSelectExpr.filter(!(field1 == "value3" && field2 == 12))).unwrap();
     assert_eq!(4, tables.len());
     let_vec!(table1, table2, table3, table4 = tables);
     assert_eq!(id1, table1.id);
@@ -233,14 +236,14 @@ fn test_select() {
     assert_eq!(id4, table3.id);
     assert_eq!(id5, table4.id);
 
-    let mut tables = sql!(TableSelectExpr.filter(!(field2 < 24)));
+    let mut tables = sql!(TableSelectExpr.filter(!(field2 < 24))).unwrap();
     assert_eq!(3, tables.len());
     let_vec!(table1, table2, table3 = tables);
     assert_eq!(id1, table1.id);
     assert_eq!(id2, table2.id);
     assert_eq!(id5, table3.id);
 
-    let mut tables = sql!(TableSelectExpr.filter(optional_field.is_none()));
+    let mut tables = sql!(TableSelectExpr.filter(optional_field.is_none())).unwrap();
     assert_eq!(4, tables.len());
     let_vec!(table1, table2, table3, table4 = tables);
     assert_eq!(id1, table1.id);
@@ -248,17 +251,17 @@ fn test_select() {
     assert_eq!(id3, table3.id);
     assert_eq!(id5, table4.id);
 
-    let mut tables = sql!(TableSelectExpr.filter(optional_field.is_some()));
+    let mut tables = sql!(TableSelectExpr.filter(optional_field.is_some())).unwrap();
     assert_eq!(1, tables.len());
     let_vec!(table1 = tables);
     assert_eq!(id4, table1.id);
 
-    let mut tables = sql!(TableSelectExpr.filter(datetime.year() == 2015));
+    let mut tables = sql!(TableSelectExpr.filter(datetime.year() == 2015)).unwrap();
     assert_eq!(1, tables.len());
     let_vec!(table1 = tables);
     assert_eq!(id4, table1.id);
 
-    let mut tables = sql!(TableSelectExpr.filter(datetime.month() == 11));
+    let mut tables = sql!(TableSelectExpr.filter(datetime.month() == 11)).unwrap();
     assert_eq!(5, tables.len());
     let_vec!(table1, table2, table3, table4, table5 = tables);
     assert_eq!(id1, table1.id);
@@ -269,17 +272,17 @@ fn test_select() {
 
     // NOTE: the hour is 20 instead of 15 because of the timezone.
     let mut tables = sql!(TableSelectExpr.filter(datetime.year() == 2015 && datetime.month() == 11 &&
-        datetime.day() == 16 && datetime.hour() == 20 && datetime.minute() == 51 && datetime.second() > 0));
+        datetime.day() == 16 && datetime.hour() == 20 && datetime.minute() == 51 && datetime.second() > 0)).unwrap();
     assert_eq!(1, tables.len());
     let_vec!(table1 = tables);
     assert_eq!(id4, table1.id);
 
-    let mut tables = sql!(TableSelectExpr.filter(field1.contains("value1")));
+    let mut tables = sql!(TableSelectExpr.filter(field1.contains("value1"))).unwrap();
     assert_eq!(1, tables.len());
     let_vec!(table1 = tables);
     assert_eq!(id1, table1.id);
 
-    let mut tables = sql!(TableSelectExpr.filter(field1.contains("alue")));
+    let mut tables = sql!(TableSelectExpr.filter(field1.contains("alue"))).unwrap();
     assert_eq!(5, tables.len());
     let_vec!(table1, table2, table3, table4, table5 = tables);
     assert_eq!(id1, table1.id);
@@ -288,12 +291,12 @@ fn test_select() {
     assert_eq!(id4, table4.id);
     assert_eq!(id5, table5.id);
 
-    let mut tables = sql!(TableSelectExpr.filter(field1.ends_with("e1")));
+    let mut tables = sql!(TableSelectExpr.filter(field1.ends_with("e1"))).unwrap();
     assert_eq!(1, tables.len());
     let_vec!(table1 = tables);
     assert_eq!(id1, table1.id);
 
-    let mut tables = sql!(TableSelectExpr.filter(field1.starts_with("va")));
+    let mut tables = sql!(TableSelectExpr.filter(field1.starts_with("va"))).unwrap();
     assert_eq!(5, tables.len());
     let_vec!(table1, table2, table3, table4, table5 = tables);
     assert_eq!(id1, table1.id);
@@ -302,14 +305,14 @@ fn test_select() {
     assert_eq!(id4, table4.id);
     assert_eq!(id5, table5.id);
 
-    let tables = sql!(TableSelectExpr.filter(field1.starts_with("e1")));
+    let tables = sql!(TableSelectExpr.filter(field1.starts_with("e1"))).unwrap();
     assert_eq!(0, tables.len());
 
-    let tables = sql!(TableSelectExpr.filter(field1.ends_with("va")));
+    let tables = sql!(TableSelectExpr.filter(field1.ends_with("va"))).unwrap();
     assert_eq!(0, tables.len());
 
     let value = "alue";
-    let mut tables = sql!(TableSelectExpr.filter(field1.contains(value)));
+    let mut tables = sql!(TableSelectExpr.filter(field1.contains(value))).unwrap();
     assert_eq!(5, tables.len());
     let_vec!(table1, table2, table3, table4, table5 = tables);
     assert_eq!(id1, table1.id);
@@ -318,7 +321,7 @@ fn test_select() {
     assert_eq!(id4, table4.id);
     assert_eq!(id5, table5.id);
 
-    let mut tables = sql!(TableSelectExpr.filter(field1.len() == 6));
+    let mut tables = sql!(TableSelectExpr.filter(field1.len() == 6)).unwrap();
     assert_eq!(5, tables.len());
     let_vec!(table1, table2, table3, table4, table5 = tables);
     assert_eq!(id1, table1.id);
@@ -329,16 +332,16 @@ fn test_select() {
 
     #[cfg(feature = "postgres")]
     {
-        let mut tables = sql!(TableSelectExpr.filter(field1.regex("%3")));
+        let mut tables = sql!(TableSelectExpr.filter(field1.regex("%3"))).unwrap();
         assert_eq!(1, tables.len());
         let_vec!(table1 = tables);
         assert_eq!(id3, table1.id);
 
-        let tables = sql!(TableSelectExpr.filter(field1.regex("%E3")));
+        let tables = sql!(TableSelectExpr.filter(field1.regex("%E3"))).unwrap();
         assert_eq!(0, tables.len());
     }
 
-    let mut tables = sql!(TableSelectExpr.filter(field1.iregex("%E3")));
+    let mut tables = sql!(TableSelectExpr.filter(field1.iregex("%E3"))).unwrap();
     assert_eq!(1, tables.len());
     let_vec!(table1 = tables);
     assert_eq!(id3, table1.id);
@@ -346,28 +349,28 @@ fn test_select() {
     let table = sql!(TableSelectExpr.filter(field1 == "value2").get()).unwrap();
     assert_eq!(id2, table.id);
 
-    let mut tables = sql!(TableSelectExpr.filter(datetime.year() == 2013 && field2 < 100).sort(-field1));
+    let mut tables = sql!(TableSelectExpr.filter(datetime.year() == 2013 && field2 < 100).sort(-field1)).unwrap();
     assert_eq!(3, tables.len());
     let_vec!(table1, table2, table3 = tables);
     assert_eq!(id3, table1.id);
     assert_eq!(id2, table2.id);
     assert_eq!(id1, table3.id);
 
-    let mut tables = sql!(TableSelectExpr.filter(field2 < 100 && datetime.year() == 2013).sort(-field1));
+    let mut tables = sql!(TableSelectExpr.filter(field2 < 100 && datetime.year() == 2013).sort(-field1)).unwrap();
     assert_eq!(3, tables.len());
     let_vec!(table1, table2, table3 = tables);
     assert_eq!(id3, table1.id);
     assert_eq!(id2, table2.id);
     assert_eq!(id1, table3.id);
 
-    let mut tables = sql!(TableSelectExpr.filter(field2 >= 42).sort(field2));
+    let mut tables = sql!(TableSelectExpr.filter(field2 >= 42).sort(field2)).unwrap();
     assert_eq!(3, tables.len());
     let_vec!(table1, table2, table3 = tables);
     assert_eq!(id2, table1.id);
     assert_eq!(id1, table2.id);
     assert_eq!(id5, table3.id);
 
-    let mut tables = sql!(TableSelectExpr.filter(field2 > 10).sort(field2)[1..3]);
+    let mut tables = sql!(TableSelectExpr.filter(field2 > 10).sort(field2)[1..3]).unwrap();
     assert_eq!(2, tables.len());
     let_vec!(table1, table2 = tables);
     assert_eq!(id4, table1.id);
@@ -389,7 +392,7 @@ fn test_select() {
     assert_eq!(42, table.field2);
 
     let table = sql!(TableSelectExpr.get(field2 == 43));
-    assert!(table.is_none());
+    assert!(is_not_found(table));
 
     let table = sql!(TableSelectExpr.get(field1 == "value2" && field2 == 42)).unwrap();
     assert_eq!(id2, table.id);
@@ -403,7 +406,7 @@ fn test_select() {
     let table = sql!(TableSelectExpr.get(!(field2 < 24))).unwrap();
     assert_eq!(id1, table.id);
 
-    let mut tables = sql!(TableSelectExpr.all().join(related_field));
+    let mut tables = sql!(TableSelectExpr.all().join(related_field)).unwrap();
     assert_eq!(5, tables.len());
     let_vec!(table1, table2, table3, table4, table5 = tables);
     assert_eq!(id1, table1.id);
@@ -417,7 +420,7 @@ fn test_select() {
     assert_eq!(id5, table5.id);
     assert_eq!(related_field2.id, table5.related_field.unwrap().id);
 
-    let mut tables = sql!(TableSelectExpr.join(related_field));
+    let mut tables = sql!(TableSelectExpr.join(related_field)).unwrap();
     assert_eq!(5, tables.len());
     let_vec!(table1, table2, table3, table4, table5 = tables);
     assert_eq!(id1, table1.id);
@@ -431,19 +434,19 @@ fn test_select() {
     assert_eq!(id5, table5.id);
     assert_eq!(related_field2.id, table5.related_field.unwrap().id);
 
-    let mut tables = sql!(TableSelectExpr.all()[..2]);
+    let mut tables = sql!(TableSelectExpr.all()[..2]).unwrap();
     assert_eq!(2, tables.len());
     let_vec!(table1, table2 = tables);
     assert_eq!(id1, table1.id);
     assert_eq!(id2, table2.id);
 
-    let mut tables = sql!(TableSelectExpr[..2]);
+    let mut tables = sql!(TableSelectExpr[..2]).unwrap();
     assert_eq!(2, tables.len());
     let_vec!(table1, table2 = tables);
     assert_eq!(id1, table1.id);
     assert_eq!(id2, table2.id);
 
-    let mut tables = sql!(TableSelectExpr[1..3]);
+    let mut tables = sql!(TableSelectExpr[1..3]).unwrap();
     assert_eq!(2, tables.len());
     let_vec!(table1, table2 = tables);
     assert_eq!(id2, table1.id);
@@ -456,17 +459,17 @@ fn test_select() {
     assert_eq!(id3, table.id);
 
     let table = sql!(TableSelectExpr[42]);
-    assert!(table.is_none());
+    assert!(is_not_found(table));
 
     let table = sql!(TableSelectExpr[2 - 1]).unwrap();
     assert_eq!(id2, table.id);
 
-    let mut tables = sql!(TableSelectExpr[..2 - 1]);
+    let mut tables = sql!(TableSelectExpr[..2 - 1]).unwrap();
     assert_eq!(1, tables.len());
     let_vec!(table1 = tables);
     assert_eq!(id1, table1.id);
 
-    let mut tables = sql!(TableSelectExpr[2 - 1..]);
+    let mut tables = sql!(TableSelectExpr[2 - 1..]).unwrap();
     assert_eq!(4, tables.len());
     let_vec!(table1, table2, table3, table4 = tables);
     assert_eq!(id2, table1.id);
@@ -480,7 +483,7 @@ fn test_select() {
 
     let index = 1i64;
     let end_index = 3i64;
-    let mut tables = sql!(TableSelectExpr[index..end_index]);
+    let mut tables = sql!(TableSelectExpr[index..end_index]).unwrap();
     assert_eq!(2, tables.len());
     let_vec!(table1, table2 = tables);
     assert_eq!(id2, table1.id);

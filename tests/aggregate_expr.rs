@@ -66,7 +66,8 @@ fn test_aggregate() {
 
     let mut aggregates = sql!(TableAggregateExpr
           .values(field1)
-          .aggregate(avg(field2)));
+          .aggregate(avg(field2)))
+        .unwrap();
     assert_eq!(2, aggregates.len());
     aggregates.sort_by(|x, y| x.field2_avg.partial_cmp(&y.field2_avg).expect("aggregate value"));
     assert_eq!(12.0, aggregates[0].field2_avg); // NOTE: round(12 / 1) = 12.
@@ -75,23 +76,27 @@ fn test_aggregate() {
     let aggregate = sql!(TableAggregateExpr.aggregate(average = avg(field2))).unwrap();
     assert_eq!((55.0 + 12.0 + 42.0) / 3.0, aggregate.average);
 
-    let aggregates = sql!(TableAggregateExpr.values(field1).aggregate(average = avg(field2)).filter(average < 20.0));
+    let aggregates = sql!(TableAggregateExpr.values(field1).aggregate(average = avg(field2)).filter(average < 20.0))
+        .unwrap();
     assert_eq!(1, aggregates.len());
     assert_eq!(12.0, aggregates[0].average); // NOTE: round(12 / 1) = 12.
 
-    let aggregates = sql!(TableAggregateExpr.values(field1).aggregate(avg(field2)).filter(field2_avg < 20.0));
+    let aggregates = sql!(TableAggregateExpr.values(field1).aggregate(avg(field2)).filter(field2_avg < 20.0))
+        .unwrap();
     assert_eq!(1, aggregates.len());
     assert_eq!(12.0, aggregates[0].field2_avg); // NOTE: round(12 / 1) = 12.
 
     let aggregates = sql!(TableAggregateExpr
         .filter(field2 > 10)
         .values(field1)
-        .aggregate(avg(field2)).filter(field2_avg < 20.0));
+        .aggregate(avg(field2)).filter(field2_avg < 20.0))
+        .unwrap();
     assert_eq!(1, aggregates.len());
     assert_eq!(12.0, aggregates[0].field2_avg); // NOTE: round(12 / 1) = 12.
 
     let aggregates = sql!(TableAggregateExpr.filter(field2 > 10).values(field1)
-                          .aggregate(average = avg(field2)).filter(average < 20.0));
+                          .aggregate(average = avg(field2)).filter(average < 20.0))
+        .unwrap();
     assert_eq!(1, aggregates.len());
     assert_eq!(12.0, aggregates[0].average); // NOTE: round(12 / 1) = 12.
 
@@ -100,7 +105,8 @@ fn test_aggregate() {
         .filter(field2 > value1)
         .values(field1)
         .aggregate(average = avg(field2))
-        .filter(average < 20.0));
+        .filter(average < 20.0))
+        .unwrap();
     assert_eq!(1, aggregates.len());
     assert_eq!(12.0, aggregates[0].average); // NOTE: round(12 / 1) = 12.
 
@@ -109,7 +115,8 @@ fn test_aggregate() {
         .filter(field2 > value1)
         .values(field1)
         .aggregate(average = avg(field2))
-        .filter(average < value2));
+        .filter(average < value2))
+        .unwrap();
     assert_eq!(1, aggregates.len());
     assert_eq!(12.0, aggregates[0].average); // NOTE: round(12 / 1) = 12.
 }

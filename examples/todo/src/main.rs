@@ -92,15 +92,15 @@ fn get_id(args: &mut env::Args) -> Option<i32> {
     None
 }
 
-fn list_todo_items(connection: &Connection, show_done: bool) {
+fn list_todo_items(connection: &Connection, show_done: bool) -> Result<(), ::postgres::Error> {
     let items =
         if show_done {
             // Show the last 10 todo items.
-            sql!(TodoItem.sort(-date_added)[..10])
+            sql!(TodoItem.sort(-date_added)[..10])?
         }
         else {
             // Show the last 10 todo items that are not done.
-            sql!(TodoItem.filter(done == false).sort(-date_added)[..10])
+            sql!(TodoItem.filter(done == false).sort(-date_added)[..10])?
         };
 
     for item in items {
@@ -113,6 +113,8 @@ fn list_todo_items(connection: &Connection, show_done: bool) {
             };
         println!("{}. {} {}", item.id, item.text, done_text);
     }
+
+    Ok(())
 }
 
 fn main() {
@@ -146,7 +148,8 @@ fn main() {
         },
         "list" => {
             let show_done = args.next() == Some("--show-done".to_owned());
-            list_todo_items(&connection, show_done);
+            list_todo_items(&connection, show_done)
+                .expect("Cannot fetch todo items");
         },
         command => println!("Unknown command {}", command),
     }

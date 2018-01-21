@@ -98,7 +98,8 @@ fn chat(req: &mut Request) -> IronResult<Response> {
     }
     else {
         // Get the last 10 messages by date.
-        let messages: Vec<Message> = sql!(Message.sort(-date_added)[..10]);
+        let messages: Vec<Message> = sql!(Message.sort(-date_added)[..10])
+            .expect("get messages");
 
         data.insert("messages".to_owned(), messages);
 

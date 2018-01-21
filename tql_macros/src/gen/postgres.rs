@@ -59,93 +59,85 @@ impl BackendGen for PostgresBackend {
     {
         let result_ident = Ident::from("result");
         let sql_query = &args.sql;
+        let std_ident = quote_spanned! { connection_expr.span() =>
+            ::std
+        };
 
         match args.query_type {
             QueryType::AggregateMulti => {
-                let result = quote! {{
-                    let result = #connection_expr.prepare(#sql_query).expect("prepare query");
-                    result.query(&#args_expr).expect("execute query").iter()
-                }};
-                let call = quote! {
-                    .map(|__tql_item_row| {
-                        #aggregate_expr
-                    }).collect::<Vec<_>>()
-                    // TODO: return an iterator instead of a vector.
-                };
                 quote! {{
                     #aggregate_struct
-                    #result#call
+                    #connection_expr.prepare(#sql_query)
+                        .and_then(|#result_ident| {
+                            Ok(#result_ident.query(&#args_expr)?.iter()
+                                .map(|__tql_item_row| {
+                                    #aggregate_expr
+                                }).collect::<Vec<_>>())
+                                // TODO: return an iterator instead of a vector.
+                        })
                 }}
             },
             QueryType::AggregateOne => {
                 quote! {{
                     #aggregate_struct
-                    let result = #connection_expr.prepare(#sql_query).expect("prepare query");
-                    result.query(&#args_expr).expect("execute query").iter().next().map(|__tql_item_row| {
-                        #aggregate_expr
-                    })
-                }}
-            },
-            QueryType::Create => {
-                quote! {{
                     #connection_expr.prepare(#sql_query)
-                        .and_then(|result| result.execute(&[]))
-                }}
-            },
-            QueryType::InsertOne => {
-                quote! {{
-                    #connection_expr.prepare(#sql_query)
-                        .and_then(|result| {
-                            // NOTE: The query is not supposed to fail, hence expect().
-                            let rows = result.query(&#args_expr).expect("execute query");
-                            // NOTE: There is always one result (the inserted id), hence unwrap().
-                            let __tql_item_row = rows.iter().next().unwrap();
-                            let count: i32 = __tql_item_row.get(0);
-                            Ok(count)
+                        .and_then(|#result_ident| {
+                            #result_ident.query(&#args_expr)?
+                                .iter().next()
+                                .ok_or_else(|| #std_ident::io::Error::from(#std_ident::io::ErrorKind::NotFound).into())
+                                .map(|__tql_item_row| {
+                                    #aggregate_expr
+                                })
                         })
                 }}
             },
+            QueryType::Create => {
+                quote! {
+                    #connection_expr.prepare(#sql_query)
+                        .and_then(|result| result.execute(&[]))
+                }
+            },
+            QueryType::InsertOne => {
+                quote! {
+                    #connection_expr.prepare(#sql_query)
+                        .and_then(|result| {
+                            let rows = result.query(&#args_expr)?;
+                            let __tql_item_row = rows.iter().next()
+                                .ok_or_else(|| #std_ident::io::Error::from(#std_ident::io::ErrorKind::NotFound))?;
+                            let count: i32 = __tql_item_row.get(0);
+                            Ok(count)
+                        })
+                }
+            },
             QueryType::SelectMulti => {
-                let result =
-                    quote! {
-                        let #result_ident = #connection_expr.prepare(#sql_query).expect("prepare query");
-                        let #result_ident = #result_ident.query(&#args_expr).expect("execute query");
-                        let results = #result_ident.iter();
-                    };
-                let call = quote! {
-                    .map(|__tql_item_row| {
-                        #struct_expr
-                    }).collect::<Vec<_>>()
-                    // TODO: return an iterator instead of a vector.
-
-                };
-                quote! {{
-                    #result
-                    results#call
-                }}
+                quote! {
+                    #connection_expr.prepare(#sql_query)
+                        .and_then(|#result_ident| {
+                            let #result_ident = #result_ident.query(&#args_expr)?;
+                            let #result_ident = #result_ident.iter();
+                            Ok(#result_ident.map(|__tql_item_row| {
+                                #struct_expr
+                            }).collect::<Vec<_>>())
+                            // TODO: return an iterator instead of a vector.
+                        })
+                }
             },
             QueryType::SelectOne => {
-                let result =
-                    quote! {
-                        let #result_ident = #connection_expr.prepare(#sql_query).expect("prepare query");
-                        let #result_ident = #result_ident.query(&#args_expr).expect("execute query");
-                        let results = #result_ident.iter().next();
-                    };
-                let call = quote! {
-                    .map(|__tql_item_row| {
-                        #struct_expr
-                    })
-                };
-                quote! {{
-                    #result
-                    results#call
-                }}
+                quote! {
+                    #connection_expr.prepare(#sql_query)
+                        .and_then(|#result_ident| {
+                            let #result_ident = #result_ident.query(&#args_expr)?;
+                            let __tql_item_row = #result_ident.iter().next()
+                                .ok_or_else(|| #std_ident::io::Error::from(#std_ident::io::ErrorKind::NotFound))?;
+                            Ok(#struct_expr)
+                        })
+                }
             },
             QueryType::Exec => {
-                quote! {{
+                quote! {
                     #connection_expr.prepare(#sql_query)
                         .and_then(|result| result.execute(&#args_expr))
-                }}
+                }
             },
         }
     }
