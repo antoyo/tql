@@ -20,6 +20,8 @@
  */
 
 /*
+ * TODO: check that values are also moved in nightly. If not, fix stable.
+ *
  * TODO: return an iterator instead of a Vec.
  * TODO: ManyToMany.
  * TODO: support the missing types
@@ -161,12 +163,13 @@ use gen::{
     tosql_impl,
 };
 use optimizer::optimize;
-use parser::Parser;
+use parser::{MethodCalls, Parser};
 
 struct SqlQueryWithArgs {
     aggregate_calls: Vec<(String, Expr)>,
     aggregates: Vec<Aggregate>,
     arguments: Args,
+    filter_method_calls: Vec<(MethodCall, Option<Expression>)>,
     idents: Vec<Ident>,
     #[cfg(feature = "unstable")]
     insert_call_span: Option<Span>,
@@ -174,7 +177,7 @@ struct SqlQueryWithArgs {
     joins: Vec<Join>,
     limit_exprs: Vec<Expr>,
     literal_arguments: Args,
-    method_calls: Vec<(MethodCall, Option<Expression>)>,
+    method_calls: MethodCalls,
     query_type: QueryType,
     sql: Tokens,
     table_name: Ident,
@@ -211,7 +214,7 @@ pub fn sql(input: TokenStream) -> TokenStream {
     let sql_expr = quote! { #sql_expr };
     let sql_result = to_sql_query(sql_expr.into());
     match sql_result {
-        Ok(sql_query_with_args) => gen_query(sql_query_with_args, connection_ident),
+        Ok(sql_query_with_args) => gen_query(sql_query_with_args, connection_ident).0,
         Err(errors) => generate_errors(errors),
     }
 }
@@ -244,7 +247,7 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
     let table_name = method_calls.name.clone().expect("table name in method_calls");
     #[cfg(feature = "unstable")]
     let insert_call_span = get_insert_position(&method_calls);
-    let mut query = analyze(method_calls)?;
+    let mut query = analyze(&method_calls)?;
     analyze_methods(&query)?;
     optimize(&mut query);
     query = analyze_types(query)?;
@@ -264,13 +267,14 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
     idents.extend(get_values_idents(&query));
     let insert_idents = get_insert_idents(&query);
     let limit_exprs = get_limit_args(&query);
-    let method_calls = get_method_calls(&query);
+    let filter_method_calls = get_method_calls(&query);
     let aggregate_calls = get_aggregate_calls(&query);
     let (arguments, literal_arguments) = arguments(query);
     Ok(SqlQueryWithArgs {
         aggregates,
         aggregate_calls,
         arguments,
+        filter_method_calls,
         idents,
         #[cfg(feature = "unstable")]
         insert_call_span,
@@ -361,16 +365,25 @@ fn respan_with(tokens: TokenStream, span: proc_macro::Span) -> TokenStream {
 
 /// Get the arguments to send to the `postgres::stmt::Statement::query` or
 /// `postgres::stmt::Statement::execute` method.
-fn typecheck_arguments(args: &SqlQueryWithArgs) -> Tokens {
+fn typecheck_arguments(args: &SqlQueryWithArgs) -> (Tokens, Vec<Tokens>) {
     let table_ident = &args.table_name;
     let mut arg_refs = vec![];
     let mut fns = vec![];
     let mut assigns = vec![];
     let mut typechecks = vec![];
+    let mut metavars = vec![];
+    let mut next_name = (0..).map(|counter|
+        Ident::from(format!("__tql_arg{}", counter))
+    );
 
     let ident = Ident::from("_table");
     {
         let mut add_arg = |arg: &Arg| {
+            let arg_name =
+                match arg.expression {
+                    Expr::Lit(_) => None,
+                    _ => Some(next_name.next().expect("Next name")),
+                };
             if let Some(name) = arg.field_name.as_ref()
                 .map(|name| {
                     let pos = name.span();
@@ -381,9 +394,12 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> Tokens {
                     Ident::new(&name[index..], pos)
                 })
             {
-                let expr = &arg.expression;
                 let convert_ident = Ident::new("convert", arg.expression.span());
                 let to_owned_ident = Ident::new("to_owned", Span::call_site());
+                let expr = arg_name.map(|arg_name| quote! { #arg_name }).unwrap_or_else(|| {
+                    let expr = &arg.expression;
+                    quote! { #expr }
+                });
                 assigns.push(quote_spanned! { arg.expression.span() =>
                     #ident.#name = #convert_ident(&#expr.#to_owned_ident());
                 });
@@ -396,19 +412,25 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> Tokens {
                     }
                 });
             }
+            arg_name
         };
 
         for arg in &args.arguments {
+            let name = add_arg(&arg);
             match arg.expression {
                 // Do not add literal arguments as they are in the final string literal.
                 Expr::Lit(_) => (),
                 _ => {
-                    let expr = &arg.expression;
-                    arg_refs.push(quote! { &(#expr) });
+                    if let Some(name) = name {
+                        metavars.push(quote! { #name });
+                        arg_refs.push(quote! { &#name })
+                    }
+                    else {
+                        let expr = &arg.expression;
+                        arg_refs.push(quote! { &(#expr) });
+                    }
                 },
             }
-
-            add_arg(&arg);
         }
 
         for arg in &args.literal_arguments {
@@ -441,7 +463,7 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> Tokens {
         typechecks.push(code);
     }
 
-    for data in &args.method_calls {
+    for data in &args.filter_method_calls {
         let call = &data.0;
         let field = &call.object_name;
         let method = &call.method_name;
@@ -486,7 +508,7 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> Tokens {
         ::tql::SqlTable
     };
 
-    quote_spanned! { table_ident.span() => {
+    let tokens = quote_spanned! { table_ident.span() => {
         // Type check the arguments by creating a dummy struct.
         // TODO: check that this let is not in the generated binary.
         {
@@ -501,7 +523,8 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> Tokens {
         }
 
         [#(#arg_refs),*]
-    }}
+    }};
+    (tokens, metavars)
 }
 
 fn concat_token_stream(stream1: TokenStream, stream2: TokenStream) -> TokenStream {
@@ -543,7 +566,7 @@ impl syn::synom::Synom for Arguments {
 fn default_connection_expr() -> Tokens {
     let connection_ident = Ident::new("connection", Span::call_site());
     quote! {
-        #connection_ident
+        $#connection_ident
     }
 }
 
@@ -601,15 +624,32 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
                         .map(|tt| proc_macro2::TokenStream::from(tt.clone()));
                     let sql_query = proc_macro2::TokenStream::from_iter(sql_query);
                     let sql_result = to_sql_query(sql_query);
-                    let code = match sql_result {
-                        Ok(sql_query_with_args) => gen_query(sql_query_with_args, connection_expr),
-                        Err(errors) => generate_errors(errors),
+                    let (code, metavars, extract_macro) = match sql_result {
+                        Ok(sql_query_with_args) => {
+                            let extract_macro = create_extract_macro(&sql_query_with_args.method_calls);
+                            let (code, metavars) = gen_query(sql_query_with_args, connection_expr);
+                            (code, metavars, extract_macro)
+                        },
+                        Err(errors) => (generate_errors(errors), vec![], quote! {}),
                     };
                     let code = proc_macro2::TokenStream::from(code);
+                    let vars =
+                        match metavars.len() {
+                            0 => quote! {},
+                            1 => quote! {
+                                let ref #(#metavars),* = __tql_extract_exprs!($($tt)*);
+                            },
+                            _ => quote! {
+                                let (ref #(#metavars),*) = __tql_extract_exprs!($($tt)*);
+                            }
+                        };
 
                     let gen = quote! {
+                        #extract_macro
+
                         macro_rules! __tql_call_macro {
-                            () => {{
+                            ($connection:ident, $($tt:tt)*) => {{
+                                #vars
                                 #code
                             }};
                         }
@@ -621,4 +661,128 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
     }
 
     empty_token_stream()
+}
+
+fn create_extract_macro(calls: &MethodCalls) -> Tokens {
+    let mut next_name = (0..).map(|counter|
+        Ident::from(format!("__tql_arg{}", counter))
+    );
+
+    let name = calls.name.as_ref().expect("Object name");
+    let mut exprs = vec![];
+    let mut methods = vec![];
+    for method in &calls.calls {
+        // FIXME: if name is limit, use [] instead.
+        let name = &method.name;
+        let args = &method.args;
+        let mut arguments = vec![];
+        if name == "sort" {
+            for arg in args {
+                arguments.push(quote! {
+                    #arg
+                });
+            }
+        }
+        else {
+            for arg in args {
+                match *arg {
+                    Expr::Assign(ref assign) => {
+                        if let Expr::Lit(_) = *assign.right {
+                            let left = &assign.left;
+                            let right = &assign.right;
+                            arguments.push(quote! {
+                                #left = #right
+                            });
+                        }
+                        else {
+                            let name = next_name.next().expect("Next name");
+                            let left = &assign.left;
+                            arguments.push(quote! {
+                                #left = $#name:expr
+                            });
+                            exprs.push(name);
+                        }
+                    },
+                    Expr::Range(ref range) => {
+                        let from =
+                            if let Some(ref expr) = range.from {
+                                if let Expr::Lit(_) = **expr {
+                                    quote! {
+                                        #expr
+                                    }
+                                }
+                                else {
+                                    let name = next_name.next().expect("Next name");
+                                    exprs.push(name);
+                                    quote! {
+                                        $#name:expr
+                                    }
+                                }
+                            }
+                            else {
+                                quote! {}
+                            };
+                        let to =
+                            if let Some(ref expr) = range.to {
+                                if let Expr::Lit(_) = **expr {
+                                    quote! {
+                                        #expr
+                                    }
+                                }
+                                else {
+                                    let name = next_name.next().expect("Next name");
+                                    exprs.push(name);
+                                    quote! {
+                                        $#name:expr
+                                    }
+                                }
+                            }
+                            else {
+                                quote! {}
+                            };
+
+                        arguments.push(quote! {
+                            #from .. #to
+                        });
+                    },
+                    _ => {
+                        if let Expr::Lit(_) = *arg {
+                            arguments.push(quote! {
+                                #arg
+                            });
+                        }
+                        else {
+                            let name = next_name.next().expect("Next name");
+                            arguments.push(quote! {
+                                $#name:expr
+                            });
+                            exprs.push(name);
+                        }
+                    },
+                }
+            }
+        }
+        methods.push(quote! {
+            . #name (#(#arguments),*)
+        });
+    }
+    let exprs =
+        match exprs.len() {
+            0 => quote! { () },
+            1 => {
+                let expr = exprs[0];
+                quote! { $#expr }
+            },
+            _ => {
+                quote! { ( #($#exprs),* ) }
+            },
+        };
+    quote! {
+        #[allow(unused)]
+        macro_rules! __tql_extract_exprs {
+            (#name #(#methods)*) => {
+                #exprs
+            };
+        }
+    }
 }

@@ -223,14 +223,14 @@ pub fn generate_errors(errors: Vec<Error>) -> TokenStream {
 }
 
 /// Generate the Rust code from the SQL query.
-pub(crate) fn gen_query(args: SqlQueryWithArgs, connection_expr: Tokens) -> TokenStream {
+pub(crate) fn gen_query(args: SqlQueryWithArgs, connection_expr: Tokens) -> (TokenStream, Vec<Tokens>) {
     let struct_expr = create_struct(&args.table_name, &args.joins);
     let (aggregate_struct, aggregate_expr) = gen_aggregate_struct(&args.aggregates);
-    let args_expr = typecheck_arguments(&args);
+    let (args_expr, metavars) = typecheck_arguments(&args);
     let backend = create_backend();
     let tokens = backend.gen_query_expr(connection_expr, args, args_expr, struct_expr, aggregate_struct,
                                         aggregate_expr);
-    tokens.into()
+    (tokens.into(), metavars)
 }
 
 /// Create the struct expression needed by the generated code.

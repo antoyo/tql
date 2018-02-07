@@ -124,7 +124,7 @@ struct QueryData {
 }
 
 /// Analyze and transform the AST.
-pub fn analyze(method_calls: MethodCalls) -> Result<Query> {
+pub fn analyze(method_calls: &MethodCalls) -> Result<Query> {
     let mut errors = vec![];
 
     let table_name = method_calls.name.expect("table name in method_calls").to_string();

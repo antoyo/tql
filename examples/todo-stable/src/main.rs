@@ -44,7 +44,7 @@ struct TodoItem {
 
 fn add_todo_item(connection: Connection, text: String) {
     // Insert the new item.
-    let result = sql!(TodoItem.insert(text = text, date_added = Utc::now(), done = false));
+    let result = sql!(connection, TodoItem.insert(text = text, date_added = Utc::now(), done = false));
     if let Err(err) = result {
         println!("Failed to add the item ({})", err);
     }
@@ -55,7 +55,7 @@ fn add_todo_item(connection: Connection, text: String) {
 
 fn delete_todo_item(connection: Connection, id: i32) {
     // Delete the item.
-    let result = sql!(TodoItem.get(id).delete());
+    let result = sql!(connection, TodoItem.get(id).delete());
     if let Err(err) = result {
         println!("Failed to delete the item ({})", err);
     }
@@ -94,11 +94,11 @@ fn list_todo_items(connection: &Connection, show_done: bool) -> Result<(), ::pos
     let items =
         if show_done {
             // Show the last 10 todo items.
-            sql!(TodoItem.sort(-date_added)[..10])?
+            sql!(connection, TodoItem.sort(-date_added)[..10])?
         }
         else {
             // Show the last 10 todo items that are not done.
-            sql!(TodoItem.filter(done == false).sort(-date_added)[..10])?
+            sql!(connection, TodoItem.filter(done == false).sort(-date_added)[..10])?
         };
 
     for item in items {
@@ -119,12 +119,12 @@ fn main() {
     let connection = get_connection();
 
     // Create the table.
-    let _ = sql!(TodoItem.create());
+    let _ = sql!(connection, TodoItem.create());
 
     let mut args = env::args();
     args.next();
 
-    let command = args.next().unwrap_or("list".to_owned());
+    let command = args.next().unwrap_or("list".to_string());
     match command.as_ref() {
         "add" => {
             if let Some(item_text) = args.next() {
@@ -145,7 +145,7 @@ fn main() {
             }
         },
         "list" => {
-            let show_done = args.next() == Some("--show-done".to_owned());
+            let show_done = args.next() == Some("--show-done".to_string());
             list_todo_items(&connection, show_done)
                 .expect("Cannot fetch todo items");
         },
