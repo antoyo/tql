@@ -103,6 +103,7 @@ mod optimizer;
 mod parser;
 mod plugin;
 mod sql;
+mod stable;
 mod state;
 mod string;
 mod types;
@@ -143,19 +144,11 @@ use analyzer::get_insert_position;
 use arguments::{Arg, Args, arguments};
 use ast::{
     Aggregate,
-    Assignment,
-    AssignmentOperator,
     Expression,
-    FilterExpression,
-    FilterValue,
     Join,
-    Limit,
-    LogicalOperator,
     MethodCall,
-    Order,
     Query,
     QueryType,
-    RelationalOperator,
     query_type,
 };
 use error::{Error, Result};
@@ -171,7 +164,8 @@ use gen::{
     tosql_impl,
 };
 use optimizer::optimize;
-use parser::{MethodCalls, Parser};
+use parser::Parser;
+use stable::generate_macro_patterns;
 
 struct SqlQueryWithArgs {
     aggregate_calls: Vec<(String, Expr)>,
@@ -185,7 +179,6 @@ struct SqlQueryWithArgs {
     joins: Vec<Join>,
     limit_exprs: Vec<Expr>,
     literal_arguments: Args,
-    method_calls: MethodCalls,
     query_type: QueryType,
     sql: Tokens,
     stable_macro_query: Tokens,
@@ -223,7 +216,7 @@ pub fn sql(input: TokenStream) -> TokenStream {
     let sql_expr = quote! { #sql_expr };
     let sql_result = to_sql_query(sql_expr.into());
     match sql_result {
-        Ok(sql_query_with_args) => gen_query(sql_query_with_args, connection_ident).0,
+        Ok(sql_query_with_args) => gen_query(&sql_query_with_args, connection_ident).0,
         Err(errors) => generate_errors(errors),
     }
 }
@@ -292,7 +285,6 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
         joins,
         limit_exprs,
         literal_arguments,
-        method_calls,
         query_type,
         sql,
         stable_macro_query,
@@ -382,7 +374,10 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> (Tokens, Vec<Tokens>) {
     let mut fns = vec![];
     let mut assigns = vec![];
     let mut typechecks = vec![];
+    #[cfg(not(feature = "unstable"))]
     let mut metavars = vec![];
+    #[cfg(feature = "unstable")]
+    let metavars = vec![];
     let mut next_name = (0..).map(|counter|
         Ident::from(format!("__tql_arg{}", counter))
     );
@@ -407,10 +402,13 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> (Tokens, Vec<Tokens>) {
             {
                 let convert_ident = Ident::new("convert", arg.expression.span());
                 let to_owned_ident = Ident::new("to_owned", Span::call_site());
+                #[cfg(not(feature = "unstable"))]
                 let expr = arg_name.map(|arg_name| quote! { #arg_name }).unwrap_or_else(|| {
                     let expr = &arg.expression;
                     quote! { #expr }
                 });
+                #[cfg(feature = "unstable")]
+                let expr = &arg.expression;
                 assigns.push(quote_spanned! { arg.expression.span() =>
                     #ident.#name = #convert_ident(&#expr.#to_owned_ident());
                 });
@@ -427,16 +425,24 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> (Tokens, Vec<Tokens>) {
         };
 
         for arg in &args.arguments {
-            let name = add_arg(&arg);
+            let _name = add_arg(&arg);
             match arg.expression {
                 // Do not add literal arguments as they are in the final string literal.
                 Expr::Lit(_) => (),
                 _ => {
-                    if let Some(name) = name {
-                        metavars.push(quote! { #name });
-                        arg_refs.push(quote! { &#name })
+                    #[cfg(not(feature = "unstable"))]
+                    {
+                        if let Some(name) = _name {
+                            metavars.push(quote! { #name });
+                            arg_refs.push(quote! { &#name })
+                        }
+                        else {
+                            let expr = &arg.expression;
+                            arg_refs.push(quote! { &(#expr) });
+                        }
                     }
-                    else {
+                    #[cfg(feature = "unstable")]
+                    {
                         let expr = &arg.expression;
                         arg_refs.push(quote! { &(#expr) });
                     }
@@ -577,7 +583,7 @@ impl syn::synom::Synom for Arguments {
 fn default_connection_expr() -> Tokens {
     let connection_ident = Ident::new("connection", Span::call_site());
     quote! {
-        $#connection_ident
+        #connection_ident
     }
 }
 
@@ -659,6 +665,7 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
 
                         macro_rules! __tql_call_macro {
                             ($connection:ident, $($tt:tt)*) => {{
+                                let ref connection = $connection;
                                 #vars
                                 #code
                             }};
@@ -671,229 +678,4 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
     }
 
     empty_token_stream()
-}
-
-fn generate_macro_patterns(query: &Query, calls: &MethodCalls) -> Tokens {
-    let mut count = 0;
-    let mut dummy_count = 0;
-    let mut args = vec![];
-    let table_name = calls.name.expect("table name");
-    let mut methods = quote! {};
-    for call in &calls.calls {
-        let name = call.name;
-        let args =
-            match name.as_ref() {
-                "create" | "delete" => quote! {},
-                "filter" | "get" =>
-                    match *query {
-                        Query::Aggregate { ref filter, .. } | Query::Delete { ref filter, .. } |
-                            Query::Select { ref filter, .. } | Query::Update { ref filter, .. } =>
-                            filter_to_args(filter, &mut dummy_count, &mut count, &mut args),
-                        _ => quote! {},
-                    },
-                "insert" | "update" =>
-                    match *query {
-                        Query::Insert { ref assignments, .. } | Query::Update { ref assignments, .. } =>
-                            assignments_to_args(assignments, &mut dummy_count, &mut count, &mut args),
-                        _ => quote! {},
-                    },
-                "limit" =>
-                    if let Query::Select { ref limit, .. } = *query {
-                        limit_to_args(limit, &mut dummy_count, &mut count, &mut args)
-                    }
-                    else {
-                        quote! {}
-                    },
-                "sort" =>
-                    if let Query::Select { ref order, .. } = *query {
-                        order_to_args(order)
-                    }
-                    else {
-                        quote! {}
-                    },
-                _ => unreachable!("No method named {}", name),
-            };
-        methods =
-            if name == "limit" {
-                quote! {
-                    #methods
-                    #args
-                }
-            }
-            else {
-                quote! {
-                    #methods
-                    . #name (#args)
-                }
-            };
-    }
-    let args =
-        if args.len() == 1 {
-            quote! { #($#args)* }
-        }
-        else {
-            quote! { (#($#args),*) }
-        };
-    quote! {
-        #[allow(unused)]
-        macro_rules! __tql_extract_exprs {
-            (#table_name #methods) => {
-                #args
-            };
-        }
-    }
-}
-
-fn filter_to_args(filter: &FilterExpression, dummy_count: &mut i32, count: &mut i32, args: &mut Vec<Ident>) -> Tokens {
-    match *filter {
-        FilterExpression::Filter(ref filter) => {
-            let left = filter_value_to_args(&filter.operand1);
-            let op =
-                if left == quote! {} {
-                    quote! {}
-                }
-                else {
-                    rel_op_to_args(filter.operator)
-                };
-            let right = &filter.operand2;
-            let right = expr_to_args(right, dummy_count, count, args);
-            quote! {
-                #left #op #right
-            }
-        },
-        FilterExpression::Filters(ref filters) => {
-            let left = filter_to_args(&filters.operand1, dummy_count, count, args);
-            let op = log_op_to_args(filters.operator);
-            let right = filter_to_args(&filters.operand2, dummy_count, count, args);
-            quote! {
-                #left #op #right
-            }
-        },
-        FilterExpression::FilterValue(ref value) => filter_value_to_args(&value.node),
-        FilterExpression::NegFilter(ref filter) => {
-            let expr = filter_to_args(filter, dummy_count, count, args);
-            quote! { - #expr }
-        },
-        FilterExpression::NoFilters => quote! {},
-        FilterExpression::ParenFilter(ref filter) => {
-            let expr = filter_to_args(filter, dummy_count, count, args);
-            quote! { ( #expr ) }
-        },
-    }
-}
-
-fn filter_value_to_args(filter_value: &FilterValue) -> Tokens {
-    match *filter_value {
-        FilterValue::Identifier(_, ref identifier) => {
-            quote! { #identifier }
-        },
-        FilterValue::MethodCall(MethodCall { ref arguments, ref method_name, ref object_name, .. }) => quote! {
-            #object_name . #method_name ( #(#arguments),* )
-        },
-        FilterValue::None => unreachable!(),
-        FilterValue::PrimaryKey(_) => quote! { },
-    }
-}
-
-fn log_op_to_args(operator: LogicalOperator) -> Tokens {
-    match operator {
-        LogicalOperator::And => quote! { && },
-        LogicalOperator::Not => quote! { ! },
-        LogicalOperator::Or => quote! { || },
-    }
-}
-
-fn rel_op_to_args(operator: RelationalOperator) -> Tokens {
-    match operator {
-        RelationalOperator::Equal => quote! { == },
-        RelationalOperator::LesserThan => quote! { < },
-        RelationalOperator::LesserThanEqual => quote! { <= },
-        RelationalOperator::NotEqual => quote! { != },
-        RelationalOperator::GreaterThan => quote! { > },
-        RelationalOperator::GreaterThanEqual => quote! { >= },
-    }
-}
-
-fn assign_op_to_args(operator: AssignmentOperator) -> Tokens {
-    match operator {
-        AssignmentOperator::Add => quote! { += },
-        AssignmentOperator::Divide => quote! { /= },
-        AssignmentOperator::Equal => quote! { = },
-        AssignmentOperator::Modulo => quote! { %= },
-        AssignmentOperator::Mul => quote! { *= },
-        AssignmentOperator::Sub => quote! { -= },
-    }
-}
-
-fn assignments_to_args(assignments: &Vec<Assignment>, dummy_count: &mut i32, count: &mut i32, args: &mut Vec<Ident>) -> Tokens {
-    let assignments = assignments.iter()
-        .map(|assignment| {
-            let ident = &assignment.identifier;
-            let op = assign_op_to_args(assignment.operator.node);
-            let expr = expr_to_args(&assignment.value, dummy_count, count, args);
-            quote! {
-                #ident #op #expr
-            }
-        });
-    quote! {
-        #(#assignments),*
-    }
-}
-
-fn order_to_args(order: &[Order]) -> Tokens {
-    let orders =
-        order.iter()
-            .map(|order|
-                 match *order {
-                     Order::Ascending(ref ident) => quote! { #ident },
-                     Order::Descending(ref ident) => quote! { - #ident },
-                     Order::NoOrder => quote! {},
-                 }
-            );
-    quote! {
-        #(#orders),*
-    }
-}
-
-fn limit_to_args(limit: &Limit, dummy_count: &mut i32, count: &mut i32, args: &mut Vec<Ident>) -> Tokens {
-    match *limit {
-        Limit::EndRange(ref expr) => {
-            let expr = expr_to_args(expr, dummy_count, count, args);
-            quote! { [.. #expr] }
-        },
-        Limit::Index(ref expr) => {
-            let expr = expr_to_args(expr, dummy_count, count, args);
-            quote! { [#expr] }
-        },
-        Limit::NoLimit => quote! { },
-        Limit::LimitOffset(ref expr1, ref expr2) | Limit::Range(ref expr1, ref expr2) => {
-            let expr1 = expr_to_args(expr1, dummy_count, count, args);
-            let expr2 = expr_to_args(expr2, dummy_count, count, args);
-            quote! { [#expr1 .. #expr2] }
-        },
-        Limit::StartRange(ref expr) => {
-            let expr = expr_to_args(expr, dummy_count, count, args);
-            quote! { [#expr .. ] }
-        },
-    }
-}
-
-fn expr_to_args(expr: &Expr, dummy_count: &mut i32, count: &mut i32, args: &mut Vec<Ident>) -> Tokens {
-    match *expr {
-        Expr::Lit(_) => {
-            *dummy_count += 1;
-            let ident = Ident::from(format!("__tql_dummy_arg{}", *dummy_count));
-            quote! {
-                $#ident : tt
-            }
-        },
-        _ => {
-            *count += 1;
-            let ident = Ident::from(format!("__tql_arg{}", *count));
-            args.push(ident.clone());
-            quote! {
-                $#ident : ident
-            }
-        },
-    }
 }
