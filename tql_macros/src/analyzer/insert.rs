@@ -29,7 +29,7 @@ use syn::Ident;
 
 use ast::{
     Assignment,
-    AssignementOperator,
+    AssignmentOperator,
     Query,
 };
 use error::Error;
@@ -45,7 +45,7 @@ pub fn check_insert_arguments(assignments: &[Assignment], errors: &mut Vec<Error
     for assignment in assignments {
         fields.insert(assignment.identifier.clone().expect("Assignment identifier"));
         let operator = &assignment.operator.node;
-        if *operator != AssignementOperator::Equal {
+        if *operator != AssignmentOperator::Equal {
             errors.push(Error::new(&format!("expected = but got {}", *operator), assignment.operator.span));
         }
     }

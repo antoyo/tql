@@ -44,7 +44,8 @@ struct TodoItem {
 
 fn add_todo_item(connection: Connection, text: String) {
     // Insert the new item.
-    let result = sql!(connection, TodoItem.insert(text = text, date_added = Utc::now(), done = false));
+    let date_added = Utc::now(); // FIXME: remove the variable when function-like proc-macro works on stable.
+    let result = sql!(connection, TodoItem.insert(text = text, date_added = date_added, done = false));
     if let Err(err) = result {
         println!("Failed to add the item ({})", err);
     }

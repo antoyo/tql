@@ -143,11 +143,19 @@ use analyzer::get_insert_position;
 use arguments::{Arg, Args, arguments};
 use ast::{
     Aggregate,
+    Assignment,
+    AssignmentOperator,
     Expression,
+    FilterExpression,
+    FilterValue,
     Join,
+    Limit,
+    LogicalOperator,
     MethodCall,
+    Order,
     Query,
     QueryType,
+    RelationalOperator,
     query_type,
 };
 use error::{Error, Result};
@@ -180,6 +188,7 @@ struct SqlQueryWithArgs {
     method_calls: MethodCalls,
     query_type: QueryType,
     sql: Tokens,
+    stable_macro_query: Tokens,
     table_name: Ident,
 }
 
@@ -250,7 +259,7 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
     let mut query = analyze(&method_calls)?;
     analyze_methods(&query)?;
     optimize(&mut query);
-    query = analyze_types(query)?;
+    analyze_types(&query)?;
     let sql = query.to_tokens();
     let joins =
         match query {
@@ -269,6 +278,7 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
     let limit_exprs = get_limit_args(&query);
     let filter_method_calls = get_method_calls(&query);
     let aggregate_calls = get_aggregate_calls(&query);
+    let stable_macro_query = generate_macro_patterns(&query, &method_calls);
     let (arguments, literal_arguments) = arguments(query);
     Ok(SqlQueryWithArgs {
         aggregates,
@@ -285,6 +295,7 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
         method_calls,
         query_type,
         sql,
+        stable_macro_query,
         table_name,
     })
 }
@@ -626,9 +637,8 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
                     let sql_result = to_sql_query(sql_query);
                     let (code, metavars, extract_macro) = match sql_result {
                         Ok(sql_query_with_args) => {
-                            let extract_macro = create_extract_macro(&sql_query_with_args.method_calls);
-                            let (code, metavars) = gen_query(sql_query_with_args, connection_expr);
-                            (code, metavars, extract_macro)
+                            let (code, metavars) = gen_query(&sql_query_with_args, connection_expr);
+                            (code, metavars, sql_query_with_args.stable_macro_query)
                         },
                         Err(errors) => (generate_errors(errors), vec![], quote! {}),
                     };
@@ -663,126 +673,227 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
     empty_token_stream()
 }
 
-fn create_extract_macro(calls: &MethodCalls) -> Tokens {
-    let mut next_name = (0..).map(|counter|
-        Ident::from(format!("__tql_arg{}", counter))
-    );
-
-    let name = calls.name.as_ref().expect("Object name");
-    let mut exprs = vec![];
-    let mut methods = vec![];
-    for method in &calls.calls {
-        // FIXME: if name is limit, use [] instead.
-        let name = &method.name;
-        let args = &method.args;
-        let mut arguments = vec![];
-        if name == "sort" {
-            for arg in args {
-                arguments.push(quote! {
-                    #arg
-                });
-            }
-        }
-        else {
-            for arg in args {
-                match *arg {
-                    Expr::Assign(ref assign) => {
-                        if let Expr::Lit(_) = *assign.right {
-                            let left = &assign.left;
-                            let right = &assign.right;
-                            arguments.push(quote! {
-                                #left = #right
-                            });
-                        }
-                        else {
-                            let name = next_name.next().expect("Next name");
-                            let left = &assign.left;
-                            arguments.push(quote! {
-                                #left = $#name:expr
-                            });
-                            exprs.push(name);
-                        }
+fn generate_macro_patterns(query: &Query, calls: &MethodCalls) -> Tokens {
+    let mut count = 0;
+    let mut dummy_count = 0;
+    let mut args = vec![];
+    let table_name = calls.name.expect("table name");
+    let mut methods = quote! {};
+    for call in &calls.calls {
+        let name = call.name;
+        let args =
+            match name.as_ref() {
+                "create" | "delete" => quote! {},
+                "filter" | "get" =>
+                    match *query {
+                        Query::Aggregate { ref filter, .. } | Query::Delete { ref filter, .. } |
+                            Query::Select { ref filter, .. } | Query::Update { ref filter, .. } =>
+                            filter_to_args(filter, &mut dummy_count, &mut count, &mut args),
+                        _ => quote! {},
                     },
-                    Expr::Range(ref range) => {
-                        let from =
-                            if let Some(ref expr) = range.from {
-                                if let Expr::Lit(_) = **expr {
-                                    quote! {
-                                        #expr
-                                    }
-                                }
-                                else {
-                                    let name = next_name.next().expect("Next name");
-                                    exprs.push(name);
-                                    quote! {
-                                        $#name:expr
-                                    }
-                                }
-                            }
-                            else {
-                                quote! {}
-                            };
-                        let to =
-                            if let Some(ref expr) = range.to {
-                                if let Expr::Lit(_) = **expr {
-                                    quote! {
-                                        #expr
-                                    }
-                                }
-                                else {
-                                    let name = next_name.next().expect("Next name");
-                                    exprs.push(name);
-                                    quote! {
-                                        $#name:expr
-                                    }
-                                }
-                            }
-                            else {
-                                quote! {}
-                            };
-
-                        arguments.push(quote! {
-                            #from .. #to
-                        });
+                "insert" | "update" =>
+                    match *query {
+                        Query::Insert { ref assignments, .. } | Query::Update { ref assignments, .. } =>
+                            assignments_to_args(assignments, &mut dummy_count, &mut count, &mut args),
+                        _ => quote! {},
                     },
-                    _ => {
-                        if let Expr::Lit(_) = *arg {
-                            arguments.push(quote! {
-                                #arg
-                            });
-                        }
-                        else {
-                            let name = next_name.next().expect("Next name");
-                            arguments.push(quote! {
-                                $#name:expr
-                            });
-                            exprs.push(name);
-                        }
+                "limit" =>
+                    if let Query::Select { ref limit, .. } = *query {
+                        limit_to_args(limit, &mut dummy_count, &mut count, &mut args)
+                    }
+                    else {
+                        quote! {}
                     },
+                "sort" =>
+                    if let Query::Select { ref order, .. } = *query {
+                        order_to_args(order)
+                    }
+                    else {
+                        quote! {}
+                    },
+                _ => unreachable!("No method named {}", name),
+            };
+        methods =
+            if name == "limit" {
+                quote! {
+                    #methods
+                    #args
                 }
             }
-        }
-        methods.push(quote! {
-            . #name (#(#arguments),*)
-        });
+            else {
+                quote! {
+                    #methods
+                    . #name (#args)
+                }
+            };
     }
-    let exprs =
-        match exprs.len() {
-            0 => quote! { () },
-            1 => {
-                let expr = exprs[0];
-                quote! { $#expr }
-            },
-            _ => {
-                quote! { ( #($#exprs),* ) }
-            },
+    let args =
+        if args.len() == 1 {
+            quote! { #($#args)* }
+        }
+        else {
+            quote! { (#($#args),*) }
         };
     quote! {
         #[allow(unused)]
         macro_rules! __tql_extract_exprs {
-            (#name #(#methods)*) => {
-                #exprs
+            (#table_name #methods) => {
+                #args
             };
         }
+    }
+}
+
+fn filter_to_args(filter: &FilterExpression, dummy_count: &mut i32, count: &mut i32, args: &mut Vec<Ident>) -> Tokens {
+    match *filter {
+        FilterExpression::Filter(ref filter) => {
+            let left = filter_value_to_args(&filter.operand1);
+            let op =
+                if left == quote! {} {
+                    quote! {}
+                }
+                else {
+                    rel_op_to_args(filter.operator)
+                };
+            let right = &filter.operand2;
+            let right = expr_to_args(right, dummy_count, count, args);
+            quote! {
+                #left #op #right
+            }
+        },
+        FilterExpression::Filters(ref filters) => {
+            let left = filter_to_args(&filters.operand1, dummy_count, count, args);
+            let op = log_op_to_args(filters.operator);
+            let right = filter_to_args(&filters.operand2, dummy_count, count, args);
+            quote! {
+                #left #op #right
+            }
+        },
+        FilterExpression::FilterValue(ref value) => filter_value_to_args(&value.node),
+        FilterExpression::NegFilter(ref filter) => {
+            let expr = filter_to_args(filter, dummy_count, count, args);
+            quote! { - #expr }
+        },
+        FilterExpression::NoFilters => quote! {},
+        FilterExpression::ParenFilter(ref filter) => {
+            let expr = filter_to_args(filter, dummy_count, count, args);
+            quote! { ( #expr ) }
+        },
+    }
+}
+
+fn filter_value_to_args(filter_value: &FilterValue) -> Tokens {
+    match *filter_value {
+        FilterValue::Identifier(_, ref identifier) => {
+            quote! { #identifier }
+        },
+        FilterValue::MethodCall(MethodCall { ref arguments, ref method_name, ref object_name, .. }) => quote! {
+            #object_name . #method_name ( #(#arguments),* )
+        },
+        FilterValue::None => unreachable!(),
+        FilterValue::PrimaryKey(_) => quote! { },
+    }
+}
+
+fn log_op_to_args(operator: LogicalOperator) -> Tokens {
+    match operator {
+        LogicalOperator::And => quote! { && },
+        LogicalOperator::Not => quote! { ! },
+        LogicalOperator::Or => quote! { || },
+    }
+}
+
+fn rel_op_to_args(operator: RelationalOperator) -> Tokens {
+    match operator {
+        RelationalOperator::Equal => quote! { == },
+        RelationalOperator::LesserThan => quote! { < },
+        RelationalOperator::LesserThanEqual => quote! { <= },
+        RelationalOperator::NotEqual => quote! { != },
+        RelationalOperator::GreaterThan => quote! { > },
+        RelationalOperator::GreaterThanEqual => quote! { >= },
+    }
+}
+
+fn assign_op_to_args(operator: AssignmentOperator) -> Tokens {
+    match operator {
+        AssignmentOperator::Add => quote! { += },
+        AssignmentOperator::Divide => quote! { /= },
+        AssignmentOperator::Equal => quote! { = },
+        AssignmentOperator::Modulo => quote! { %= },
+        AssignmentOperator::Mul => quote! { *= },
+        AssignmentOperator::Sub => quote! { -= },
+    }
+}
+
+fn assignments_to_args(assignments: &Vec<Assignment>, dummy_count: &mut i32, count: &mut i32, args: &mut Vec<Ident>) -> Tokens {
+    let assignments = assignments.iter()
+        .map(|assignment| {
+            let ident = &assignment.identifier;
+            let op = assign_op_to_args(assignment.operator.node);
+            let expr = expr_to_args(&assignment.value, dummy_count, count, args);
+            quote! {
+                #ident #op #expr
+            }
+        });
+    quote! {
+        #(#assignments),*
+    }
+}
+
+fn order_to_args(order: &[Order]) -> Tokens {
+    let orders =
+        order.iter()
+            .map(|order|
+                 match *order {
+                     Order::Ascending(ref ident) => quote! { #ident },
+                     Order::Descending(ref ident) => quote! { - #ident },
+                     Order::NoOrder => quote! {},
+                 }
+            );
+    quote! {
+        #(#orders),*
+    }
+}
+
+fn limit_to_args(limit: &Limit, dummy_count: &mut i32, count: &mut i32, args: &mut Vec<Ident>) -> Tokens {
+    match *limit {
+        Limit::EndRange(ref expr) => {
+            let expr = expr_to_args(expr, dummy_count, count, args);
+            quote! { [.. #expr] }
+        },
+        Limit::Index(ref expr) => {
+            let expr = expr_to_args(expr, dummy_count, count, args);
+            quote! { [#expr] }
+        },
+        Limit::NoLimit => quote! { },
+        Limit::LimitOffset(ref expr1, ref expr2) | Limit::Range(ref expr1, ref expr2) => {
+            let expr1 = expr_to_args(expr1, dummy_count, count, args);
+            let expr2 = expr_to_args(expr2, dummy_count, count, args);
+            quote! { [#expr1 .. #expr2] }
+        },
+        Limit::StartRange(ref expr) => {
+            let expr = expr_to_args(expr, dummy_count, count, args);
+            quote! { [#expr .. ] }
+        },
+    }
+}
+
+fn expr_to_args(expr: &Expr, dummy_count: &mut i32, count: &mut i32, args: &mut Vec<Ident>) -> Tokens {
+    match *expr {
+        Expr::Lit(_) => {
+            *dummy_count += 1;
+            let ident = Ident::from(format!("__tql_dummy_arg{}", *dummy_count));
+            quote! {
+                $#ident : tt
+            }
+        },
+        _ => {
+            *count += 1;
+            let ident = Ident::from(format!("__tql_arg{}", *count));
+            args.push(ident.clone());
+            quote! {
+                $#ident : ident
+            }
+        },
     }
 }

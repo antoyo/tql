@@ -54,7 +54,7 @@ impl BackendGen for SqliteBackend {
         quote! { i32 }
     }
 
-    fn gen_query_expr(&self, connection_expr: Tokens, args: SqlQueryWithArgs, args_expr: Tokens, struct_expr: Tokens,
+    fn gen_query_expr(&self, connection_expr: Tokens, args: &SqlQueryWithArgs, args_expr: Tokens, struct_expr: Tokens,
                       aggregate_struct: Tokens, aggregate_expr: Tokens) -> Tokens
     {
         let result_ident = Ident::from("result");

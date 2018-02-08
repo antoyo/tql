@@ -39,33 +39,6 @@ use ast::{
     Query,
 };
 
-macro_rules! add_filter_arguments {
-    ( $name:ident, $typ:ident, $func:ident ) => {
-        /// Create arguments from the `filter` and add them to `arguments`.
-        fn $name(filter: $typ, args: &mut Args, literals: &mut Args) {
-            match filter {
-                $typ::Filter(filter) => {
-                    $func(&filter.operand1, args, literals, Some(filter.operand2));
-                },
-                $typ::Filters(filters) => {
-                    $name(*filters.operand1, args, literals);
-                    $name(*filters.operand2, args, literals);
-                },
-                $typ::NegFilter(filter) => {
-                    $name(*filter, args, literals);
-                },
-                $typ::NoFilters => (),
-                $typ::ParenFilter(filter) => {
-                    $name(*filter, args, literals);
-                },
-                $typ::FilterValue(filter_value) => {
-                    $func(&filter_value.node, args, literals, None);
-                },
-            }
-        }
-    };
-}
-
 /// A Rust expression to be send as a parameter to the SQL query function.
 #[derive(Clone, Debug)]
 pub struct Arg {
@@ -107,9 +80,51 @@ fn add_expr(arguments: &mut Args, literals: &mut Args, arg: Arg) {
     arguments.push(arg);
 }
 
-add_filter_arguments!(add_filter_arguments, FilterExpression, add_filter_value_arguments);
+/// Create arguments from the `filter` and add them to `arguments`.
+fn add_filter_arguments(filter: FilterExpression, args: &mut Args, literals: &mut Args) {
+    match filter {
+        FilterExpression::Filter(filter) => {
+            add_filter_value_arguments(&filter.operand1, args, literals, Some(filter.operand2));
+        },
+        FilterExpression::Filters(filters) => {
+            add_filter_arguments(*filters.operand1, args, literals);
+            add_filter_arguments(*filters.operand2, args, literals);
+        },
+        FilterExpression::NegFilter(filter) => {
+            add_filter_arguments(*filter, args, literals);
+        },
+        FilterExpression::NoFilters => (),
+        FilterExpression::ParenFilter(filter) => {
+            add_filter_arguments(*filter, args, literals);
+        },
+        FilterExpression::FilterValue(filter_value) => {
+            add_filter_value_arguments(&filter_value.node, args, literals, None);
+        },
+    }
+}
 
-add_filter_arguments!(add_aggregate_filter_arguments, AggregateFilterExpression, add_aggregate_filter_value_arguments);
+/// Create arguments from the `filter` and add them to `arguments`.
+fn add_aggregate_filter_arguments(filter: AggregateFilterExpression, args: &mut Args, literals: &mut Args) {
+    match filter {
+        AggregateFilterExpression::Filter(filter) => {
+            add_aggregate_filter_value_arguments(&filter.operand1, args, literals, Some(filter.operand2));
+        },
+        AggregateFilterExpression::Filters(filters) => {
+            add_aggregate_filter_arguments(*filters.operand1, args, literals);
+            add_aggregate_filter_arguments(*filters.operand2, args, literals);
+        },
+        AggregateFilterExpression::NegFilter(filter) => {
+            add_aggregate_filter_arguments(*filter, args, literals);
+        },
+        AggregateFilterExpression::NoFilters => (),
+        AggregateFilterExpression::ParenFilter(filter) => {
+            add_aggregate_filter_arguments(*filter, args, literals);
+        },
+        AggregateFilterExpression::FilterValue(filter_value) => {
+            add_aggregate_filter_value_arguments(&filter_value.node, args, literals, None);
+        },
+    }
+}
 
 /// Create arguments from the `limit` and add them to `arguments`.
 fn add_limit_arguments(limit: Limit, arguments: &mut Args, literals: &mut Args) {
