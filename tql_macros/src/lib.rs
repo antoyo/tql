@@ -20,7 +20,8 @@
  */
 
 /*
- * TODO: check that values are also moved in nightly. If not, fix stable.
+ * FIXME: values are moved in stable.
+ * TODO: looks like the function annotate does not exist anymore.
  *
  * TODO: return an iterator instead of a Vec.
  * TODO: ManyToMany.

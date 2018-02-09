@@ -7,10 +7,13 @@ use syn::{
 };
 
 use ast::{
+    Aggregate,
     Assignment,
     AssignmentOperator,
     FilterExpression,
     FilterValue,
+    Groups,
+    Join,
     Limit,
     LogicalOperator,
     MethodCall,
@@ -30,7 +33,14 @@ pub fn generate_macro_patterns(query: &Query, calls: &MethodCalls) -> Tokens {
         let name = call.name;
         let args =
             match name.as_ref() {
-                "create" | "delete" => quote! {},
+                "all" | "create" | "delete" | "drop" => quote! {},
+                "aggregate" =>
+                    if let Query::Aggregate { ref aggregates, .. } = *query {
+                        aggregates_to_args(aggregates)
+                    }
+                    else {
+                        quote! {}
+                    },
                 "filter" | "get" =>
                     match *query {
                         Query::Aggregate { ref filter, .. } | Query::Delete { ref filter, .. } |
@@ -38,6 +48,12 @@ pub fn generate_macro_patterns(query: &Query, calls: &MethodCalls) -> Tokens {
                             filter_to_args(filter, &mut dummy_count, &mut count, &mut args),
                         _ => quote! {},
                     },
+                "join" =>
+                    match *query {
+                        Query::Aggregate { ref joins, .. } | Query::Select { ref joins, .. } =>
+                            joins_to_args(joins),
+                        _ => quote! {},
+                    }
                 "insert" | "update" =>
                     match *query {
                         Query::Insert { ref assignments, .. } | Query::Update { ref assignments, .. } =>
@@ -54,6 +70,13 @@ pub fn generate_macro_patterns(query: &Query, calls: &MethodCalls) -> Tokens {
                 "sort" =>
                     if let Query::Select { ref order, .. } = *query {
                         order_to_args(order)
+                    }
+                    else {
+                        quote! {}
+                    },
+                "values" =>
+                    if let Query::Aggregate { ref groups, .. } = *query {
+                        values_to_args(groups)
                     }
                     else {
                         quote! {}
@@ -242,5 +265,47 @@ fn expr_to_args(expr: &Expr, dummy_count: &mut i32, count: &mut i32, args: &mut 
                 $#ident : ident
             }
         },
+    }
+}
+
+fn joins_to_args(joins: &[Join]) -> Tokens {
+    let joins = joins.iter()
+        .map(|join| {
+            let base_field = &join.base_field;
+            let base_table = Ident::from(join.base_table.as_str());
+            quote! {
+                #base_table.#base_field
+            }
+        });
+    quote! {
+        #(#joins),*
+    }
+}
+
+fn aggregates_to_args(aggregates: &[Aggregate]) -> Tokens {
+    let aggregates = aggregates.iter()
+        .map(|aggregate| {
+            let result =
+                if aggregate.has_name_in_query {
+                    let name = aggregate.result_name.expect("result name");
+                    quote! { #name = }
+                }
+                else {
+                    quote! {}
+                };
+            let function = &aggregate.function;
+            let field = &aggregate.field;
+            quote! {
+                #result #function(#field)
+            }
+        });
+    quote! {
+        #(#aggregates),*
+    }
+}
+
+fn values_to_args(groups: &Groups) -> Tokens {
+    quote! {
+        #(#groups),*
     }
 }

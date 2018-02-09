@@ -35,8 +35,9 @@ pub type Groups = Vec<Ident>;
 pub struct Aggregate {
     pub field: Option<Ident>,
     pub function: String,
-    pub sql_function: String,
+    pub has_name_in_query: bool,
     pub result_name: Option<Ident>,
+    pub sql_function: String,
 }
 
 /// `AggregateFilter` for SQL `Query` (HAVING clause).
