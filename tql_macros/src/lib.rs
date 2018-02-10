@@ -20,14 +20,12 @@
  */
 
 /*
- * FIXME: values are moved in stable.
- * TODO: looks like the function annotate does not exist anymore.
- *
- * TODO: return an iterator instead of a Vec.
  * TODO: ManyToMany.
+ * TODO: looks like the function annotate does not exist anymore.
+ * TODO: return an iterator instead of a Vec.
+ *
  * TODO: support the missing types
  * (https://docs.rs/postgres/0.15.1/postgres/types/trait.ToSql.html).
- *
  * TODO: error for unsupported types in backends.
  * TODO: remove useless empty string ("") in generated code (concat!("", "")).
  * TODO: avoid using quote_spanned and respan when possible and document all of their usage.
@@ -654,10 +652,10 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
                         match metavars.len() {
                             0 => quote! {},
                             1 => quote! {
-                                let ref #(#metavars),* = __tql_extract_exprs!($($tt)*);
+                                let #(#metavars),* = __tql_extract_exprs!($($tt)*);
                             },
                             _ => quote! {
-                                let (ref #(#metavars),*) = __tql_extract_exprs!($($tt)*);
+                                let (#(#metavars),*) = __tql_extract_exprs!($($tt)*);
                             }
                         };
 

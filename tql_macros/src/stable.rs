@@ -99,10 +99,10 @@ pub fn generate_macro_patterns(query: &Query, calls: &MethodCalls) -> Tokens {
     }
     let args =
         if args.len() == 1 {
-            quote! { #($#args)* }
+            quote! { #(&$#args)* }
         }
         else {
-            quote! { (#($#args),*) }
+            quote! { (#(&$#args),*) }
         };
     quote! {
         #[allow(unused)]
