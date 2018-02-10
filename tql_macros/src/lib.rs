@@ -78,9 +78,6 @@
 #![cfg_attr(feature = "unstable", feature(proc_macro))]
 #![recursion_limit="128"]
 
-#[cfg(not(any(feature = "rusqlite", feature = "postgres")))]
-compile_error!("Enable one of the following features: sqlite, pg");
-
 #[cfg(all(feature = "rusqlite", feature = "postgres"))]
 compile_error!("Only one of the following features must be enabled: sqlite, pg");
 
