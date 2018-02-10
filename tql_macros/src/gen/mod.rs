@@ -493,7 +493,7 @@ fn check_missing_fields_macro(named: &Punctuated<Field, Comma>, table_ident: &Id
     let macro_name = Ident::new(&format!("tql_{}_check_missing_fields", table_ident), Span::call_site());
     #[cfg(feature = "unstable")]
     let macro_call = quote_spanned! { table_ident.span() =>
-        tql_macros::check_missing_fields!
+        ::tql_macros::check_missing_fields!
     };
     #[cfg(not(feature = "unstable"))]
     let macro_call = quote! {

@@ -23,6 +23,7 @@
  * TODO: ManyToMany.
  * TODO: looks like the function annotate does not exist anymore.
  * TODO: return an iterator instead of a Vec.
+ * TODO: add support for default value.
  *
  * TODO: support the missing types
  * (https://docs.rs/postgres/0.15.1/postgres/types/trait.ToSql.html).
