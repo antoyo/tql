@@ -1,7 +1,10 @@
 [package]
 authors = ["Antoni Boucher <bouanto@zoho.com>"]
 categories = ["database"]
+description = "Compile-time ORM (macros)"
+license = "MIT"
 name = "tql_macros"
+repository = "https://github.com/antoyo/tql"
 version = "0.1.0"
 
 [dependencies]

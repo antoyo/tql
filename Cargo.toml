@@ -1,7 +1,10 @@
 [package]
 authors = ["Antoni Boucher <bouanto@zoho.com>"]
 categories = ["database"]
+description = "Compile-time ORM (runtime library)"
+license = "MIT"
 name = "tql"
+repository = "https://github.com/antoyo/tql"
 version = "0.1.0"
 
 [dependencies]
