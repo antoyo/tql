@@ -26,6 +26,7 @@
  *
  * TODO: support the missing types
  * (https://docs.rs/postgres/0.15.1/postgres/types/trait.ToSql.html).
+ * TODO: support intermediate models in ManyToMany (allow adding extra fields).
  * TODO: error for unsupported types in backends.
  * TODO: remove useless empty string ("") in generated code (concat!("", "")).
  * TODO: avoid using quote_spanned and respan when possible and document all of their usage.

@@ -469,7 +469,7 @@ fn pk_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> Tokens {
         }
         else {
             quote! {
-                ""
+                "-1" // FIXME: hack for when the table has no primary key.
             }
         };
     quote! {

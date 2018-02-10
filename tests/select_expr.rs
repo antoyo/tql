@@ -95,6 +95,28 @@ struct Table4 {
     field2: i32,
 }
 
+#[derive(SqlTable)]
+struct Table5 {
+    id: PrimaryKey,
+    field1: i32,
+    field2: i32,
+    //tables6: ManyToMany<Table6>,
+}
+
+#[derive(SqlTable)]
+struct Table6 {
+    id: PrimaryKey,
+    field1: i32,
+    field2: i32,
+    //tables5: HasMany<Table5>,
+}
+
+#[derive(SqlTable)]
+struct Table5_Table6 {
+    table5: ForeignKey<Table5>,
+    table6: ForeignKey<Table6>,
+}
+
 #[test]
 fn test_select() {
     let connection = get_connection();
@@ -106,6 +128,9 @@ fn test_select() {
         let _ = sql!(Table2.drop());
         let _ = sql!(Table3.drop());
         let _ = sql!(Table4.drop());
+        let _ = sql!(Table5.drop());
+        let _ = sql!(Table6.drop());
+        let _ = sql!(Table5_Table6.drop());
     });
 
     let _ = sql!(RelatedTableSelectExpr.create());
@@ -113,6 +138,9 @@ fn test_select() {
     let _ = sql!(Table2.create());
     let _ = sql!(Table3.create());
     let _ = sql!(Table4.create());
+    let _ = sql!(Table5.create());
+    let _ = sql!(Table6.create());
+    let _ = sql!(Table5_Table6.create());
     let _ = sql!(Table1.create());
 
     let datetime: DateTime<Utc> = FromStr::from_str("2015-11-16T15:51:12-05:00").unwrap();
@@ -529,4 +557,23 @@ fn test_select() {
     assert_eq!(table_related2.field2, 43);
     assert_eq!(table_related3.field1, 26);
     assert_eq!(table_related3.field2, 44);
+
+    let table5_id = sql!(Table5.insert(field1 = 24, field2 = 42)).unwrap();
+    let table6_id = sql!(Table6.insert(field1 = 24, field2 = 42)).unwrap();
+    let table5 = Table5 {
+        id: table5_id,
+        field1: 24,
+        field2: 42,
+        //tables6: ManyToMany::new(),
+    };
+    let table6 = Table6 {
+        id: table6_id,
+        field1: 24,
+        field2: 42,
+        //tables5: HasMany::new(),
+    };
+    sql!(Table5_Table6.insert(table5 = table5, table6 = table6)).unwrap();
+    //table5.tables6.add(table6);
+    //table5.tables6.all();
+    sql!(Table5_Table6.all().join(table5));
 }
