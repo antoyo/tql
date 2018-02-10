@@ -54,7 +54,7 @@ impl BackendGen for PostgresBackend {
     }
 
     /// Generate the Rust code using the `postgres` library depending on the `QueryType`.
-    fn gen_query_expr(&self, connection_expr: Tokens, args: SqlQueryWithArgs, args_expr: Tokens, struct_expr: Tokens,
+    fn gen_query_expr(&self, connection_expr: Tokens, args: &SqlQueryWithArgs, args_expr: Tokens, struct_expr: Tokens,
                       aggregate_struct: Tokens, aggregate_expr: Tokens) -> Tokens
     {
         let result_ident = Ident::from("result");

@@ -35,8 +35,9 @@ pub type Groups = Vec<Ident>;
 pub struct Aggregate {
     pub field: Option<Ident>,
     pub function: String,
-    pub sql_function: String,
+    pub has_name_in_query: bool,
     pub result_name: Option<Ident>,
+    pub sql_function: String,
 }
 
 /// `AggregateFilter` for SQL `Query` (HAVING clause).
@@ -82,13 +83,13 @@ pub struct AggregateFilters {
 #[derive(Debug)]
 pub struct Assignment {
     pub identifier: Option<Ident>,
-    pub operator: WithSpan<AssignementOperator>,
+    pub operator: WithSpan<AssignmentOperator>,
     pub value: Expression,
 }
 
-/// `AssignementOperator` for use in SQL Insert and Update `Query`.
-#[derive(Debug, PartialEq)]
-pub enum AssignementOperator {
+/// `AssignmentOperator` for use in SQL Insert and Update `Query`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum AssignmentOperator {
     Add,
     Divide,
     Equal,
@@ -97,16 +98,16 @@ pub enum AssignementOperator {
     Sub,
 }
 
-impl Display for AssignementOperator {
+impl Display for AssignmentOperator {
     fn fmt(&self, formatter: &mut Formatter) -> Result<(), Error> {
         let op =
             match *self {
-                AssignementOperator::Add => "+=",
-                AssignementOperator::Divide => "/=",
-                AssignementOperator::Equal => "=",
-                AssignementOperator::Modulo => "%=",
-                AssignementOperator::Mul => "*=",
-                AssignementOperator::Sub => "-=",
+                AssignmentOperator::Add => "+=",
+                AssignmentOperator::Divide => "/=",
+                AssignmentOperator::Equal => "=",
+                AssignmentOperator::Modulo => "%=",
+                AssignmentOperator::Mul => "*=",
+                AssignmentOperator::Sub => "-=",
             };
         write!(formatter, "{}", op).unwrap();
         Ok(())
@@ -192,7 +193,7 @@ impl Default for Limit {
 }
 
 /// `LogicalOperator` to combine `Filter`s.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum LogicalOperator {
     And,
     Not,
@@ -219,7 +220,7 @@ pub enum Order {
 }
 
 /// `RelationalOperator` to be used in a `Filter`.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum RelationalOperator {
     Equal,
     LesserThan,

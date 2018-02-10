@@ -93,6 +93,9 @@ pub fn argument_to_aggregate(arg: &Expression) -> Result<Aggregate> {
                     ident.span = path_ident.span;
                     aggregate.result_name = Some(ident);
                 }
+                else {
+                    aggregate.has_name_in_query = true;
+                }
             }
             else {
                 // TODO: allow expressions (field2 / field1).

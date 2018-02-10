@@ -39,7 +39,7 @@ use ast::{
     AggregateFilters,
     AggregateFilterExpression,
     Assignment,
-    AssignementOperator,
+    AssignmentOperator,
     Expression,
     Filter,
     FilterExpression,
@@ -124,7 +124,7 @@ impl ToSql for AggregateFilters {
 impl ToSql for Assignment {
     fn to_sql(&self, index: &mut usize) -> String {
         let identifier = self.identifier.expect("Assignment identifier").to_sql(index);
-        if let AssignementOperator::Equal = self.operator.node {
+        if let AssignmentOperator::Equal = self.operator.node {
             identifier + &self.operator.node.to_sql(index) + &self.value.to_sql(index)
         }
         else {
@@ -141,15 +141,15 @@ impl ToSql for [Assignment] {
     }
 }
 
-impl ToSql for AssignementOperator {
+impl ToSql for AssignmentOperator {
     fn to_sql(&self, _index: &mut usize) -> String {
         match *self {
-            AssignementOperator::Add => " = {} + ",
-            AssignementOperator::Divide => " = {} / ",
-            AssignementOperator::Equal => " = ",
-            AssignementOperator::Modulo => " = {} % ",
-            AssignementOperator::Mul => " = {} * ",
-            AssignementOperator::Sub => " = {} - ",
+            AssignmentOperator::Add => " = {} + ",
+            AssignmentOperator::Divide => " = {} / ",
+            AssignmentOperator::Equal => " = ",
+            AssignmentOperator::Modulo => " = {} % ",
+            AssignmentOperator::Mul => " = {} * ",
+            AssignmentOperator::Sub => " = {} - ",
         }.to_string()
     }
 }

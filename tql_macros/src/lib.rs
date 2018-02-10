@@ -20,11 +20,12 @@
  */
 
 /*
- * TODO: return an iterator instead of a Vec.
  * TODO: ManyToMany.
+ * TODO: looks like the function annotate does not exist anymore.
+ * TODO: return an iterator instead of a Vec.
+ *
  * TODO: support the missing types
  * (https://docs.rs/postgres/0.15.1/postgres/types/trait.ToSql.html).
- *
  * TODO: error for unsupported types in backends.
  * TODO: remove useless empty string ("") in generated code (concat!("", "")).
  * TODO: avoid using quote_spanned and respan when possible and document all of their usage.
@@ -101,6 +102,7 @@ mod optimizer;
 mod parser;
 mod plugin;
 mod sql;
+mod stable;
 mod state;
 mod string;
 mod types;
@@ -162,11 +164,13 @@ use gen::{
 };
 use optimizer::optimize;
 use parser::Parser;
+use stable::generate_macro_patterns;
 
 struct SqlQueryWithArgs {
     aggregate_calls: Vec<(String, Expr)>,
     aggregates: Vec<Aggregate>,
     arguments: Args,
+    filter_method_calls: Vec<(MethodCall, Option<Expression>)>,
     idents: Vec<Ident>,
     #[cfg(feature = "unstable")]
     insert_call_span: Option<Span>,
@@ -174,9 +178,9 @@ struct SqlQueryWithArgs {
     joins: Vec<Join>,
     limit_exprs: Vec<Expr>,
     literal_arguments: Args,
-    method_calls: Vec<(MethodCall, Option<Expression>)>,
     query_type: QueryType,
     sql: Tokens,
+    stable_macro_query: Tokens,
     table_name: Ident,
 }
 
@@ -211,7 +215,7 @@ pub fn sql(input: TokenStream) -> TokenStream {
     let sql_expr = quote! { #sql_expr };
     let sql_result = to_sql_query(sql_expr.into());
     match sql_result {
-        Ok(sql_query_with_args) => gen_query(sql_query_with_args, connection_ident),
+        Ok(sql_query_with_args) => gen_query(&sql_query_with_args, connection_ident).0,
         Err(errors) => generate_errors(errors),
     }
 }
@@ -244,10 +248,10 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
     let table_name = method_calls.name.clone().expect("table name in method_calls");
     #[cfg(feature = "unstable")]
     let insert_call_span = get_insert_position(&method_calls);
-    let mut query = analyze(method_calls)?;
+    let mut query = analyze(&method_calls)?;
     analyze_methods(&query)?;
     optimize(&mut query);
-    query = analyze_types(query)?;
+    analyze_types(&query)?;
     let sql = query.to_tokens();
     let joins =
         match query {
@@ -264,13 +268,15 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
     idents.extend(get_values_idents(&query));
     let insert_idents = get_insert_idents(&query);
     let limit_exprs = get_limit_args(&query);
-    let method_calls = get_method_calls(&query);
+    let filter_method_calls = get_method_calls(&query);
     let aggregate_calls = get_aggregate_calls(&query);
+    let stable_macro_query = generate_macro_patterns(&query, &method_calls);
     let (arguments, literal_arguments) = arguments(query);
     Ok(SqlQueryWithArgs {
         aggregates,
         aggregate_calls,
         arguments,
+        filter_method_calls,
         idents,
         #[cfg(feature = "unstable")]
         insert_call_span,
@@ -278,9 +284,9 @@ fn to_sql_query(input: proc_macro2::TokenStream) -> Result<SqlQueryWithArgs> {
         joins,
         limit_exprs,
         literal_arguments,
-        method_calls,
         query_type,
         sql,
+        stable_macro_query,
         table_name,
     })
 }
@@ -361,16 +367,28 @@ fn respan_with(tokens: TokenStream, span: proc_macro::Span) -> TokenStream {
 
 /// Get the arguments to send to the `postgres::stmt::Statement::query` or
 /// `postgres::stmt::Statement::execute` method.
-fn typecheck_arguments(args: &SqlQueryWithArgs) -> Tokens {
+fn typecheck_arguments(args: &SqlQueryWithArgs) -> (Tokens, Vec<Tokens>) {
     let table_ident = &args.table_name;
     let mut arg_refs = vec![];
     let mut fns = vec![];
     let mut assigns = vec![];
     let mut typechecks = vec![];
+    #[cfg(not(feature = "unstable"))]
+    let mut metavars = vec![];
+    #[cfg(feature = "unstable")]
+    let metavars = vec![];
+    let mut next_name = (0..).map(|counter|
+        Ident::from(format!("__tql_arg{}", counter))
+    );
 
     let ident = Ident::from("_table");
     {
         let mut add_arg = |arg: &Arg| {
+            let arg_name =
+                match arg.expression {
+                    Expr::Lit(_) => None,
+                    _ => Some(next_name.next().expect("Next name")),
+                };
             if let Some(name) = arg.field_name.as_ref()
                 .map(|name| {
                     let pos = name.span();
@@ -381,9 +399,15 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> Tokens {
                     Ident::new(&name[index..], pos)
                 })
             {
-                let expr = &arg.expression;
                 let convert_ident = Ident::new("convert", arg.expression.span());
                 let to_owned_ident = Ident::new("to_owned", Span::call_site());
+                #[cfg(not(feature = "unstable"))]
+                let expr = arg_name.map(|arg_name| quote! { #arg_name }).unwrap_or_else(|| {
+                    let expr = &arg.expression;
+                    quote! { #expr }
+                });
+                #[cfg(feature = "unstable")]
+                let expr = &arg.expression;
                 assigns.push(quote_spanned! { arg.expression.span() =>
                     #ident.#name = #convert_ident(&#expr.#to_owned_ident());
                 });
@@ -396,19 +420,33 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> Tokens {
                     }
                 });
             }
+            arg_name
         };
 
         for arg in &args.arguments {
+            let _name = add_arg(&arg);
             match arg.expression {
                 // Do not add literal arguments as they are in the final string literal.
                 Expr::Lit(_) => (),
                 _ => {
-                    let expr = &arg.expression;
-                    arg_refs.push(quote! { &(#expr) });
+                    #[cfg(not(feature = "unstable"))]
+                    {
+                        if let Some(name) = _name {
+                            metavars.push(quote! { #name });
+                            arg_refs.push(quote! { &#name })
+                        }
+                        else {
+                            let expr = &arg.expression;
+                            arg_refs.push(quote! { &(#expr) });
+                        }
+                    }
+                    #[cfg(feature = "unstable")]
+                    {
+                        let expr = &arg.expression;
+                        arg_refs.push(quote! { &(#expr) });
+                    }
                 },
             }
-
-            add_arg(&arg);
         }
 
         for arg in &args.literal_arguments {
@@ -441,7 +479,7 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> Tokens {
         typechecks.push(code);
     }
 
-    for data in &args.method_calls {
+    for data in &args.filter_method_calls {
         let call = &data.0;
         let field = &call.object_name;
         let method = &call.method_name;
@@ -486,7 +524,7 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> Tokens {
         ::tql::SqlTable
     };
 
-    quote_spanned! { table_ident.span() => {
+    let tokens = quote_spanned! { table_ident.span() => {
         // Type check the arguments by creating a dummy struct.
         // TODO: check that this let is not in the generated binary.
         {
@@ -501,7 +539,8 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> Tokens {
         }
 
         [#(#arg_refs),*]
-    }}
+    }};
+    (tokens, metavars)
 }
 
 fn concat_token_stream(stream1: TokenStream, stream2: TokenStream) -> TokenStream {
@@ -601,15 +640,32 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
                         .map(|tt| proc_macro2::TokenStream::from(tt.clone()));
                     let sql_query = proc_macro2::TokenStream::from_iter(sql_query);
                     let sql_result = to_sql_query(sql_query);
-                    let code = match sql_result {
-                        Ok(sql_query_with_args) => gen_query(sql_query_with_args, connection_expr),
-                        Err(errors) => generate_errors(errors),
+                    let (code, metavars, extract_macro) = match sql_result {
+                        Ok(sql_query_with_args) => {
+                            let (code, metavars) = gen_query(&sql_query_with_args, connection_expr);
+                            (code, metavars, sql_query_with_args.stable_macro_query)
+                        },
+                        Err(errors) => (generate_errors(errors), vec![], quote! {}),
                     };
                     let code = proc_macro2::TokenStream::from(code);
+                    let vars =
+                        match metavars.len() {
+                            0 => quote! {},
+                            1 => quote! {
+                                let #(#metavars),* = __tql_extract_exprs!($($tt)*);
+                            },
+                            _ => quote! {
+                                let (#(#metavars),*) = __tql_extract_exprs!($($tt)*);
+                            }
+                        };
 
                     let gen = quote! {
+                        #extract_macro
+
                         macro_rules! __tql_call_macro {
-                            () => {{
+                            ($connection:ident, $($tt:tt)*) => {{
+                                let ref connection = $connection;
+                                #vars
                                 #code
                             }};
                         }

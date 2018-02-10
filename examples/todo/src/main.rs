@@ -147,7 +147,7 @@ fn main() {
             }
         },
         "list" => {
-            let show_done = args.next() == Some("--show-done".to_owned());
+            let show_done = args.next() == Some("--show-done".to_string());
             list_todo_items(&connection, show_done)
                 .expect("Cannot fetch todo items");
         },

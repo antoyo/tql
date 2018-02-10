@@ -43,5 +43,3 @@ matrix:
               - cargo test --features sqlite --manifest-path tests/testcrate/Cargo.toml
               - cargo test --manifest-path tests/sqlite-ui-tests/Cargo.toml
           env: RUSTFLAGS="--cfg procmacro2_semver_exempt"
-    allow_failures:
-        - rust: beta

@@ -124,7 +124,7 @@ struct QueryData {
 }
 
 /// Analyze and transform the AST.
-pub fn analyze(method_calls: MethodCalls) -> Result<Query> {
+pub fn analyze(method_calls: &MethodCalls) -> Result<Query> {
     let mut errors = vec![];
 
     let table_name = method_calls.name.expect("table name in method_calls").to_string();
@@ -146,9 +146,9 @@ pub fn analyze(method_calls: MethodCalls) -> Result<Query> {
 }
 
 /// Analyze the literal types in the `Query`.
-pub fn analyze_types(query: Query) -> Result<Query> {
+pub fn analyze_types(query: &Query) -> Result<()> {
     let mut errors = vec![];
-    match query {
+    match *query {
         Query::Aggregate { ref filter, ref table, .. } => {
             analyze_filter_types(filter, &table, &mut errors);
         },
@@ -166,7 +166,7 @@ pub fn analyze_types(query: Query) -> Result<Query> {
             analyze_filter_types(filter, &table, &mut errors);
         },
     }
-    res(query, errors)
+    res((), errors)
 }
 
 /// Check that the `arguments` vector contains `expected_count` elements.

@@ -30,7 +30,7 @@ use syn::spanned::Spanned;
 
 use ast::{
     Assignment,
-    AssignementOperator,
+    AssignmentOperator,
     Expression,
     WithSpan,
 };
@@ -51,7 +51,7 @@ pub fn argument_to_assignment(arg: &Expression) -> Result<Assignment> {
     let mut assignment = Assignment {
         identifier: None,
         operator: WithSpan {
-            node: AssignementOperator::Equal,
+            node: AssignmentOperator::Equal,
             span: arg.span(),
         },
         value: number_literal(0),
@@ -79,14 +79,14 @@ pub fn argument_to_assignment(arg: &Expression) -> Result<Assignment> {
 }
 
 /// Convert a `BinOp` to an SQL `AssignmentOperator`.
-fn binop_to_assignment_operator(binop: &BinOp) -> (AssignementOperator, Span) {
+fn binop_to_assignment_operator(binop: &BinOp) -> (AssignmentOperator, Span) {
     match *binop {
-        BinOp::AddEq(span) => (AssignementOperator::Add, span.0[0]),
-        BinOp::SubEq(span) => (AssignementOperator::Sub, span.0[0]),
-        BinOp::MulEq(span) => (AssignementOperator::Mul, span.0[0]),
-        BinOp::DivEq(span) => (AssignementOperator::Divide, span.0[0]),
-        BinOp::RemEq(span) => (AssignementOperator::Modulo, span.0[0]),
-        BinOp::Eq(span) => (AssignementOperator::Equal, span.0[0]),
+        BinOp::AddEq(span) => (AssignmentOperator::Add, span.0[0]),
+        BinOp::SubEq(span) => (AssignmentOperator::Sub, span.0[0]),
+        BinOp::MulEq(span) => (AssignmentOperator::Mul, span.0[0]),
+        BinOp::DivEq(span) => (AssignmentOperator::Divide, span.0[0]),
+        BinOp::RemEq(span) => (AssignmentOperator::Modulo, span.0[0]),
+        BinOp::Eq(span) => (AssignmentOperator::Equal, span.0[0]),
         BinOp::Add(_) | BinOp::Sub(_) | BinOp::Mul(_) | BinOp::Div(_) | BinOp::Rem(_) | BinOp::And(_) |
             BinOp::Or(_) | BinOp::BitXor(_) | BinOp::BitXorEq(_) | BinOp::BitAnd(_) | BinOp::BitAndEq(_) |
             BinOp::BitOr(_) | BinOp::BitOrEq(_) | BinOp::Shl(_) | BinOp::ShlEq(_) | BinOp::Shr(_) | BinOp::ShrEq(_) |

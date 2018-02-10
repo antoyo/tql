@@ -101,7 +101,7 @@ fn chat(req: &mut Request) -> IronResult<Response> {
         let messages: Vec<Message> = sql!(Message.sort(-date_added)[..10])
             .expect("get messages");
 
-        data.insert("messages".to_owned(), messages);
+        data.insert("messages".to_string(), messages);
 
         resp.set_mut(Template::new("chat", data))
             .set_mut(status::Ok);

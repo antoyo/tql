@@ -104,12 +104,12 @@ macro_rules! check_missing_fields {
 #[cfg(not(unstable))]
 #[macro_export]
 macro_rules! sql {
-    ($($tt:tt)*) => {{
+    ($connection:ident, $($tt:tt)*) => {{
         #[derive(StableToSql)]
         enum __TqlStableToSqlEnum {
             Input = (stringify!($($tt)*), 0).1,
         }
 
-        __tql_call_macro!()
+        __tql_call_macro!($connection, $($tt)*)
     }};
 }
