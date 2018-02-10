@@ -12,8 +12,8 @@ image:https://img.shields.io/gitter/room/tql-rs/Lobby.svg[link="https://gitter.i
 
 == Requirements
 
-Currently, `tql` only supports the `PostgreSQL` database (more databases will be supported in the future).
-So, you need to install `PostgreSQL` in order to use this crate.
+Currently, `tql` only supports the `PostgreSQL` and `SQLite` databases (more databases will be supported in the future).
+So, you need to install `PostgreSQL` (and/or `libsqlite3-sys`) in order to use this crate.
 
 == Usage
 
