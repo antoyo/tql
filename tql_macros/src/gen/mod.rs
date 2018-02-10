@@ -19,6 +19,8 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#[cfg(not(any(feature = "rusqlite", feature = "postgres")))]
+mod dummy;
 #[cfg(feature = "postgres")]
 mod postgres;
 #[cfg(feature = "rusqlite")]
@@ -58,6 +60,8 @@ use plugin::{new_ident, string_literal};
 use self::postgres::create_backend;
 #[cfg(feature = "rusqlite")]
 use self::sqlite::create_backend;
+#[cfg(not(any(feature = "rusqlite", feature = "postgres")))]
+use self::dummy::create_backend;
 use sql::fields_to_sql;
 use state::SqlFields;
 use string::token_to_string;

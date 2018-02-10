@@ -21,6 +21,8 @@
 
 //! The PostgreSQL code generator.
 
+#[cfg(not(any(feature = "rusqlite", feature = "postgres")))]
+mod dummy;
 #[cfg(feature = "postgres")]
 mod postgres;
 #[cfg(feature = "rusqlite")]
@@ -66,9 +68,10 @@ use plugin::string_literal;
 use state::methods_singleton;
 use types::Type;
 
+#[cfg(not(any(feature = "rusqlite", feature = "postgres")))]
+use self::dummy::create_sql_backend;
 #[cfg(feature = "postgres")]
 use self::postgres::create_sql_backend;
-
 #[cfg(feature = "rusqlite")]
 use self::sqlite::create_sql_backend;
 
@@ -519,6 +522,8 @@ pub fn type_to_sql(typ: &Type, nullable: bool) -> Tokens {
             Type::Serial => "INTEGER PRIMARY KEY",
             #[cfg(feature = "postgres")]
             Type::Serial => "SERIAL PRIMARY KEY",
+            #[cfg(not(any(feature = "rusqlite", feature = "postgres")))]
+            Type::Serial => unreachable!("Enable one of the following features: sqlite, pg"),
             Type::String => "CHARACTER VARYING",
             Type::UnsupportedType(_) => "", // TODO: should panic. TODO: document why.
             Type::UtcDateTime => "TIMESTAMP WITH TIME ZONE",
@@ -581,6 +586,8 @@ impl ToSql for Limit {
             StartRange(ref expression) => " LIMIT -1 OFFSET ".to_string() + &expression.to_sql(index),
             #[cfg(feature = "postgres")]
             StartRange(ref expression) => " OFFSET ".to_string() + &expression.to_sql(index),
+            #[cfg(not(any(feature = "rusqlite", feature = "postgres")))]
+            StartRange(_) => unreachable!("Enable one of the following features: sqlite, pg"),
         }
     }
 }

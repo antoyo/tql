@@ -24,6 +24,7 @@
  * TODO: looks like the function annotate does not exist anymore.
  * TODO: return an iterator instead of a Vec.
  * TODO: add support for default value.
+ * TODO: support INSERT OR IGNORE.
  *
  * TODO: support the missing types
  * (https://docs.rs/postgres/0.15.1/postgres/types/trait.ToSql.html).
@@ -76,9 +77,6 @@
 
 #![cfg_attr(feature = "unstable", feature(proc_macro))]
 #![recursion_limit="128"]
-
-#[cfg(not(any(feature = "rusqlite", feature = "postgres")))]
-compile_error!("Enable one of the following features: sqlite, pg");
 
 #[cfg(all(feature = "rusqlite", feature = "postgres"))]
 compile_error!("Only one of the following features must be enabled: sqlite, pg");
