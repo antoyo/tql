@@ -23,8 +23,11 @@ First, add this to you `Cargo.toml`:
 ----
 [dependencies]
 chrono = "^0.4.0"
-tql = { git = "https://github.com/antoyo/tql" }
-tql_macros = { git = "https://github.com/antoyo/tql" }
+tql_macros = "0.1"
+
+[dependencies.tql]
+features = ["chrono", "pg"]
+version = "0.1"
 
 [dependencies.postgres]
 features = ["with-chrono"]
@@ -88,7 +91,7 @@ fn main() {
 
     // Insert a row in the table.
     let text = String::new();
-    let id = sql!(Model.insert(text = &text, date_added = Utc::now())).unwrap();
+    let id = sql!(Model.insert(text = text, date_added = Utc::now())).unwrap();
 
     // Update a row.
     let result = sql!(Model.get(id).update(text = "new-text"));
@@ -105,6 +108,37 @@ fn main() {
 The `sql!()` macro uses the identifier `connection` by default.
 
 Look at the https://github.com/antoyo/tql#syntax-table[following table] to see more examples.
+
+== Usage with SQLite
+
+First, change the `postgres` dependency to this one:
+
+[source,toml]
+----
+rusqlite = "^0.13.0"
+----
+
+Then, change the features of the `tql` dependency:
+
+[source,toml]
+----
+[dependencies.tql]
+features = ["sqlite"]
+version = "0.1"
+----
+
+In the Rust code, the connection needs to come from `rusqlite` now:
+
+[source,rust]
+----
+use rusqlite::Connection;
+
+fn get_connection() -> Connection {
+    Connection::open("database.db").unwrap()
+}
+----
+
+And the rest is the same.
 
 == Using on stable Rust
 
@@ -147,10 +181,23 @@ Finally, disable the `unstable` feature by updating the `tql` dependency to:
 
 [source,toml]
 ----
-tql = { git = "https://github.com/antoyo/tql", default-features = false }
+[dependencies.tql]
+default-features = false
+features = ["chrono", "pg"]
+version = "0.1"
 ----
 
-With this small change, we can use the `sql!()` macro like before.
+With this small change, we can use the `sql!()`, but it now requires you to specify the connection:
+
+[source.rust]
+----
+let date_added = Utc::now();
+let id = sql!(connection, Model.insert(text = text, date_added = date_added)).unwrap();
+----
+
+Also, because of limitations on the stable compiler, you cannot use an expression for the arguments anymore:
+that's why we now create a variable `date_added`.
+For now, if you use `tql` on stable, you need to use identifiers or literals for arguments.
 
 === Why not always using the stable version?
 
@@ -192,7 +239,7 @@ This way, you get the best of both worlds:
 you have nice errors and you can deploy with the stable version of the compiler.
 This is not an issue at all because you're not supposed to have compiler errors when you're ready to deploy (and you can see the errors anyway).
 
-NOTE: Compile with `RUSTFLAGS "--cfg procmacro2_semver_exempt"` to get even better error messages.
+NOTE: Compile with `RUSTFLAGS="--cfg procmacro2_semver_exempt"` to get even better error messages.
 
 == Syntax table
 
