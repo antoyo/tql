@@ -294,7 +294,7 @@ pub fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, Option
     }
 
     let mut primary_key_field = None;
-    let position = item_struct.ident.span;
+    let position = item_struct.ident.span();
     let mut impls: TokenStream = quote! {}.into();
     let mut errors = vec![];
 

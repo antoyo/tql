@@ -33,13 +33,13 @@ pub fn create_sql_backend() -> DummySqlBackend {
 }
 
 impl ToSql for Aggregate {
-    fn to_sql(&self, index: &mut usize) -> String {
+    fn to_sql(&self, _index: &mut usize) -> String {
         unreachable!("Enable one of the following features: sqlite, pg");
     }
 }
 
 impl SqlBackend for DummySqlBackend {
-    fn insert_query(&self, table: &str, fields: &[String], values: &[String]) -> Tokens {
+    fn insert_query(&self, _table: &str, _fields: &[String], _values: &[String]) -> Tokens {
         unreachable!("Enable one of the following features: sqlite, pg");
     }
 }

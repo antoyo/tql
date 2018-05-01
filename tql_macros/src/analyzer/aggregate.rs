@@ -90,7 +90,7 @@ pub fn argument_to_aggregate(arg: &Expression) -> Result<Aggregate> {
                     let mut ident = new_ident(&result_name);
                     // NOTE: violate the hygiene by assigning a known context to this new
                     // identifier.
-                    ident.span = path_ident.span;
+                    ident.set_span(path_ident.span());
                     aggregate.result_name = Some(ident);
                 }
                 else {
@@ -189,7 +189,7 @@ pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &
             Expr::Path(ref path) => {
                 let segment_ident = path.path.segments.first().unwrap().into_value().ident;
                 let identifier = segment_ident.to_string();
-                let aggregate = check_aggregate_field(&identifier, aggregates, segment_ident.span, &mut errors);
+                let aggregate = check_aggregate_field(&identifier, aggregates, segment_ident.span(), &mut errors);
                 if let Some(aggregate) = aggregate {
                     // Transform the aggregate field name to its SQL representation.
                     AggregateFilterExpression::FilterValue(WithSpan {

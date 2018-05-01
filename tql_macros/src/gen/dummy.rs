@@ -33,7 +33,7 @@ pub fn create_backend() -> DummyBackend {
 }
 
 impl BackendGen for DummyBackend {
-    fn convert_index(&self, index: usize) -> Tokens {
+    fn convert_index(&self, _index: usize) -> Tokens {
         unreachable!("Enable one of the following features: sqlite, pg");
     }
 
@@ -41,25 +41,25 @@ impl BackendGen for DummyBackend {
         unreachable!("Enable one of the following features: sqlite, pg");
     }
 
-    fn gen_query_expr(&self, connection_expr: Tokens, args: &SqlQueryWithArgs, args_expr: Tokens, struct_expr: Tokens,
-                      aggregate_struct: Tokens, aggregate_expr: Tokens) -> Tokens
+    fn gen_query_expr(&self, _connection_expr: Tokens, _args: &SqlQueryWithArgs, _args_expr: Tokens, _struct_expr: Tokens,
+                      _aggregate_struct: Tokens, _aggregate_expr: Tokens) -> Tokens
     {
         unreachable!("Enable one of the following features: sqlite, pg");
     }
 
-    fn int_literal(&self, num: usize) -> Expr {
+    fn int_literal(&self, _num: usize) -> Expr {
         unreachable!("Enable one of the following features: sqlite, pg");
     }
 
-    fn row_type_ident(&self, table_ident: &Ident) -> Tokens {
+    fn row_type_ident(&self, _table_ident: &Ident) -> Tokens {
         unreachable!("Enable one of the following features: sqlite, pg");
     }
 
-    fn to_sql(&self, primary_key_ident: &Ident) -> Tokens {
+    fn to_sql(&self, _primary_key_ident: &Ident) -> Tokens {
         unreachable!("Enable one of the following features: sqlite, pg");
     }
 
-    fn to_sql_impl(&self, table_ident: &Ident, to_sql_code: Tokens) -> Tokens {
+    fn to_sql_impl(&self, _table_ident: &Ident, _to_sql_code: Tokens) -> Tokens {
         unreachable!("Enable one of the following features: sqlite, pg");
     }
 }

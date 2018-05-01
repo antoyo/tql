@@ -19,8 +19,6 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use syn::spanned::Spanned;
-
 use ast::Query;
 use error::{Error, Result, res};
 use state::methods_singleton;

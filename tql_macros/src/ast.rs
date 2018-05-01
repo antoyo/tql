@@ -327,5 +327,5 @@ pub struct WithSpan<T> {
 /// Get the position of the first token of the expression.
 pub fn first_token_span(expr: &Expr) -> Span {
     let tokens: TokenStream = expr.into_tokens().into();
-    tokens.into_iter().next().expect("first token of method call expression").span
+    tokens.into_iter().next().expect("first token of method call expression").span()
 }

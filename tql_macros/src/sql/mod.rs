@@ -207,11 +207,11 @@ impl ToSql for [Ident] {
 impl Join {
     fn to_check(&self) -> Tokens {
         let related_table_macro_name =
-            Ident::new(&format!("tql_{}_check_related_tables", self.base_table), self.base_field.span);
+            Ident::new(&format!("tql_{}_check_related_tables", self.base_table), self.base_field.span());
         let related_pk_macro_name = Ident::new(&format!("tql_{}_check_related_pks", self.base_table),
-            self.base_field.span);
+            self.base_field.span());
         let base_field_ident = &self.base_field;
-        quote_spanned! { self.base_field.span =>
+        quote_spanned! { self.base_field.span() =>
             #related_table_macro_name!(#base_field_ident);
             #related_pk_macro_name!(#base_field_ident);
         }
@@ -220,7 +220,7 @@ impl Join {
     fn to_tokens(&self) -> Tokens {
         let related_table_macro_name =
             Ident::new(&format!("tql_{}_related_tables", self.base_table), Span::call_site());
-        let related_pks_macro_name = Ident::new(&format!("tql_{}_related_pks", self.base_table), self.base_field.span);
+        let related_pks_macro_name = Ident::new(&format!("tql_{}_related_pks", self.base_table), self.base_field.span());
         let base_table = &self.base_table;
         let base_field = self.base_field.to_sql(&mut 1);
         let base_field_ident = &self.base_field;

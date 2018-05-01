@@ -111,7 +111,7 @@ use std::iter::FromIterator;
 
 use proc_macro::TokenStream;
 #[cfg(feature = "unstable")]
-use proc_macro::{TokenNode, TokenTree};
+use proc_macro::{Group, TokenTree};
 use proc_macro2::{Spacing, Span};
 use quote::Tokens;
 #[cfg(feature = "unstable")]
@@ -348,16 +348,13 @@ fn respan_tokens_with(tokens: Tokens, span: proc_macro::Span) -> Tokens {
 fn respan_with(tokens: TokenStream, span: proc_macro::Span) -> TokenStream {
     let mut result = vec![];
     for mut token in tokens {
-        match token.kind {
-            TokenNode::Group(delimiter, inner_tokens) => {
-                let new_tokens = respan_with(inner_tokens, span);
-                result.push(TokenTree {
-                    span,
-                    kind: TokenNode::Group(delimiter, new_tokens),
-                });
+        match token {
+            TokenTree::Group(group) => {
+                let new_tokens = respan_with(group.stream(), span);
+                result.push(TokenTree::Group(Group::new(group.delimiter(), new_tokens)));
             },
             _ => {
-                token.span = span;
+                token.set_span(span);
                 result.push(token);
             }
         }
@@ -626,18 +623,22 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
                 if let Expr::Macro(ref macr) = **tuple.elems.first().unwrap().value() {
                     let tts: Vec<_> = macr.mac.tts.clone().into_iter().collect();
                     let (sql_query, connection_expr) =
-                        if let proc_macro2::TokenNode::Op(',', Spacing::Alone) = tts[1].kind {
-                            let connection_expr = &tts[0];
-                            let connection_expr = quote! {
-                                #connection_expr
-                            };
-                            (&tts[2..], connection_expr)
+                        if let proc_macro2::TokenTree::Op(op) = tts[1] {
+                            if op.op() == ',' && op.spacing() == Spacing::Alone {
+                                let connection_expr = &tts[0];
+                                let connection_expr = quote! {
+                                    #connection_expr
+                                };
+                                (&tts[2..], connection_expr)
+                            }
+                            else {
+                                (&tts[..], default_connection_expr())
+                            }
                         }
                         else {
                             (&tts[..], default_connection_expr())
                         };
-                    let sql_query = sql_query.iter()
-                        .map(|tt| proc_macro2::TokenStream::from(tt.clone()));
+                    let sql_query = sql_query.iter().cloned();
                     let sql_query = proc_macro2::TokenStream::from_iter(sql_query);
                     let sql_result = to_sql_query(sql_query);
                     let (code, metavars, extract_macro) = match sql_result {
