@@ -21,7 +21,7 @@
 
 //! Tests of the methods related to `Query::Select`.
 
-#![feature(proc_macro)]
+#![feature(proc_macro_hygiene)]
 
 extern crate postgres;
 extern crate tql;

@@ -127,7 +127,7 @@ struct QueryData {
 pub fn analyze(method_calls: &MethodCalls) -> Result<Query> {
     let mut errors = vec![];
 
-    let table_name = method_calls.name.expect("table name in method_calls").to_string();
+    let table_name = method_calls.name.clone().expect("table name in method_calls").to_string();
 
     check_methods(&method_calls, &mut errors);
     check_method_calls_validity(&method_calls, &mut errors);
@@ -213,17 +213,17 @@ fn check_method_calls_validity(method_calls: &MethodCalls, errors: &mut Vec<Erro
         };
 
     let main_method = method_calls.calls.iter()
-        .filter(|call| method_map.contains_key(&call.name.as_ref()) )
+        .filter(|call| method_map.contains_key(&call.name.to_string().as_str() ))
         .next()
-        .map_or("all", |call| call.name.as_ref());
+        .map_or("all".to_string(), |call| call.name.to_string());
 
     // TODO: check that the insert, update or delete methods are not called more than once.
-    let mut valid_methods = vec![main_method];
-    valid_methods.append(&mut method_map[&main_method].clone());
+    let mut valid_methods = vec![main_method.clone()];
+    valid_methods.append(&mut method_map[main_method.as_str()].iter().map(|x| x.to_string()).collect());
 
     let methods = get_methods();
     let invalid_methods = method_calls.calls.iter()
-        .filter(|call| methods.contains(&call.name.to_string()) && !valid_methods.contains(&call.name.as_ref()));
+        .filter(|call| methods.contains(&call.name.to_string()) && !valid_methods.contains(&call.name.to_string()));
 
     for method in invalid_methods {
         errors.push(Error::new(
@@ -245,13 +245,13 @@ fn check_methods(method_calls: &MethodCalls, errors: &mut Vec<Error>) {
                 &format!("no method named `{}` found in tql", method_call.name),
                 method_call.name.span(),
             );
-            propose_similar_name(method_call.name.as_ref(), methods.iter().map(String::as_ref), &mut error);
+            propose_similar_name(method_call.name.to_string().as_str(), methods.iter().map(String::as_ref), &mut error);
             errors.push(error);
         }
     }
 
     if method_calls.calls.is_empty() {
-        let table_name = &method_calls.name.expect("table name in method_calls");
+        let table_name = &method_calls.name.clone().expect("table name in method_calls");
         let mut error =
             Error::new_with_code(
                 &format!("`{table}` is the name of a struct, but this expression uses it like a method name",
@@ -461,7 +461,7 @@ fn process_methods(calls: &[MethodCall], table_name: &str, delete_position: &mut
     let mut query_data = QueryData::default();
 
     for method_call in calls {
-        match method_call.name.as_ref() {
+        match method_call.name.to_string().as_str() {
             "aggregate" => {
                 try(convert_arguments(&method_call.args, argument_to_aggregate), &mut errors, |aggrs| {
                     query_data.aggregates = aggrs;

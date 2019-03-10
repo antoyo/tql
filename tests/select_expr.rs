@@ -19,7 +19,7 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#![feature(proc_macro, proc_macro_non_items)]
+#![feature(proc_macro_hygiene)]
 
 macro_rules! let_vec {
     ( $($name:ident),* = $vector:ident ) => {

@@ -1,6 +1,6 @@
 //! Workaround to make get the hygiene right on stable.
 
-use quote::Tokens;
+use proc_macro2::TokenStream;
 use syn::{
     Expr,
     Ident,
@@ -23,16 +23,16 @@ use ast::{
 };
 use parser::MethodCalls;
 
-pub fn generate_macro_patterns(query: &Query, calls: &MethodCalls) -> Tokens {
+pub fn generate_macro_patterns(query: &Query, calls: &MethodCalls) -> TokenStream {
     let mut count = 0;
     let mut dummy_count = 0;
     let mut args = vec![];
-    let table_name = calls.name.expect("table name");
+    let table_name = calls.name.clone().expect("table name");
     let mut methods = quote! {};
     for call in &calls.calls {
-        let name = call.name;
+        let name = &call.name;
         let args =
-            match name.as_ref() {
+            match name.to_string().as_str() {
                 "all" | "create" | "delete" | "drop" => quote! {},
                 "aggregate" =>
                     if let Query::Aggregate { ref aggregates, .. } = *query {
@@ -114,12 +114,12 @@ pub fn generate_macro_patterns(query: &Query, calls: &MethodCalls) -> Tokens {
     }
 }
 
-fn filter_to_args(filter: &FilterExpression, dummy_count: &mut i32, count: &mut i32, args: &mut Vec<Ident>) -> Tokens {
+fn filter_to_args(filter: &FilterExpression, dummy_count: &mut i32, count: &mut i32, args: &mut Vec<Ident>) -> TokenStream {
     match *filter {
         FilterExpression::Filter(ref filter) => {
             let left = filter_value_to_args(&filter.operand1);
             let op =
-                if left == quote! {} {
+                if left.is_empty() {
                     quote! {}
                 }
                 else {
@@ -152,7 +152,7 @@ fn filter_to_args(filter: &FilterExpression, dummy_count: &mut i32, count: &mut 
     }
 }
 
-fn filter_value_to_args(filter_value: &FilterValue) -> Tokens {
+fn filter_value_to_args(filter_value: &FilterValue) -> TokenStream {
     match *filter_value {
         FilterValue::Identifier(_, ref identifier) => {
             quote! { #identifier }
@@ -165,7 +165,7 @@ fn filter_value_to_args(filter_value: &FilterValue) -> Tokens {
     }
 }
 
-fn log_op_to_args(operator: LogicalOperator) -> Tokens {
+fn log_op_to_args(operator: LogicalOperator) -> TokenStream {
     match operator {
         LogicalOperator::And => quote! { && },
         LogicalOperator::Not => quote! { ! },
@@ -173,7 +173,7 @@ fn log_op_to_args(operator: LogicalOperator) -> Tokens {
     }
 }
 
-fn rel_op_to_args(operator: RelationalOperator) -> Tokens {
+fn rel_op_to_args(operator: RelationalOperator) -> TokenStream {
     match operator {
         RelationalOperator::Equal => quote! { == },
         RelationalOperator::LesserThan => quote! { < },
@@ -184,7 +184,7 @@ fn rel_op_to_args(operator: RelationalOperator) -> Tokens {
     }
 }
 
-fn assign_op_to_args(operator: AssignmentOperator) -> Tokens {
+fn assign_op_to_args(operator: AssignmentOperator) -> TokenStream {
     match operator {
         AssignmentOperator::Add => quote! { += },
         AssignmentOperator::Divide => quote! { /= },
@@ -195,7 +195,7 @@ fn assign_op_to_args(operator: AssignmentOperator) -> Tokens {
     }
 }
 
-fn assignments_to_args(assignments: &Vec<Assignment>, dummy_count: &mut i32, count: &mut i32, args: &mut Vec<Ident>) -> Tokens {
+fn assignments_to_args(assignments: &Vec<Assignment>, dummy_count: &mut i32, count: &mut i32, args: &mut Vec<Ident>) -> TokenStream {
     let assignments = assignments.iter()
         .map(|assignment| {
             let ident = &assignment.identifier;
@@ -210,7 +210,7 @@ fn assignments_to_args(assignments: &Vec<Assignment>, dummy_count: &mut i32, cou
     }
 }
 
-fn order_to_args(order: &[Order]) -> Tokens {
+fn order_to_args(order: &[Order]) -> TokenStream {
     let orders =
         order.iter()
             .map(|order|
@@ -225,7 +225,7 @@ fn order_to_args(order: &[Order]) -> Tokens {
     }
 }
 
-fn limit_to_args(limit: &Limit, dummy_count: &mut i32, count: &mut i32, args: &mut Vec<Ident>) -> Tokens {
+fn limit_to_args(limit: &Limit, dummy_count: &mut i32, count: &mut i32, args: &mut Vec<Ident>) -> TokenStream {
     match *limit {
         Limit::EndRange(ref expr) => {
             let expr = expr_to_args(expr, dummy_count, count, args);
@@ -248,18 +248,18 @@ fn limit_to_args(limit: &Limit, dummy_count: &mut i32, count: &mut i32, args: &m
     }
 }
 
-fn expr_to_args(expr: &Expr, dummy_count: &mut i32, count: &mut i32, args: &mut Vec<Ident>) -> Tokens {
+fn expr_to_args(expr: &Expr, dummy_count: &mut i32, count: &mut i32, args: &mut Vec<Ident>) -> TokenStream {
     match *expr {
         Expr::Lit(_) => {
             *dummy_count += 1;
-            let ident = Ident::from(format!("__tql_dummy_arg{}", *dummy_count));
+            let ident = Ident::new(&format!("__tql_dummy_arg{}", *dummy_count), proc_macro2::Span::call_site());
             quote! {
                 $#ident : tt
             }
         },
         _ => {
             *count += 1;
-            let ident = Ident::from(format!("__tql_arg{}", *count));
+            let ident = Ident::new(&format!("__tql_arg{}", *count), proc_macro2::Span::call_site());
             args.push(ident.clone());
             quote! {
                 $#ident : ident
@@ -268,11 +268,11 @@ fn expr_to_args(expr: &Expr, dummy_count: &mut i32, count: &mut i32, args: &mut 
     }
 }
 
-fn joins_to_args(joins: &[Join]) -> Tokens {
+fn joins_to_args(joins: &[Join]) -> TokenStream {
     let joins = joins.iter()
         .map(|join| {
             let base_field = &join.base_field;
-            let base_table = Ident::from(join.base_table.as_str());
+            let base_table = Ident::new(join.base_table.as_str(), proc_macro2::Span::call_site());
             quote! {
                 #base_table.#base_field
             }
@@ -282,12 +282,12 @@ fn joins_to_args(joins: &[Join]) -> Tokens {
     }
 }
 
-fn aggregates_to_args(aggregates: &[Aggregate]) -> Tokens {
+fn aggregates_to_args(aggregates: &[Aggregate]) -> TokenStream {
     let aggregates = aggregates.iter()
         .map(|aggregate| {
             let result =
                 if aggregate.has_name_in_query {
-                    let name = aggregate.result_name.expect("result name");
+                    let name = aggregate.result_name.clone().expect("result name");
                     quote! { #name = }
                 }
                 else {
@@ -304,7 +304,7 @@ fn aggregates_to_args(aggregates: &[Aggregate]) -> Tokens {
     }
 }
 
-fn values_to_args(groups: &Groups) -> Tokens {
+fn values_to_args(groups: &Groups) -> TokenStream {
     quote! {
         #(#groups),*
     }

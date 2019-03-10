@@ -21,7 +21,7 @@
 
 //! Tests of the type analyzer lint for the `#[SqlTable]` attribute.
 
-#![feature(proc_macro)]
+#![feature(proc_macro_hygiene)]
 
 extern crate tql;
 #[macro_use]

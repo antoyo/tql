@@ -11,14 +11,14 @@ version = "0.1.0"
 rand = "^0.4.2"
 
 [dependencies.proc-macro2]
-version = "0.3"
+version = "0.4"
 
 [dependencies.quote]
-version = "0.5"
+version = "0.6"
 
 [dependencies.syn]
 features = ["extra-traits", "printing", "full"]
-version = "0.13"
+version = "0.15"
 
 [lib]
 proc-macro = true

@@ -147,13 +147,13 @@ pub fn expression_to_filter_expression(arg: &Expression, table_name: &str) -> Re
             },
             Expr::MethodCall(ref call) => {
                 FilterExpression::FilterValue(WithSpan {
-                    node: method_call_expression_to_filter_expression(call.method, &call.receiver, &call.args,
+                    node: method_call_expression_to_filter_expression(call.method.clone(), &call.receiver, &call.args,
                                                                       call.span(), &mut errors),
                     span: arg.span(),
                 })
             },
             Expr::Path(ref path) => {
-                let identifier = path.path.segments.first().unwrap().into_value().ident;
+                let identifier = path.path.segments.first().unwrap().into_value().ident.clone();
                 FilterExpression::FilterValue(WithSpan {
                     node: FilterValue::Identifier(table_name.to_string(), identifier),
                     span: arg.span(),
@@ -217,7 +217,7 @@ fn method_call_expression_to_filter_expression(identifier: Ident, expr: &Express
 /// Convert a method call where the object is an identifier to a filter expression.
 fn path_method_call_to_filter(path: &Path, identifier: Ident, args: &Punctuated<Expr, Comma>, position: Span) -> FilterValue
 {
-    let object_name = path.segments.first().unwrap().into_value().ident;
+    let object_name = path.segments.first().unwrap().into_value().ident.clone();
     let arguments: Vec<Expression> = args.iter()
         .cloned()
         .collect();

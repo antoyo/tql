@@ -21,7 +21,7 @@
 
 //! Tests of the `#[SqlTable]` attribute.
 
-#![feature(proc_macro)] // FIXME: bad span for field nested_options in stderr (should be on Option<String>, not just Option).
+#![feature(proc_macro_hygiene)] // FIXME: bad span for field nested_options in stderr (should be on Option<String>, not just Option).
 
 #[macro_use]
 extern crate tql_macros;

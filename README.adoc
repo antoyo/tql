@@ -40,7 +40,7 @@ Next, add this to your crate:
 
 [source,rust]
 ----
-#![feature(proc_macro)]
+#![feature(proc_macro_hygiene)]
 
 extern crate chrono;
 extern crate postgres;
@@ -148,7 +148,7 @@ First, remove these lines:
 
 [source,rust]
 ----
-#![feature(proc_macro)]
+#![feature(proc_macro_hygiene)]
 
 // …
 

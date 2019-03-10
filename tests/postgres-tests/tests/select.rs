@@ -19,7 +19,7 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#![feature(proc_macro)]
+#![feature(proc_macro_hygiene)]
 
 extern crate chrono;
 extern crate postgres;

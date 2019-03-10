@@ -29,10 +29,10 @@ pub fn analyze_methods(query: &Query) -> Result<()> {
     let calls = get_method_calls(query);
     let mut errors = vec![];
     for (call, _) in calls {
-        let name = call.method_name.as_ref();
-        if let Some(method) = methods.get(name) {
+        let name = call.method_name.to_string();
+        if let Some(method) = methods.get(&name) {
             if method.template.is_none() {
-                errors.push(Error::new(&format!("The method {} is not available on this backend", name),
+                errors.push(Error::new(&format!("The method {} is not available on this backend", &name),
                     call.method_name.span()))
             }
         }

@@ -24,7 +24,7 @@
 use std::fmt::{Display, Error, Formatter};
 
 use proc_macro2::{Span, TokenStream};
-use quote::{Tokens, ToTokens};
+use quote::ToTokens;
 use syn::{Expr, Ident};
 
 pub type Expression = Expr;
@@ -288,7 +288,7 @@ pub enum QueryType {
 #[derive(Debug)]
 pub struct TypedField {
     pub identifier: String,
-    pub typ: Tokens,
+    pub typ: TokenStream,
 }
 
 /// Get the query type.
@@ -326,6 +326,6 @@ pub struct WithSpan<T> {
 
 /// Get the position of the first token of the expression.
 pub fn first_token_span(expr: &Expr) -> Span {
-    let tokens: TokenStream = expr.into_tokens().into();
+    let tokens: TokenStream = expr.into_token_stream().into();
     tokens.into_iter().next().expect("first token of method call expression").span()
 }

@@ -31,8 +31,7 @@ mod sqlite;
 use std::iter;
 use std::str::from_utf8;
 
-use proc_macro2::Span;
-use quote::Tokens;
+use proc_macro2::{Span,TokenStream};
 use syn::{Expr, Ident, Lit};
 
 use ast::{
@@ -76,7 +75,7 @@ use self::postgres::create_sql_backend;
 use self::sqlite::create_sql_backend;
 
 trait SqlBackend {
-    fn insert_query(&self, table: &str, fields: &[String], values: &[String]) -> Tokens;
+    fn insert_query(&self, table: &str, fields: &[String], values: &[String]) -> TokenStream;
 }
 
 /// A generic trait for converting a value to SQL.
@@ -126,7 +125,7 @@ impl ToSql for AggregateFilters {
 
 impl ToSql for Assignment {
     fn to_sql(&self, index: &mut usize) -> String {
-        let identifier = self.identifier.expect("Assignment identifier").to_sql(index);
+        let identifier = self.identifier.clone().expect("Assignment identifier").to_sql(index);
         if let AssignmentOperator::Equal = self.operator.node {
             identifier + &self.operator.node.to_sql(index) + &self.value.to_sql(index)
         }
@@ -158,7 +157,7 @@ impl ToSql for AssignmentOperator {
 }
 
 impl FilterExpression {
-    fn to_tokens(&self, index: &mut usize) -> Tokens {
+    fn to_tokens(&self, index: &mut usize) -> TokenStream {
         match *self {
             FilterExpression::Filter(ref filter) => filter.to_tokens(index),
             FilterExpression::Filters(ref filters) => filters.to_tokens(index),
@@ -205,7 +204,7 @@ impl ToSql for [Ident] {
 }
 
 impl Join {
-    fn to_check(&self) -> Tokens {
+    fn to_check(&self) -> TokenStream {
         let related_table_macro_name =
             Ident::new(&format!("tql_{}_check_related_tables", self.base_table), self.base_field.span());
         let related_pk_macro_name = Ident::new(&format!("tql_{}_check_related_pks", self.base_table),
@@ -217,7 +216,7 @@ impl Join {
         }
     }
 
-    fn to_tokens(&self) -> Tokens {
+    fn to_tokens(&self) -> TokenStream {
         let related_table_macro_name =
             Ident::new(&format!("tql_{}_related_tables", self.base_table), Span::call_site());
         let related_pks_macro_name = Ident::new(&format!("tql_{}_related_pks", self.base_table), self.base_field.span());
@@ -234,7 +233,7 @@ impl Join {
     }
 }
 
-fn sep_by<I: Iterator<Item=Tokens>>(elements: I, sep: &str) -> Tokens {
+fn sep_by<I: Iterator<Item=TokenStream>>(elements: I, sep: &str) -> TokenStream {
     let mut elements: Vec<_> = elements.collect();
     if let Some(last_element) = elements.pop() {
         let elements = elements.iter()
@@ -254,21 +253,21 @@ fn sep_by<I: Iterator<Item=Tokens>>(elements: I, sep: &str) -> Tokens {
     }
 }
 
-fn joins_to_check(joins: &[Join]) -> Tokens {
+fn joins_to_check(joins: &[Join]) -> TokenStream {
     let checks = joins.iter().map(|join| join.to_check());
     quote! {
         #(#checks)*
     }
 }
 
-fn joins_to_tokens(joins: &[Join]) -> Tokens {
+fn joins_to_tokens(joins: &[Join]) -> TokenStream {
     sep_by(joins.iter().map(|join| join.to_tokens()), " ")
 }
 
-fn joined_fields(joins: &[Join], table: &str) -> Tokens {
+fn joined_fields(joins: &[Join], table: &str) -> TokenStream {
     let macro_name = Ident::new(&format!("tql_{}_related_field_list", table), Span::call_site());
     let fields = joins.iter()
-        .map(|join| join.base_field);
+        .map(|join| join.base_field.clone());
     let macro_name = iter::repeat(macro_name)
         .take(joins.len());
     quote! {
@@ -284,7 +283,7 @@ impl ToSql for String {
 
 /// Convert a whole `Query` to SQL.
 impl Query {
-    pub fn to_tokens(&self) -> Tokens {
+    pub fn to_tokens(&self) -> TokenStream {
         match *self {
             Query::Aggregate { ref aggregates, ref aggregate_filter, ref filter, ref groups, ref joins, ref table } => {
                 let where_clause = filter_to_where_clause(filter);
@@ -333,7 +332,7 @@ impl Query {
             },
             Query::Insert { ref assignments, ref table } => {
                 let fields: Vec<_> = assignments.iter().map(|assign|
-                    assign.identifier.expect("Assignment identifier").to_sql(&mut 1)).collect();
+                    assign.identifier.clone().expect("Assignment identifier").to_sql(&mut 1)).collect();
                 let index = &mut 1;
                 let values: Vec<_> = assignments.iter().map(|assign|
                     assign.value.to_sql(index)
@@ -380,7 +379,7 @@ impl Query {
 }
 
 impl Filter {
-    fn to_tokens(&self, index: &mut usize) -> Tokens {
+    fn to_tokens(&self, index: &mut usize) -> TokenStream {
         let operand1 = self.operand1.to_tokens();
         let operator = self.operator.to_sql(index);
         let operand2 = self.operand2.to_sql(index);
@@ -391,7 +390,7 @@ impl Filter {
 }
 
 impl Filters {
-    fn to_tokens(&self, index: &mut usize) -> Tokens {
+    fn to_tokens(&self, index: &mut usize) -> TokenStream {
         let operand1 = self.operand1.to_tokens(index);
         let operator = self.operator.to_sql(index);
         let operand2 = self.operand2.to_tokens(index);
@@ -402,7 +401,7 @@ impl Filters {
 }
 
 impl FilterValue {
-    fn to_tokens(&self) -> Tokens {
+    fn to_tokens(&self) -> TokenStream {
         let sql =
             match *self {
                 FilterValue::Identifier(ref table, ref identifier) => format!("{}.{}", table, identifier.to_sql(&mut 1)),
@@ -488,7 +487,7 @@ fn escape(string: String) -> String {
     string.replace("'", "''")
 }
 
-pub fn type_to_sql(typ: &Type, nullable: bool) -> Tokens {
+pub fn type_to_sql(typ: &Type, nullable: bool) -> TokenStream {
     let sql_type =
         match *typ {
             Type::Bool => "BOOLEAN",
@@ -605,7 +604,7 @@ impl ToSql for RelationalOperator {
     }
 }
 
-pub fn fields_to_sql(fields: &[TypedField]) -> Tokens {
+pub fn fields_to_sql(fields: &[TypedField]) -> TokenStream {
     let fields = fields.iter()
         .map(|field| {
              let ident = field.identifier.to_sql(&mut 1);
@@ -635,7 +634,7 @@ fn has_order_clauses(orders: &[Order]) -> bool {
     false
 }
 
-fn string_token(string: &str) -> Tokens {
+fn string_token(string: &str) -> TokenStream {
     let expr = string_literal(string);
     quote! {
         #expr

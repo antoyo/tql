@@ -87,7 +87,7 @@ impl Parser {
                         .collect();
 
                     calls.push(MethodCall {
-                        name: call.method,
+                        name: call.method.clone(),
                         args,
                         position: expr.span(),
                     });
@@ -96,7 +96,7 @@ impl Parser {
                     if path.path.segments.len() == 1 {
                         calls.name = Some(path.path.segments.first()
                             .expect("first segment in path").into_value()
-                            .ident);
+                            .ident.clone());
                     }
                 },
                 Expr::Index(ref index) => {

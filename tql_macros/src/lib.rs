@@ -75,7 +75,7 @@
  * explain why it is slow.
  */
 
-#![cfg_attr(feature = "unstable", feature(proc_macro))]
+#![cfg_attr(feature = "unstable", feature(proc_macro_diagnostic))]
 #![recursion_limit="128"]
 
 #[cfg(all(feature = "rusqlite", feature = "postgres"))]
@@ -113,9 +113,9 @@ use proc_macro::TokenStream;
 #[cfg(feature = "unstable")]
 use proc_macro::{Group, TokenTree};
 use proc_macro2::{Spacing, Span};
-use quote::Tokens;
+use proc_macro2::TokenStream as Tokens; // TODO: remove
 #[cfg(feature = "unstable")]
-use quote::ToTokens;
+//use quote::ToTokens;
 use syn::{
     Expr,
     Ident,
@@ -341,7 +341,7 @@ pub fn sql_table(input: TokenStream) -> TokenStream {
 #[cfg(feature = "unstable")]
 fn respan_tokens_with(tokens: Tokens, span: proc_macro::Span) -> Tokens {
     let tokens: proc_macro2::TokenStream = respan_with(tokens.into(), span).into();
-    tokens.into_tokens()
+    tokens.into()
 }
 
 #[cfg(feature = "unstable")]
@@ -375,10 +375,11 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> (Tokens, Vec<Tokens>) {
     #[cfg(feature = "unstable")]
     let metavars = vec![];
     let mut next_name = (0..).map(|counter|
-        Ident::from(format!("__tql_arg{}", counter))
+        //Ident::from(format!("__tql_arg{}", counter))
+        Ident::new(&format!("__tql_arg{}", counter), Span::call_site())
     );
 
-    let ident = Ident::from("_table");
+    let ident = Ident::new("_table", Span::call_site());
     {
         let mut add_arg = |arg: &Arg| {
             let arg_name =
@@ -572,8 +573,10 @@ pub fn check_missing_fields(input: TokenStream) -> TokenStream {
 
 struct Arguments(Punctuated<Expr, Token![,]>);
 
-impl syn::synom::Synom for Arguments {
-    named!(parse -> Self, map!(call!(Punctuated::parse_terminated), Arguments));
+impl syn::parse::Parse for Arguments {
+    fn parse(input: syn::parse::ParseStream) -> syn::parse::Result<Self> {
+        Ok(Self(Punctuated::parse_terminated(input)?))
+    }
 }
 
 fn default_connection_expr() -> Tokens {
@@ -623,8 +626,9 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
                 if let Expr::Macro(ref macr) = **tuple.elems.first().unwrap().value() {
                     let tts: Vec<_> = macr.mac.tts.clone().into_iter().collect();
                     let (sql_query, connection_expr) =
-                        if let proc_macro2::TokenTree::Op(op) = tts[1] {
-                            if op.op() == ',' && op.spacing() == Spacing::Alone {
+                        //if let proc_macro2::TokenTree::Op(op) = tts[1] {
+                        if let proc_macro2::TokenTree::Punct(ref op) = tts[1] { //TODO: check
+                            if op.as_char() == ',' && op.spacing() == Spacing::Alone {
                                 let connection_expr = &tts[0];
                                 let connection_expr = quote! {
                                     #connection_expr
