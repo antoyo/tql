@@ -28,9 +28,7 @@ use std::result;
 
 #[cfg(feature = "unstable")]
 use proc_macro::{Diagnostic, Level};
-use proc_macro2::Span;
-#[cfg(not(feature = "unstable"))]
-use quote::Tokens;
+use proc_macro2::{Span,TokenStream};
 
 /// `Error` is a type that represents an error with its position.
 #[derive(Debug)]
@@ -193,7 +191,7 @@ pub fn res<T>(result: T, errors: Vec<Error>) -> Result<T> {
 }
 
 #[cfg(not(feature = "unstable"))]
-pub fn compiler_error(msg: &Error) -> Tokens {
+pub fn compiler_error(msg: &Error) -> TokenStream {
     let msg = msg.to_string();
     quote! {
         compile_error!(#msg);
