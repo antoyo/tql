@@ -79,7 +79,7 @@ pub fn argument_to_aggregate(arg: &Expression) -> Result<Aggregate> {
             }
         }
 
-        if check_argument_count(&call.args, 1, arg.span(), &mut errors) {
+        if check_argument_count(&call.args, 1, crate::merge_spans_of(arg), &mut errors) {
             if let Expr::Path(ref path) = **call.args.first().expect("first argument").value() {
                 let path_ident = &path.path.segments.first().unwrap().into_value().ident;
                 aggregate.field = Some(path_ident.clone());
