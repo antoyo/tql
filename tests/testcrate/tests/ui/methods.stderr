@@ -14,15 +14,13 @@ error[E0599]: no method named `yar` found for type `tql::DateTime` in the curren
   --> $DIR/methods.rs:60:28
    |
 60 |     sql!(Table.filter(date.yar() == 2015));
-   |                            ^^^
-   |
-   = help: did you mean `year`?
+   |                            ^^^ help: did you mean: `year`
 
 error[E0609]: no field `dte` on type `Table`
   --> $DIR/methods.rs:64:23
    |
 64 |     sql!(Table.filter(dte.year() == 2015));
-   |                       ^^^ did you mean `date`?
+   |                       ^^^ help: a field with a similar name exists: `date`
 
 error[E0308]: mismatched types
   --> $DIR/methods.rs:68:23
@@ -34,7 +32,7 @@ error[E0308]: mismatched types
   --> $DIR/methods.rs:74:40
    |
 74 |     sql!(Table.filter(field1.ends_with(1) == true));
-   |                                        ^ expected &str, found integral variable
+   |                                        ^ expected &str, found integer
    |
    = note: expected type `&str`
               found type `{integer}`
@@ -62,3 +60,5 @@ error[E0308]: mismatched types
 
 error: aborting due to 9 previous errors
 
+Some errors occurred: E0308, E0599, E0609.
+For more information about an error, try `rustc --explain E0308`.

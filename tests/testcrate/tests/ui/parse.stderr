@@ -1,4 +1,4 @@
-error: cannot parse expression in sql!(): failed to parse all tokens
+error: cannot parse expression in sql!(): expected `,`
   --> $DIR/parse.rs:45:5
    |
 45 |     sql!(Table.filter(field1 in "value1"));
