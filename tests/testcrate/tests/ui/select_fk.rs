@@ -23,24 +23,24 @@
 
 #![feature(proc_macro_hygiene)]
 
-extern crate postgres;
+//extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
-
+#[macro_use] mod connection;
 use tql::{ForeignKey, PrimaryKey};
-
+backend_extern_crate!();
+use connection::{Connection, get_connection};    
 #[derive(SqlTable)]
 struct Table {
     id: PrimaryKey,
     related: ForeignKey<RelatedTable>,
 }
-
 #[derive(SqlTable)]
 struct RelatedTable {
     field1: String,
 }
-
 fn main() {
+    let connection = get_connection();
     sql!(Table.all().join(related));
 }

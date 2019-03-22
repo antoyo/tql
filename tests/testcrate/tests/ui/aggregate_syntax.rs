@@ -22,22 +22,22 @@
 //! Tests of the aggregate() method.
 
 #![feature(proc_macro_hygiene)]
-
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
-
+#[macro_use] mod connection;
 use tql::PrimaryKey;
 use tql_macros::sql;
-
+backend_extern_crate!();
 #[derive(SqlTable)]
 struct Table {
     id: PrimaryKey,
     field1: String,
     i32_field: i32,
 }
-
+use connection::{Connection, get_connection};
 fn main() {
+    let connection = get_connection();
     sql!(Table.aggregate(avh(i32_field)));
     //~^ ERROR unresolved name `avh`
     //~| HELP did you mean avg?
@@ -54,7 +54,7 @@ fn main() {
     //sql!(Table.values(i32_field).aggregate(average = avg(i32_field)).filter(avrage < 20));
     // TODO: propose similar names.
 
-    if let Some(aggregate) = sql!(Table.aggregate(average = avg(field2))) {
-        println!("{}", aggregate.averag);
+    if let Ok(aggregate) = sql!(Table.aggregate(average = avg(field2))) {
+        println!("{}", aggregate.average);
     }
 }

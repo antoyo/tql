@@ -1,4 +1,4 @@
-/*
+        /*
  * Copyright (c) 2017-2018 Boucher, Antoni <bouanto@zoho.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -22,14 +22,14 @@
 //! Tests of the `#[SqlTable]` attribute.
 
 #![feature(proc_macro_hygiene)] // FIXME: bad span for field nested_options in stderr (should be on Option<String>, not just Option).
-
+extern crate tql;
 #[macro_use]
 extern crate tql_macros;
-
+#[macro_use] mod connection;
+backend_extern_crate!();
 struct Connection {
     value: String,
 }
-
 #[derive(SqlTable)]
 struct Table<'a> {
     //~^ WARNING No primary key found
@@ -53,4 +53,8 @@ struct Table<'a> {
     //~^ ERROR use of unsupported type name `Vec`
     vector_i32: Vec<i32>,
     //~^ ERROR use of unsupported type name `Vec<i32>`
+}
+
+fn main() {
+    
 }
