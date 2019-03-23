@@ -75,7 +75,7 @@
  * explain why it is slow.
  */
 
-#![cfg_attr(feature = "unstable", feature(proc_macro_diagnostic, proc_macro_span))]
+#![cfg_attr(feature = "unstable", feature(proc_macro_diagnostic))]
 #![recursion_limit="128"]
 
 #[cfg(all(feature = "rusqlite", feature = "postgres"))]
@@ -516,6 +516,7 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> (Tokens, Vec<Tokens>) {
             _data = #expr;
         });
     }
+
     let trait_ident = quote_spanned! { table_ident.span() =>
         ::tql::SqlTable
     };
@@ -680,26 +681,4 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
     }
 
     empty_token_stream()
-}
-
-#[cfg(feature="unstable")]
-pub(crate) fn merge_spans_of<T: quote::ToTokens>(tokens: &T) -> proc_macro2::Span {
-    let ts = quote::ToTokens::into_token_stream(tokens.clone());
-    let spans : Vec<proc_macro::Span> = ts.into_iter()
-    .map(|x| x.span().unwrap())
-    .collect();
-    let first = spans[0].clone();
-    let merged = spans.iter().fold(first, |acc,x| acc.join(x.clone()).unwrap());
-    merged.into()
-}
-
-//TODO: remove this version when proc_macro::Span::join is stable
-#[cfg(not(feature="unstable"))]
-pub(crate) fn merge_spans_of<T: quote::ToTokens>(tokens: &T) -> proc_macro2::Span {
-    //on stable its impossible to merge spans, so this does not but just takes first
-    let ts = quote::ToTokens::into_token_stream(tokens.clone());
-    ts.into_iter()
-    .map(|x| x.span())
-    .nth(0)
-    .unwrap()
 }

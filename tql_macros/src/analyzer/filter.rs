@@ -146,10 +146,9 @@ pub fn expression_to_filter_expression(arg: &Expression, table_name: &str) -> Re
                 binary_expression_to_filter_expression(&bin.left, &bin.op, &bin.right, table_name)?
             },
             Expr::MethodCall(ref call) => {
-                let call_span = crate::merge_spans_of(call);
                 FilterExpression::FilterValue(WithSpan {
                     node: method_call_expression_to_filter_expression(call.method.clone(), &call.receiver, &call.args,
-                                                                      call_span, &mut errors),
+                                                                      call.span(), &mut errors),
                     span: arg.span(),
                 })
             },

@@ -109,6 +109,7 @@ pub fn table_methods(item_struct: &ItemStruct) -> Tokens {
             .map(|field| field.ident.clone().expect("field has name"));
         let field_idents2 = named.iter()
             .map(|field| field.ident.clone().expect("field has name"));
+
         let trait_ident = quote_spanned! { table_ident.span() =>
             ::tql::SqlTable
         };
@@ -543,8 +544,7 @@ fn related_table_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) ->
                 let msg = string_literal(&format!("mismatched types
 expected type `ForeignKey<_>`
    found type `{}`", typ));
-                let span = crate::merge_spans_of(&field);
-                compiler_errors.push(quote_spanned! { span =>
+                compiler_errors.push(quote_spanned! { field.span() =>
                     compile_error!(#msg)
                 });
             }

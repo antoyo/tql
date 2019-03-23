@@ -110,7 +110,7 @@ impl Parser {
                 _ => {
                     errors.push(Error::new(
                         "Expected method call", // TODO: improve this message.
-                        crate::merge_spans_of(expr),
+                        expr.span(),
                     ));
                 }
             }
