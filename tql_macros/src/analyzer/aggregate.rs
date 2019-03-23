@@ -166,8 +166,7 @@ fn binary_expression_to_aggregate_filter_expression(expr1: &Expression, op: &Bin
 
 /// Check that an aggregate field exists.
 fn check_aggregate_field<'a>(identifier: &str, aggregates: &'a [Aggregate], position: Span, errors: &mut Vec<Error>) -> Option<&'a Aggregate> {
-    let matching = Some(identifier.to_string());
-    let result = aggregates.iter().find(|aggr| aggr.result_name.as_ref().map(|name| name.to_string()) == matching);
+    let result = aggregates.iter().find(|aggr| aggr.result_name.as_ref().map_or(false, |name| name == identifier));
     if let None = result {
         errors.push(Error::new(
             &format!("no aggregate field named `{}` found", identifier), // TODO: improve this message.
