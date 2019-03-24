@@ -39,7 +39,7 @@ struct Table {
     id: PrimaryKey,
     field1: String,
     i32_field: i32,
-    field2: ForeignKey<Table>,
+    field2: ForeignKey<AnotherTable>,
 }
 
 fn main() {
@@ -84,4 +84,10 @@ fn main() {
     //~^ ERROR cannot call the drop() method with the aggregate() method
     //~| ERROR cannot call the insert() method with the aggregate() method
     //~| ERROR cannot call the delete() method with the aggregate() method
+}
+
+#[derive(SqlTable)]
+struct AnotherTable {
+    id: PrimaryKey,
+    field: String,
 }

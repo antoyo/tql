@@ -4,8 +4,8 @@ error: missing fields: field2, related_field
 36 | struct Table {
    |        ^^^^^
 ...
-56 |     sql!(Table.insert(field1 = 42, i32_field = 91));
-   |          ----------------------------------------- in this macro invocation
+56 |     sql!(Table.insert(field1 = 42.to_string(), i32_field = 91));
+   |     ---------------------------------------------------------- in this macro invocation
 
 error: missing fields: i32_field, field2, related_field
   --> $DIR/insert_missing_fields.rs:36:8
@@ -13,8 +13,15 @@ error: missing fields: i32_field, field2, related_field
 36 | struct Table {
    |        ^^^^^
 ...
-59 |     sql!(Table.insert(field1 = 42, i32_fild = 91));
-   |          ---------------------------------------- in this macro invocation
+59 |     sql!(Table.insert(field1 = 42.to_string(), i32_fild = 91));
+   |     --------------------------------------------------------- in this macro invocation
 
-error: aborting due to 2 previous errors
+error[E0609]: no field `i32_fild` on type `Table`
+  --> $DIR/insert_missing_fields.rs:59:48
+   |
+59 |     sql!(Table.insert(field1 = 42.to_string(), i32_fild = 91));
+   |                                                ^^^^^^^^ help: a field with a similar name exists: `i32_field`
 
+error: aborting due to 3 previous errors
+
+For more information about this error, try `rustc --explain E0609`.

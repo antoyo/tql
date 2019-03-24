@@ -40,9 +40,7 @@ use syn::{
     ItemStruct,
     parse,
 };
-#[cfg(feature = "unstable")]
 use syn::{AngleBracketedGenericArguments, LitStr, Path, TypePath};
-#[cfg(feature = "unstable")]
 use syn::PathArguments::AngleBracketed;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
@@ -109,7 +107,7 @@ pub fn table_methods(item_struct: &ItemStruct) -> Tokens {
             .map(|field| field.ident.clone().expect("field has name"));
         let field_idents2 = named.iter()
             .map(|field| field.ident.clone().expect("field has name"));
-
+        
         let trait_ident = quote_spanned! { table_ident.span() =>
             ::tql::SqlTable
         };
@@ -284,6 +282,7 @@ fn gen_aggregate_struct(aggregates: &[Aggregate]) -> (Tokens, Tokens) {
     }})
 }
 
+
 /// Get the fields from the struct (also returns the ToSql implementations to check that the types
 /// used for ForeignKey have a #[derive(SqlTable)]).
 /// Also check if the field types from the struct are supported types.
@@ -306,7 +305,6 @@ pub fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, Option
     let mut primary_key_count = 0;
     for field in &fields {
         if let Some(ref field_ident) = field.ident {
-            #[cfg(feature = "unstable")]
             let field_type = &field.ty;
             let field_name = field_ident.to_string();
             let field = field_ty_to_type(&field.ty);
@@ -327,38 +325,30 @@ pub fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, Option
                     let type_ident = new_ident(typ);
                     let struct_ident = new_ident(&format!("CheckForeignKey{}", rand_string()));
                     // TODO: replace with a trait bound on ForeignKey when it is stable.
-                    #[cfg(feature = "unstable")]
-                    let mut code: TokenStream;
-                    #[cfg(not(feature = "unstable"))]
-                    let code: TokenStream;
-                    code = quote! {
+                    let span = {
+                        if let syn::Type::Path(TypePath { path: Path { ref segments, .. }, ..}) = *field_type {
+                            let segment = segments.first().expect("first segment").into_value();
+                            if let AngleBracketed(AngleBracketedGenericArguments { ref args, .. }) =
+                                segment.arguments
+                            {
+                                args.first().expect("first argument").span()
+                            }
+                            else {
+                                field_type.span()
+                            }
+                        }
+                        else {
+                            field_type.span()
+                        }
+                    };
+
+                    let code: TokenStream = quote_spanned!{ span =>
                         #[allow(dead_code)]
                         struct #struct_ident where #type_ident: ::tql::SqlTable {
                             field: #type_ident,
                         }
                     }.into();
-                    #[cfg(feature = "unstable")]
-                    {
-                        let field_pos =
-                            if let syn::Type::Path(TypePath { path: Path { ref segments, .. }, ..}) = *field_type {
-                                let segment = segments.first().expect("first segment").into_value();
-                                if let AngleBracketed(AngleBracketedGenericArguments { ref args, .. }) =
-                                    segment.arguments
-                                {
-                                    args.first().expect("first argument").span()
-                                }
-                                else {
-                                    field_type.span()
-                                }
-                            }
-                            else {
-                                field_type.span()
-                            };
-                        let span = field_pos.unstable();
-                        // NOTE: position the trait at this position so that the error message points
-                        // on the type.
-                        code = respan_with(code, span);
-                    }
+
                     impls = concat_token_stream(impls, code);
                 },
                 _ => (),

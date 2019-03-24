@@ -53,9 +53,9 @@ struct RelatedTable {
 fn main() {
     let connection = get_connection();
 
-    sql!(Table.insert(field1 = 42, i32_field = 91));
+    sql!(Table.insert(field1 = 42.to_string(), i32_field = 91));
     //~^ ERROR missing fields: `field2`, `related_field`
 
-    sql!(Table.insert(field1 = 42, i32_fild = 91));
+    sql!(Table.insert(field1 = 42.to_string(), i32_fild = 91));
     //~^ ERROR missing fields: `field2`, `related_field`
 }

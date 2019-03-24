@@ -20,5 +20,24 @@ expected type `ForeignKey<_>`
 54 |     sql!(Table.all().join(field1, i32_field));
    |                                   --------- in this macro invocation
 
-error: aborting due to 2 previous errors
+error[E0308]: mismatched types
+  --> $DIR/select_join.rs:54:27
+   |
+54 |     sql!(Table.all().join(field1, i32_field));
+   |                           ^^^^^^ expected enum `std::option::Option`, found struct `std::string::String`
+   |
+   = note: expected type `std::option::Option<_>`
+              found type `std::string::String`
 
+error[E0308]: mismatched types
+  --> $DIR/select_join.rs:54:35
+   |
+54 |     sql!(Table.all().join(field1, i32_field));
+   |                                   ^^^^^^^^^ expected enum `std::option::Option`, found i32
+   |
+   = note: expected type `std::option::Option<_>`
+              found type `i32`
+
+error: aborting due to 4 previous errors
+
+For more information about this error, try `rustc --explain E0308`.

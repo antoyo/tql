@@ -25,7 +25,7 @@
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
-#[macro_use] mod connection;
+#[macro_use] mod connection; use tql::{DateTime,ForeignKey};
 backend_extern_crate!();
 struct Connection {
     value: String,

@@ -64,5 +64,37 @@ error: use of unsupported type name `Vec<i32>`
 54 |     vector_i32: Vec<i32>,
    |                 ^^^^^^^^
 
-error: aborting due to 10 previous errors
+error[E0106]: missing lifetime specifier
+  --> $DIR/sql_table.rs:34:8
+   |
+34 | struct Table<'a> {
+   |        ^^^^^ expected lifetime parameter
 
+error[E0107]: wrong number of type arguments: expected 0, found 1
+  --> $DIR/sql_table.rs:46:28
+   |
+46 |     datetime_i32: DateTime<i32>,
+   |                            ^^^ unexpected type argument
+
+error[E0107]: wrong number of type arguments: expected 1, found 0
+  --> $DIR/sql_table.rs:48:20
+   |
+48 |     foreign_value: ForeignKey,
+   |                    ^^^^^^^^^^ expected 1 type argument
+
+error[E0107]: wrong number of type arguments: expected 1, found 0
+  --> $DIR/sql_table.rs:50:21
+   |
+50 |     optional_value: Option,
+   |                     ^^^^^^ expected 1 type argument
+
+error[E0107]: wrong number of type arguments: expected 1, found 0
+  --> $DIR/sql_table.rs:52:13
+   |
+52 |     vector: Vec,
+   |             ^^^ expected 1 type argument
+
+error: aborting due to 15 previous errors
+
+Some errors occurred: E0106, E0107.
+For more information about an error, try `rustc --explain E0106`.
