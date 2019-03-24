@@ -1,13 +1,13 @@
 error: expected = but got +=
-  --> $DIR/insert_syntax.rs:48:33
+  --> $DIR/insert_syntax.rs:52:33
    |
-48 |     sql!(Table.insert(i32_field += 42, field1 = "Test"));
+52 |     sql!(Table.insert(i32_field += 42, field1 = "Test"));
    |                                 ^^
 
 error: expected = but got -=
-  --> $DIR/insert_syntax.rs:51:46
+  --> $DIR/insert_syntax.rs:55:46
    |
-51 |     sql!(Table.insert(i32_field = 42, field1 -= "Test"));
+55 |     sql!(Table.insert(i32_field = 42, field1 -= "Test"));
    |                                              ^^
 
 error: aborting due to 2 previous errors

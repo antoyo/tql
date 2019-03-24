@@ -1,16 +1,16 @@
 warning: No primary key found
-  --> $DIR/select_fk.rs:40:8
+  --> $DIR/select_fk.rs:44:8
    |
-40 | struct RelatedTable {
+44 | struct RelatedTable {
    |        ^^^^^^^^^^^^
 
 error: No primary key found for table RelatedTable which is needed for a join
-  --> $DIR/select_fk.rs:40:8
+  --> $DIR/select_fk.rs:44:8
    |
-40 | struct RelatedTable {
+44 | struct RelatedTable {
    |        ^^^^^^^^^^^^
 ...
-45 |     sql!(Table.all().join(related));
+49 |     sql!(Table.all().join(related));
    |                           ------- in this macro invocation
 
 error: aborting due to previous error

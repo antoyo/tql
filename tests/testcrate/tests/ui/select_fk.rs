@@ -27,10 +27,14 @@
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
-#[macro_use] mod connection;
-use tql::{ForeignKey, PrimaryKey};
+
+#[macro_use] 
+mod connection;
 backend_extern_crate!();
-use connection::{Connection, get_connection};    
+
+use tql::{ForeignKey, PrimaryKey};
+use connection::{Connection, get_connection}; 
+
 #[derive(SqlTable)]
 struct Table {
     id: PrimaryKey,

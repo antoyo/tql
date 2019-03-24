@@ -22,11 +22,17 @@
 //! Tests of the `#[SqlTable]` attribute.
 
 #![feature(proc_macro_hygiene)] // FIXME: bad span for field nested_options in stderr (should be on Option<String>, not just Option).
+
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
-#[macro_use] mod connection; use tql::{DateTime,ForeignKey};
+
+#[macro_use] 
+mod connection; 
 backend_extern_crate!();
+
+use tql::{DateTime,ForeignKey};
+
 struct Connection {
     value: String,
 }

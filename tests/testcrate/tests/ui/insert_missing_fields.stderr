@@ -1,16 +1,16 @@
 error: missing fields: field2, related_field
-  --> $DIR/insert_missing_fields.rs:36:8
+  --> $DIR/insert_missing_fields.rs:39:8
    |
-36 | struct Table {
+39 | struct Table {
    |        ^^^^^
 ...
 56 |     sql!(Table.insert(field1 = 42.to_string(), i32_field = 91));
    |     ---------------------------------------------------------- in this macro invocation
 
 error: missing fields: i32_field, field2, related_field
-  --> $DIR/insert_missing_fields.rs:36:8
+  --> $DIR/insert_missing_fields.rs:39:8
    |
-36 | struct Table {
+39 | struct Table {
    |        ^^^^^
 ...
 59 |     sql!(Table.insert(field1 = 42.to_string(), i32_fild = 91));

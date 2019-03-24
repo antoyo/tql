@@ -26,10 +26,14 @@
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
-#[macro_use] mod connection;
+
+#[macro_use]
+mod connection;
+backend_extern_crate!();
+
 use tql::{ForeignKey, PrimaryKey};
 use tql_macros::sql;
-backend_extern_crate!();
+
 struct Connection {
     value: String,
 }
@@ -40,6 +44,12 @@ struct Table {
     field1: String,
     i32_field: i32,
     field2: ForeignKey<AnotherTable>,
+}
+
+#[derive(SqlTable)]
+struct AnotherTable {
+    id: PrimaryKey,
+    field: String,
 }
 
 fn main() {
@@ -84,10 +94,4 @@ fn main() {
     //~^ ERROR cannot call the drop() method with the aggregate() method
     //~| ERROR cannot call the insert() method with the aggregate() method
     //~| ERROR cannot call the delete() method with the aggregate() method
-}
-
-#[derive(SqlTable)]
-struct AnotherTable {
-    id: PrimaryKey,
-    field: String,
 }

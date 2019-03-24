@@ -1,7 +1,7 @@
 error: this method takes 0 parameters but 1 parameter was supplied
-  --> $DIR/delete_syntax.rs:41:40
+  --> $DIR/delete_syntax.rs:45:40
    |
-41 |     let _ = sql!(Table.filter(id == 1).delete(id == 1));
+45 |     let _ = sql!(Table.filter(id == 1).delete(id == 1));
    |                                        ^^^^^^
 
 error: aborting due to previous error

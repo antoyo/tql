@@ -23,15 +23,18 @@
 
 #![feature(proc_macro_hygiene)]
 
-
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
-#[macro_use] mod connection;
+
+#[macro_use] 
+mod connection;
+backend_extern_crate!();
+
 use connection::{Connection, get_connection};
 use tql::{ForeignKey, PrimaryKey};
 use tql_macros::sql;
-backend_extern_crate!();
+
 #[derive(SqlTable)]
 struct Table {
     id: PrimaryKey,
@@ -46,9 +49,6 @@ struct RelatedTable {
     id: PrimaryKey,
 }
 
-//fn get_connection() -> Connection {
-//    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
-//}
 
 fn main() {
     let connection = get_connection();
