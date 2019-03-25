@@ -40,7 +40,9 @@ use syn::{
     ItemStruct,
     parse,
 };
-use syn::{AngleBracketedGenericArguments, LitStr, Path, TypePath};
+#[cfg(feature="unstable")]
+use syn::LitStr;
+use syn::{AngleBracketedGenericArguments, Path, TypePath};
 use syn::PathArguments::AngleBracketed;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
@@ -77,8 +79,6 @@ use {
     empty_token_stream,
     typecheck_arguments,
 };
-#[cfg(feature = "unstable")]
-use respan_with;
 
 /// Create the from_row() method for the table struct.
 pub fn table_methods(item_struct: &ItemStruct) -> Tokens {

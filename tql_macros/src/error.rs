@@ -28,7 +28,9 @@ use std::result;
 
 #[cfg(feature = "unstable")]
 use proc_macro::{Diagnostic, Level};
-use proc_macro2::{Span,TokenStream};
+#[cfg(not(feature="unstable"))]
+use proc_macro2::TokenStream;
+use proc_macro2::Span;
 
 /// `Error` is a type that represents an error with its position.
 #[derive(Debug)]
