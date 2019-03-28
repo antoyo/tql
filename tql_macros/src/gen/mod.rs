@@ -28,7 +28,7 @@ mod sqlite;
 
 use proc_macro::TokenStream;
 use proc_macro2::Span;
-use proc_macro2::TokenStream as Tokens; // todo: remove
+use proc_macro2::TokenStream as Tokens;
 use rand::{self, Rng};
 use syn::{
     self,

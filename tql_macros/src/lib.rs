@@ -113,7 +113,7 @@ use proc_macro::TokenStream;
 #[cfg(feature = "unstable")]
 use proc_macro::{Group, TokenTree};
 use proc_macro2::{Spacing, Span};
-use proc_macro2::TokenStream as Tokens; // TODO: remove
+use proc_macro2::TokenStream as Tokens;
 
 use syn::{
     Expr,
@@ -374,7 +374,6 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> (Tokens, Vec<Tokens>) {
     #[cfg(feature = "unstable")]
     let metavars = vec![];
     let mut next_name = (0..).map(|counter|
-        //Ident::from(format!("__tql_arg{}", counter))
         Ident::new(&format!("__tql_arg{}", counter), Span::call_site())
     );
 
@@ -625,8 +624,7 @@ pub fn stable_to_sql(input: TokenStream) -> TokenStream {
                 if let Expr::Macro(ref macr) = **tuple.elems.first().unwrap().value() {
                     let tts: Vec<_> = macr.mac.tts.clone().into_iter().collect();
                     let (sql_query, connection_expr) =
-                        //if let proc_macro2::TokenTree::Op(op) = tts[1] {
-                        if let proc_macro2::TokenTree::Punct(ref op) = tts[1] { //TODO: check
+                        if let proc_macro2::TokenTree::Punct(ref op) = tts[1] { 
                             if op.as_char() == ',' && op.spacing() == Spacing::Alone {
                                 let connection_expr = &tts[0];
                                 let connection_expr = quote! {

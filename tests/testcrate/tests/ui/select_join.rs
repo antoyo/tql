@@ -47,10 +47,6 @@ struct RelatedTable {
     id: PrimaryKey,
 }
 
-//fn get_connection() -> Connection {
-//    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
-//}
-
 fn main() {
     let connection = get_connection();
 

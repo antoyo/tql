@@ -6,7 +6,7 @@ expected type `ForeignKey<_>`
 41 |     field1: String,
    |     ^^^^^^^^^^^^^^
 ...
-57 |     sql!(Table.all().join(field1, i32_field));
+53 |     sql!(Table.all().join(field1, i32_field));
    |                           ------ in this macro invocation
 
 error: mismatched types
@@ -17,22 +17,22 @@ expected type `ForeignKey<_>`
 42 |     i32_field: i32,
    |     ^^^^^^^^^^^^^^
 ...
-57 |     sql!(Table.all().join(field1, i32_field));
+53 |     sql!(Table.all().join(field1, i32_field));
    |                                   --------- in this macro invocation
 
 error[E0308]: mismatched types
-  --> $DIR/select_join.rs:57:27
+  --> $DIR/select_join.rs:53:27
    |
-57 |     sql!(Table.all().join(field1, i32_field));
+53 |     sql!(Table.all().join(field1, i32_field));
    |                           ^^^^^^ expected enum `std::option::Option`, found struct `std::string::String`
    |
    = note: expected type `std::option::Option<_>`
               found type `std::string::String`
 
 error[E0308]: mismatched types
-  --> $DIR/select_join.rs:57:35
+  --> $DIR/select_join.rs:53:35
    |
-57 |     sql!(Table.all().join(field1, i32_field));
+53 |     sql!(Table.all().join(field1, i32_field));
    |                                   ^^^^^^^^^ expected enum `std::option::Option`, found i32
    |
    = note: expected type `std::option::Option<_>`

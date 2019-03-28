@@ -1,4 +1,4 @@
-        /*
+/*
  * Copyright (c) 2017-2018 Boucher, Antoni <bouanto@zoho.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -21,7 +21,7 @@
 
 //! Tests of the `#[SqlTable]` attribute.
 
-#![feature(proc_macro_hygiene)] // FIXME: bad span for field nested_options in stderr (should be on Option<String>, not just Option).
+#![feature(proc_macro_hygiene)] 
 
 extern crate tql;
 #[macro_use]

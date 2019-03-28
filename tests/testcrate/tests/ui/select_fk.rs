@@ -23,7 +23,6 @@
 
 #![feature(proc_macro_hygiene)]
 
-//extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
