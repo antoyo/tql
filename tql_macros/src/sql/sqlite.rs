@@ -21,7 +21,7 @@
 
 //! The SQLite code generator.
 
-use quote::Tokens;
+use proc_macro2::TokenStream;
 
 use ast::Aggregate;
 use sql::{SqlBackend, ToSql};
@@ -34,12 +34,12 @@ pub fn create_sql_backend() -> SqliteSqlBackend {
 
 impl ToSql for Aggregate {
     fn to_sql(&self, index: &mut usize) -> String {
-        self.sql_function.to_sql(index) + "(" + &self.field.expect("Aggregate field").to_sql(index) + ")"
+        self.sql_function.to_sql(index) + "(" + &self.field.clone().expect("Aggregate field").to_sql(index) + ")"
     }
 }
 
 impl SqlBackend for SqliteSqlBackend {
-    fn insert_query(&self, table: &str, fields: &[String], values: &[String]) -> Tokens {
+    fn insert_query(&self, table: &str, fields: &[String], values: &[String]) -> TokenStream {
         let query =
             format!("INSERT INTO {table}({fields}) VALUES({values})",
             table = table,

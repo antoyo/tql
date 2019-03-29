@@ -1,105 +1,105 @@
 error: this macro takes 1 parameter but 0 parameters were supplied
-  --> $DIR/macro.rs:46:5
+  --> $DIR/macro.rs:56:5
    |
-46 |     to_sql!();
+56 |     to_sql!();
    |     ^^^^^^^^^^
 
 error: this macro takes 1 parameter but 0 parameters were supplied
-  --> $DIR/macro.rs:51:5
+  --> $DIR/macro.rs:61:5
    |
-51 |     sql!();
+61 |     sql!();
    |     ^^^^^^^
 
 error: `Table` is the name of a struct, but this expression uses it like a method name
-  --> $DIR/macro.rs:56:10
+  --> $DIR/macro.rs:66:10
    |
-56 |     sql!(Table);
+66 |     sql!(Table);
    |          ^^^^^
    |
    = help: did you mean to write `Table.method()`?
 
 error: Expected method call
-  --> $DIR/macro.rs:60:10
+  --> $DIR/macro.rs:70:10
    |
-60 |     sql!(Table());
+70 |     sql!(Table());
    |          ^^^^^^^
 
 error: cannot call the filter() method with the insert() method
-  --> $DIR/macro.rs:63:25
+  --> $DIR/macro.rs:73:25
    |
-63 |     sql!(Table.insert().filter(i32_field == 10).delete());
+73 |     sql!(Table.insert().filter(i32_field == 10).delete());
    |                         ^^^^^^
 
 error: cannot call the delete() method with the insert() method
-  --> $DIR/macro.rs:63:49
+  --> $DIR/macro.rs:73:49
    |
-63 |     sql!(Table.insert().filter(i32_field == 10).delete());
+73 |     sql!(Table.insert().filter(i32_field == 10).delete());
    |                                                 ^^^^^^
 
 error: cannot call the delete() method with the update() method
-  --> $DIR/macro.rs:67:63
+  --> $DIR/macro.rs:77:63
    |
-67 |     sql!(Table.update(i32_field = 10).filter(i32_field == 10).delete());
+77 |     sql!(Table.update(i32_field = 10).filter(i32_field == 10).delete());
    |                                                               ^^^^^^
 
 error: cannot call the join() method with the delete() method
-  --> $DIR/macro.rs:70:16
+  --> $DIR/macro.rs:80:16
    |
-70 |     sql!(Table.join(field2).filter(i32_field == 10).delete());
+80 |     sql!(Table.join(field2).filter(i32_field == 10).delete());
    |                ^^^^
 
 error: cannot call the insert() method with the create() method
-  --> $DIR/macro.rs:73:25
+  --> $DIR/macro.rs:83:25
    |
-73 |     sql!(Table.create().insert().filter(i32_field == 10).delete());
+83 |     sql!(Table.create().insert().filter(i32_field == 10).delete());
    |                         ^^^^^^
 
 error: cannot call the filter() method with the create() method
-  --> $DIR/macro.rs:73:34
+  --> $DIR/macro.rs:83:34
    |
-73 |     sql!(Table.create().insert().filter(i32_field == 10).delete());
+83 |     sql!(Table.create().insert().filter(i32_field == 10).delete());
    |                                  ^^^^^^
 
 error: cannot call the delete() method with the create() method
-  --> $DIR/macro.rs:73:58
+  --> $DIR/macro.rs:83:58
    |
-73 |     sql!(Table.create().insert().filter(i32_field == 10).delete());
+83 |     sql!(Table.create().insert().filter(i32_field == 10).delete());
    |                                                          ^^^^^^
 
 error: cannot call the insert() method with the drop() method
-  --> $DIR/macro.rs:78:23
+  --> $DIR/macro.rs:88:23
    |
-78 |     sql!(Table.drop().insert().filter(i32_field == 10).delete());
+88 |     sql!(Table.drop().insert().filter(i32_field == 10).delete());
    |                       ^^^^^^
 
 error: cannot call the filter() method with the drop() method
-  --> $DIR/macro.rs:78:32
+  --> $DIR/macro.rs:88:32
    |
-78 |     sql!(Table.drop().insert().filter(i32_field == 10).delete());
+88 |     sql!(Table.drop().insert().filter(i32_field == 10).delete());
    |                                ^^^^^^
 
 error: cannot call the delete() method with the drop() method
-  --> $DIR/macro.rs:78:56
+  --> $DIR/macro.rs:88:56
    |
-78 |     sql!(Table.drop().insert().filter(i32_field == 10).delete());
+88 |     sql!(Table.drop().insert().filter(i32_field == 10).delete());
    |                                                        ^^^^^^
 
 error: cannot call the drop() method with the aggregate() method
-  --> $DIR/macro.rs:83:66
+  --> $DIR/macro.rs:93:66
    |
-83 |     sql!(Table.filter(i32_field == 10).aggregate(avg(i32_field)).drop().insert().filter(i32_field_avg == 10).delete());
+93 |     sql!(Table.filter(i32_field == 10).aggregate(avg(i32_field)).drop().insert().filter(i32_field_avg == 10).delete());
    |                                                                  ^^^^
 
 error: cannot call the insert() method with the aggregate() method
-  --> $DIR/macro.rs:83:73
+  --> $DIR/macro.rs:93:73
    |
-83 |     sql!(Table.filter(i32_field == 10).aggregate(avg(i32_field)).drop().insert().filter(i32_field_avg == 10).delete());
+93 |     sql!(Table.filter(i32_field == 10).aggregate(avg(i32_field)).drop().insert().filter(i32_field_avg == 10).delete());
    |                                                                         ^^^^^^
 
 error: cannot call the delete() method with the aggregate() method
-  --> $DIR/macro.rs:83:110
+  --> $DIR/macro.rs:93:110
    |
-83 |     sql!(Table.filter(i32_field == 10).aggregate(avg(i32_field)).drop().insert().filter(i32_field_avg == 10).delete());
+93 |     sql!(Table.filter(i32_field == 10).aggregate(avg(i32_field)).drop().insert().filter(i32_field_avg == 10).delete());
    |                                                                                                              ^^^^^^
 
 error: aborting due to 17 previous errors

@@ -2,10 +2,11 @@ error[E0308]: mismatched types
   --> $DIR/methods_expr.rs:51:39
    |
 51 |     sql!(Table.filter(field1.contains(value) == true));
-   |                                       ^^^^^ expected &str, found integral variable
+   |                                       ^^^^^ expected &str, found integer
    |
    = note: expected type `&str`
               found type `{integer}`
 
 error: aborting due to previous error
 
+For more information about this error, try `rustc --explain E0308`.

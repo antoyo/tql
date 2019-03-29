@@ -21,14 +21,17 @@
 
 //! Tests of the methods related to `Query::Select`.
 
-#![feature(proc_macro)]
+#![feature(proc_macro_hygiene)]
 
-extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
-use postgres::{Connection, TlsMode};
+#[macro_use] 
+mod connection;
+backend_extern_crate!();
+
+use connection::{Connection, get_connection};
 use tql::PrimaryKey;
 use tql_macros::sql;
 
@@ -42,10 +45,6 @@ struct Table {
 #[derive(SqlTable)]
 struct RelatedTable {
     id: PrimaryKey,
-}
-
-fn get_connection() -> Connection {
-    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
 }
 
 fn main() {

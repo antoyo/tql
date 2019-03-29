@@ -8,7 +8,8 @@ error[E0412]: cannot find type `Tble` in this scope
   --> $DIR/select_macro.rs:49:10
    |
 49 |     sql!(Tble.filter(field1 == "value"));
-   |          ^^^^ did you mean `Table`?
+   |          ^^^^ help: a struct with a similar name exists: `Table`
 
 error: aborting due to 2 previous errors
 
+For more information about this error, try `rustc --explain E0412`.

@@ -19,8 +19,7 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use proc_macro2::Span;
-use quote::Tokens;
+use proc_macro2::{Span,TokenStream};
 use syn::{
     Expr,
     ExprLit,
@@ -43,21 +42,21 @@ pub fn create_backend() -> PostgresBackend {
 }
 
 impl BackendGen for PostgresBackend {
-    fn convert_index(&self, index: usize) -> Tokens {
+    fn convert_index(&self, index: usize) -> TokenStream {
         quote! {
             #index
         }
     }
 
-    fn delta_type(&self) -> Tokens {
+    fn delta_type(&self) -> TokenStream {
         quote! { usize }
     }
 
     /// Generate the Rust code using the `postgres` library depending on the `QueryType`.
-    fn gen_query_expr(&self, connection_expr: Tokens, args: &SqlQueryWithArgs, args_expr: Tokens, struct_expr: Tokens,
-                      aggregate_struct: Tokens, aggregate_expr: Tokens) -> Tokens
+    fn gen_query_expr(&self, connection_expr: TokenStream, args: &SqlQueryWithArgs, args_expr: TokenStream, struct_expr: TokenStream,
+                      aggregate_struct: TokenStream, aggregate_expr: TokenStream) -> TokenStream
     {
-        let result_ident = Ident::from("result");
+        let result_ident = Ident::new("__tql_result", proc_macro2::Span::call_site());
         let sql_query = &args.sql;
         let std_ident = quote_spanned! { connection_expr.span() =>
             ::std
@@ -149,19 +148,19 @@ impl BackendGen for PostgresBackend {
         })
     }
 
-    fn row_type_ident(&self, table_ident: &Ident) -> Tokens {
+    fn row_type_ident(&self, table_ident: &Ident) -> proc_macro2::TokenStream {
         quote_spanned! { table_ident.span() =>
             ::postgres::rows::Row
         }
     }
 
-    fn to_sql(&self, primary_key_ident: &Ident) -> Tokens {
+    fn to_sql(&self, primary_key_ident: &Ident) -> proc_macro2::TokenStream {
         quote! {
             self.#primary_key_ident.to_sql(ty, out)
         }
     }
 
-    fn to_sql_impl(&self, table_ident: &Ident, to_sql_code: Tokens) -> Tokens {
+    fn to_sql_impl(&self, table_ident: &Ident, to_sql_code: proc_macro2::TokenStream) -> TokenStream {
         let std_ident = quote_spanned! { table_ident.span() =>
             ::std
         };

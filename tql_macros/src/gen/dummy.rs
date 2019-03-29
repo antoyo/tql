@@ -19,7 +19,7 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use quote::Tokens;
+use proc_macro2::TokenStream;
 use syn::{Expr, Ident};
 
 use super::BackendGen;
@@ -33,16 +33,16 @@ pub fn create_backend() -> DummyBackend {
 }
 
 impl BackendGen for DummyBackend {
-    fn convert_index(&self, _index: usize) -> Tokens {
+    fn convert_index(&self, _index: usize) -> TokenStream {
         unreachable!("Enable one of the following features: sqlite, pg");
     }
 
-    fn delta_type(&self) -> Tokens {
+    fn delta_type(&self) -> TokenStream {
         unreachable!("Enable one of the following features: sqlite, pg");
     }
 
-    fn gen_query_expr(&self, _connection_expr: Tokens, _args: &SqlQueryWithArgs, _args_expr: Tokens, _struct_expr: Tokens,
-                      _aggregate_struct: Tokens, _aggregate_expr: Tokens) -> Tokens
+    fn gen_query_expr(&self, _connection_expr: TokenStream, _args: &SqlQueryWithArgs, _args_expr: TokenStream, _struct_expr: TokenStream,
+                      _aggregate_struct: TokenStream, _aggregate_expr: TokenStream) -> TokenStream
     {
         unreachable!("Enable one of the following features: sqlite, pg");
     }
@@ -51,15 +51,15 @@ impl BackendGen for DummyBackend {
         unreachable!("Enable one of the following features: sqlite, pg");
     }
 
-    fn row_type_ident(&self, _table_ident: &Ident) -> Tokens {
+    fn row_type_ident(&self, _table_ident: &Ident) -> TokenStream {
         unreachable!("Enable one of the following features: sqlite, pg");
     }
 
-    fn to_sql(&self, _primary_key_ident: &Ident) -> Tokens {
+    fn to_sql(&self, _primary_key_ident: &Ident) -> TokenStream {
         unreachable!("Enable one of the following features: sqlite, pg");
     }
 
-    fn to_sql_impl(&self, _table_ident: &Ident, _to_sql_code: Tokens) -> Tokens {
+    fn to_sql_impl(&self, _table_ident: &Ident, _to_sql_code: TokenStream) -> TokenStream {
         unreachable!("Enable one of the following features: sqlite, pg");
     }
 }

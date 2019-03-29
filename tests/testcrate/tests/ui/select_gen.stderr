@@ -12,3 +12,4 @@ error[E0425]: cannot find value `value2` in this scope
 
 error: aborting due to 2 previous errors
 
+For more information about this error, try `rustc --explain E0425`.

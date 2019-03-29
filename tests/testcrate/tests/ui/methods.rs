@@ -21,7 +21,7 @@
 
 //! Tests of the methods available in the filter() method.
 
-#![feature(proc_macro)]
+#![feature(proc_macro_hygiene)]
 
 extern crate chrono;
 extern crate tql;

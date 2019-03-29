@@ -21,8 +21,7 @@
 
 //! The PostgreSQL code generator.
 
-use proc_macro2::Span;
-use quote::Tokens;
+use proc_macro2::{Span,TokenStream};
 use syn::Ident;
 
 use ast::Aggregate;
@@ -38,12 +37,12 @@ impl ToSql for Aggregate {
     fn to_sql(&self, index: &mut usize) -> String {
         // TODO: do not hard-code the type.
         "CAST(".to_string() + &self.sql_function.to_sql(index) + "(" +
-            &self.field.expect("Aggregate field").to_sql(index) + ") AS DOUBLE PRECISION)"
+            &self.field.clone().expect("Aggregate field").to_sql(index) + ") AS DOUBLE PRECISION)"
     }
 }
 
 impl SqlBackend for PostgresSqlBackend {
-    fn insert_query(&self, table: &str, fields: &[String], values: &[String]) -> Tokens {
+    fn insert_query(&self, table: &str, fields: &[String], values: &[String]) -> TokenStream {
         let query_start =
             format!("INSERT INTO {table}({fields}) VALUES({values}) RETURNING ",
             table = table,

@@ -21,11 +21,15 @@
 
 //! Tests of the methods related to `Query::Select`.
 
-#![feature(proc_macro)]
+#![feature(proc_macro_hygiene)]
 
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
+
+#[macro_use] 
+mod connection;
+backend_extern_crate!();
 
 use tql::PrimaryKey;
 use tql_macros::sql;

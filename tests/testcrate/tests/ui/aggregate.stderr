@@ -10,10 +10,15 @@ error[E0308]: mismatched types
   --> $DIR/aggregate.rs:52:87
    |
 52 |     sql!(Table.values(i32_field).aggregate(average = avg(i32_field)).filter(average < 20));
-   |                                                                                       ^^ expected f64, found integral variable
+   |                                                                                       ^^
+   |                                                                                       |
+   |                                                                                       expected f64, found integer
+   |                                                                                       help: use a float literal: `20.0`
    |
    = note: expected type `f64`
               found type `{integer}`
 
 error: aborting due to 2 previous errors
 
+Some errors occurred: E0308, E0609.
+For more information about an error, try `rustc --explain E0308`.

@@ -21,7 +21,7 @@
 
 use std::fmt::{self, Display, Formatter};
 
-use quote::Tokens;
+use proc_macro2::TokenStream;
 use syn::{
     self,
     AngleBracketedGenericArguments,
@@ -94,7 +94,7 @@ impl Display for Type {
 }
 
 /// Convert a `Type` to its SQL representation.
-pub fn type_to_sql(typ: &Type) -> Tokens {
+pub fn type_to_sql(typ: &Type) -> TokenStream {
     sql::type_to_sql(typ, false)
 }
 

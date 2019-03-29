@@ -21,15 +21,21 @@
 
 //! Tests of the `#[SqlTable]` attribute.
 
-#![feature(proc_macro)] // FIXME: bad span for field nested_options in stderr (should be on Option<String>, not just Option).
+#![feature(proc_macro_hygiene)] 
 
+extern crate tql;
 #[macro_use]
 extern crate tql_macros;
+
+#[macro_use] 
+mod connection; 
+backend_extern_crate!();
+
+use tql::{DateTime,ForeignKey};
 
 struct Connection {
     value: String,
 }
-
 #[derive(SqlTable)]
 struct Table<'a> {
     //~^ WARNING No primary key found
@@ -53,4 +59,8 @@ struct Table<'a> {
     //~^ ERROR use of unsupported type name `Vec`
     vector_i32: Vec<i32>,
     //~^ ERROR use of unsupported type name `Vec<i32>`
+}
+
+fn main() {
+    
 }

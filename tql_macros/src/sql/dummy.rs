@@ -21,7 +21,7 @@
 
 //! The SQLite code generator.
 
-use quote::Tokens;
+use proc_macro2::TokenStream ;
 
 use ast::Aggregate;
 use sql::{SqlBackend, ToSql};
@@ -39,7 +39,7 @@ impl ToSql for Aggregate {
 }
 
 impl SqlBackend for DummySqlBackend {
-    fn insert_query(&self, _table: &str, _fields: &[String], _values: &[String]) -> Tokens {
+    fn insert_query(&self, _table: &str, _fields: &[String], _values: &[String]) -> TokenStream {
         unreachable!("Enable one of the following features: sqlite, pg");
     }
 }

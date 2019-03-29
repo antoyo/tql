@@ -4,7 +4,7 @@ error[E0308]: mismatched types
 49 |     let _ = sql!(Table.filter(id == 1).update(field1 = 42, i32_field = value));
    |                                                        ^^
    |                                                        |
-   |                                                        expected struct `std::string::String`, found integral variable
+   |                                                        expected struct `std::string::String`, found integer
    |                                                        help: try using a conversion method: `42.to_string()`
    |
    = note: expected type `std::string::String`
@@ -20,3 +20,5 @@ error[E0609]: no field `value` on type `Table`
 
 error: aborting due to 2 previous errors
 
+Some errors occurred: E0308, E0609.
+For more information about an error, try `rustc --explain E0308`.

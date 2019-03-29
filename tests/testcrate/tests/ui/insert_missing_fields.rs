@@ -21,14 +21,17 @@
 
 //! Tests of the insert() method.
 
-#![feature(proc_macro)]
+#![feature(proc_macro_hygiene)]
 
-extern crate postgres;
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
 
-use postgres::{Connection, TlsMode};
+#[macro_use] 
+mod connection;
+backend_extern_crate!();
+
+use connection::{Connection, get_connection};
 use tql::{ForeignKey, PrimaryKey};
 use tql_macros::sql;
 
@@ -46,16 +49,13 @@ struct RelatedTable {
     id: PrimaryKey,
 }
 
-fn get_connection() -> Connection {
-    Connection::connect("postgres://test:test@localhost/database", TlsMode::None).unwrap()
-}
 
 fn main() {
     let connection = get_connection();
 
-    sql!(Table.insert(field1 = 42, i32_field = 91));
+    sql!(Table.insert(field1 = 42.to_string(), i32_field = 91));
     //~^ ERROR missing fields: `field2`, `related_field`
 
-    sql!(Table.insert(field1 = 42, i32_fild = 91));
+    sql!(Table.insert(field1 = 42.to_string(), i32_fild = 91));
     //~^ ERROR missing fields: `field2`, `related_field`
 }

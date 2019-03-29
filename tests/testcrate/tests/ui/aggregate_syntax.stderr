@@ -1,27 +1,27 @@
 error: unresolved name `avh`
-  --> $DIR/aggregate_syntax.rs:41:26
+  --> $DIR/aggregate_syntax.rs:45:26
    |
-41 |     sql!(Table.aggregate(avh(i32_field)));
+45 |     sql!(Table.aggregate(avh(i32_field)));
    |                          ^^^
    |
    = help: did you mean avg?
 
 error: Expected identifier
-  --> $DIR/aggregate_syntax.rs:45:23
+  --> $DIR/aggregate_syntax.rs:49:23
    |
-45 |     sql!(Table.values("test").aggregate(avg(i32_field)));
+49 |     sql!(Table.values("test").aggregate(avg(i32_field)));
    |                       ^^^^^^
 
 error: this function takes 1 parameter but 2 parameters were supplied
-  --> $DIR/aggregate_syntax.rs:48:26
+  --> $DIR/aggregate_syntax.rs:52:26
    |
-48 |     sql!(Table.aggregate(avg(i32_field, field1)));
+52 |     sql!(Table.aggregate(avg(i32_field, field1)));
    |                          ^^^^^^^^^^^^^^^^^^^^^^
 
 error: no aggregate field named `avg` found
-  --> $DIR/aggregate_syntax.rs:51:77
+  --> $DIR/aggregate_syntax.rs:55:77
    |
-51 |     sql!(Table.values(i32_field).aggregate(average = avg(i32_field)).filter(avg < 20));
+55 |     sql!(Table.values(i32_field).aggregate(average = avg(i32_field)).filter(avg < 20));
    |                                                                             ^^^
 
 error: aborting due to 4 previous errors

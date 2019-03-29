@@ -81,11 +81,11 @@ pub fn argument_to_aggregate(arg: &Expression) -> Result<Aggregate> {
 
         if check_argument_count(&call.args, 1, arg.span(), &mut errors) {
             if let Expr::Path(ref path) = **call.args.first().expect("first argument").value() {
-                let path_ident = path.path.segments.first().unwrap().into_value().ident;
-                aggregate.field = Some(path_ident);
+                let path_ident = &path.path.segments.first().unwrap().into_value().ident;
+                aggregate.field = Some(path_ident.clone());
 
                 if aggregate.result_name.is_none() {
-                    let result_name = aggregate.field.expect("Aggregate identifier").to_string() + "_" +
+                    let result_name = aggregate.field.clone().expect("Aggregate identifier").to_string() + "_" +
                         &aggregate.sql_function.to_lowercase();
                     let mut ident = new_ident(&result_name);
                     // NOTE: violate the hygiene by assigning a known context to this new
@@ -115,7 +115,7 @@ pub fn argument_to_aggregate(arg: &Expression) -> Result<Aggregate> {
 /// Convert an `Expression` to a group `Ident`.
 pub fn argument_to_group(arg: &Expression) -> Result<Ident> {
     let mut errors = vec![];
-    let mut group = Ident::from("dummy_ident");
+    let mut group = Ident::new("__tql_dummy_ident", Span::call_site());
 
     if let Some(identifier) = path_expr_to_identifier(arg, &mut errors) {
         group = identifier;
@@ -166,7 +166,7 @@ fn binary_expression_to_aggregate_filter_expression(expr1: &Expression, op: &Bin
 
 /// Check that an aggregate field exists.
 fn check_aggregate_field<'a>(identifier: &str, aggregates: &'a [Aggregate], position: Span, errors: &mut Vec<Error>) -> Option<&'a Aggregate> {
-    let result = aggregates.iter().find(|aggr| aggr.result_name.as_ref().map(|name| name.as_ref()) == Some(identifier));
+    let result = aggregates.iter().find(|aggr| aggr.result_name.as_ref().map_or(false, |name| name == identifier));
     if let None = result {
         errors.push(Error::new(
             &format!("no aggregate field named `{}` found", identifier), // TODO: improve this message.
@@ -187,7 +187,7 @@ pub fn expression_to_aggregate_filter_expression(arg: &Expression, aggregates: &
                 binary_expression_to_aggregate_filter_expression(&bin.left, &bin.op, &bin.right, aggregates)?
             },
             Expr::Path(ref path) => {
-                let segment_ident = path.path.segments.first().unwrap().into_value().ident;
+                let segment_ident = &path.path.segments.first().unwrap().into_value().ident;
                 let identifier = segment_ident.to_string();
                 let aggregate = check_aggregate_field(&identifier, aggregates, segment_ident.span(), &mut errors);
                 if let Some(aggregate) = aggregate {

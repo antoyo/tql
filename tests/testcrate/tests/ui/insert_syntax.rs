@@ -21,11 +21,15 @@
 
 //! Tests of the insert() method.
 
-#![feature(proc_macro)]
+#![feature(proc_macro_hygiene)]
 
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
+
+#[macro_use] 
+mod connection;
+backend_extern_crate!();
 
 use tql::{ForeignKey, PrimaryKey};
 use tql_macros::sql;

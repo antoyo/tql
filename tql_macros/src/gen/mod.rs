@@ -28,7 +28,7 @@ mod sqlite;
 
 use proc_macro::TokenStream;
 use proc_macro2::Span;
-use quote::Tokens;
+use proc_macro2::TokenStream as Tokens;
 use rand::{self, Rng};
 use syn::{
     self,
@@ -40,9 +40,9 @@ use syn::{
     ItemStruct,
     parse,
 };
-#[cfg(feature = "unstable")]
-use syn::{AngleBracketedGenericArguments, LitStr, Path, TypePath};
-#[cfg(feature = "unstable")]
+#[cfg(feature="unstable")]
+use syn::LitStr;
+use syn::{AngleBracketedGenericArguments, Path, TypePath};
 use syn::PathArguments::AngleBracketed;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
@@ -79,8 +79,6 @@ use {
     empty_token_stream,
     typecheck_arguments,
 };
-#[cfg(feature = "unstable")]
-use respan_with;
 
 /// Create the from_row() method for the table struct.
 pub fn table_methods(item_struct: &ItemStruct) -> Tokens {
@@ -106,10 +104,10 @@ pub fn table_methods(item_struct: &ItemStruct) -> Tokens {
         let field_count = backend.int_literal(field_count);
 
         let field_idents = named.iter()
-            .map(|field| field.ident.expect("field has name"));
+            .map(|field| field.ident.clone().expect("field has name"));
         let field_idents2 = named.iter()
-            .map(|field| field.ident.expect("field has name"));
-
+            .map(|field| field.ident.clone().expect("field has name"));
+        
         let trait_ident = quote_spanned! { table_ident.span() =>
             ::tql::SqlTable
         };
@@ -182,11 +180,11 @@ fn create_debug_impl(item_struct: &ItemStruct) -> Tokens {
     let table_name = table_ident.to_string();
     if let Fields::Named(FieldsNamed { ref named , .. }) = item_struct.fields {
         let field_idents = named.iter()
-            .map(|field| field.ident.expect("field has name"));
+            .map(|field| field.ident.clone().expect("field has name"));
         let field_names = field_idents
             .map(|ident| ident.to_string());
         let field_idents = named.iter()
-            .map(|field| field.ident.expect("field has name"));
+            .map(|field| field.ident.clone().expect("field has name"));
         let std_ident = quote_spanned! { table_ident.span() =>
             ::std
         };
@@ -284,6 +282,7 @@ fn gen_aggregate_struct(aggregates: &[Aggregate]) -> (Tokens, Tokens) {
     }})
 }
 
+
 /// Get the fields from the struct (also returns the ToSql implementations to check that the types
 /// used for ForeignKey have a #[derive(SqlTable)]).
 /// Also check if the field types from the struct are supported types.
@@ -305,8 +304,7 @@ pub fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, Option
         };
     let mut primary_key_count = 0;
     for field in &fields {
-        if let Some(field_ident) = field.ident {
-            #[cfg(feature = "unstable")]
+        if let Some(ref field_ident) = field.ident {
             let field_type = &field.ty;
             let field_name = field_ident.to_string();
             let field = field_ty_to_type(&field.ty);
@@ -327,38 +325,30 @@ pub fn get_struct_fields(item_struct: &ItemStruct) -> (Result<SqlFields>, Option
                     let type_ident = new_ident(typ);
                     let struct_ident = new_ident(&format!("CheckForeignKey{}", rand_string()));
                     // TODO: replace with a trait bound on ForeignKey when it is stable.
-                    #[cfg(feature = "unstable")]
-                    let mut code: TokenStream;
-                    #[cfg(not(feature = "unstable"))]
-                    let code: TokenStream;
-                    code = quote! {
+                    let span = {
+                        if let syn::Type::Path(TypePath { path: Path { ref segments, .. }, ..}) = *field_type {
+                            let segment = segments.first().expect("first segment").into_value();
+                            if let AngleBracketed(AngleBracketedGenericArguments { ref args, .. }) =
+                                segment.arguments
+                            {
+                                args.first().expect("first argument").span()
+                            }
+                            else {
+                                field_type.span()
+                            }
+                        }
+                        else {
+                            field_type.span()
+                        }
+                    };
+
+                    let code: TokenStream = quote_spanned!{ span =>
                         #[allow(dead_code)]
                         struct #struct_ident where #type_ident: ::tql::SqlTable {
                             field: #type_ident,
                         }
                     }.into();
-                    #[cfg(feature = "unstable")]
-                    {
-                        let field_pos =
-                            if let syn::Type::Path(TypePath { path: Path { ref segments, .. }, ..}) = *field_type {
-                                let segment = segments.first().expect("first segment").into_value();
-                                if let AngleBracketed(AngleBracketedGenericArguments { ref args, .. }) =
-                                    segment.arguments
-                                {
-                                    args.first().expect("first argument").span()
-                                }
-                                else {
-                                    field_type.span()
-                                }
-                            }
-                            else {
-                                field_type.span()
-                            };
-                        let span = field_pos.unstable();
-                        // NOTE: position the trait at this position so that the error message points
-                        // on the type.
-                        code = respan_with(code, span);
-                    }
+
                     impls = concat_token_stream(impls, code);
                 },
                 _ => (),
@@ -384,7 +374,7 @@ fn field_list_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> To
         })
         .map(|field| {
             format!("{table}.{column}",
-                    column = field.ident.expect("field has name"),
+                    column = field.ident.clone().expect("field has name"),
                     table = table_ident
                    )
         })
@@ -404,7 +394,7 @@ fn create_query_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> 
     let mut fields_to_create = vec![];
     for field in named {
         fields_to_create.push(TypedField {
-            identifier: field.ident.expect("field ident").to_string(),
+            identifier: field.ident.clone().expect("field ident").to_string(),
             typ: type_to_sql(&field_ty_to_type(&field.ty).node),
         });
     }
@@ -427,7 +417,7 @@ fn related_pks_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> T
     let mut related_pk_macro_names = vec![];
     for field in named {
         let typ = token_to_string(&field.ty);
-        if let Some(ident) = field.ident {
+        if let Some(ref ident) = field.ident {
             if typ.starts_with("ForeignKey") {
                 if let syn::Type::Path(ref path) = field.ty {
                     let element = path.path.segments.first().expect("first segment of path");
@@ -458,7 +448,7 @@ fn pk_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) -> Tokens {
     let mut primary_key = None;
     for field in named {
         let typ = token_to_string(&field.ty);
-        if let Some(ident) = field.ident {
+        if let Some(ref ident) = field.ident {
             if typ == "PrimaryKey" {
                 primary_key = Some(ident);
             }
@@ -488,7 +478,7 @@ fn check_missing_fields_macro(named: &Punctuated<Field, Comma>, table_ident: &Id
     let mut mandatory_fields = vec![];
     for field in named {
         let typ = token_to_string(&field.ty);
-        if let Some(ident) = field.ident {
+        if let Some(ref ident) = field.ident {
             if !typ.starts_with("Option") && typ != "PrimaryKey" {
                 mandatory_fields.push(ident);
             }
@@ -521,7 +511,7 @@ fn related_table_macro(named: &Punctuated<Field, Comma>, table_ident: &Ident) ->
     let mut compiler_errors = vec![];
     for field in named {
         let typ = token_to_string(&field.ty);
-        if let Some(ident) = field.ident {
+        if let Some(ref ident) = field.ident {
             if typ.starts_with("ForeignKey") {
                 if let syn::Type::Path(ref path) = field.ty {
                     let element = path.path.segments.first().expect("first segment of path");
@@ -617,7 +607,7 @@ pub fn table_macro(item_struct: &ItemStruct) -> Tokens {
         let mut fk_patterns = vec![];
         for field in named {
             let typ = token_to_string(&field.ty);
-            if let Some(ident) = field.ident {
+            if let Some(ref ident) = field.ident {
                 if !typ.starts_with("Option") && typ != "PrimaryKey" {
                     mandatory_fields.push(ident);
                 }

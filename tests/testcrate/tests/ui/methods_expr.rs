@@ -22,7 +22,7 @@
 //! Tests of the type analyzer lint for a `Query::Select` using the methods available in the
 //! filter() method.
 
-#![feature(proc_macro)]
+#![feature(proc_macro_hygiene)]
 
 extern crate tql;
 #[macro_use]

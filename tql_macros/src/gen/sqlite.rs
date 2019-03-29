@@ -19,8 +19,7 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-use proc_macro2::Span;
-use quote::Tokens;
+use proc_macro2::{Span,TokenStream};
 use syn::{
     Expr,
     ExprLit,
@@ -43,21 +42,21 @@ pub fn create_backend() -> SqliteBackend {
 }
 
 impl BackendGen for SqliteBackend {
-    fn convert_index(&self, index: usize) -> Tokens {
+    fn convert_index(&self, index: usize) -> TokenStream {
         let index = index as i32;
         quote! {
             #index
         }
     }
 
-    fn delta_type(&self) -> Tokens {
+    fn delta_type(&self) -> TokenStream {
         quote! { i32 }
     }
 
-    fn gen_query_expr(&self, connection_expr: Tokens, args: &SqlQueryWithArgs, args_expr: Tokens, struct_expr: Tokens,
-                      aggregate_struct: Tokens, aggregate_expr: Tokens) -> Tokens
+    fn gen_query_expr(&self, connection_expr: TokenStream, args: &SqlQueryWithArgs, args_expr: TokenStream, struct_expr: TokenStream,
+                      aggregate_struct: TokenStream, aggregate_expr: TokenStream) -> TokenStream
     {
-        let result_ident = Ident::from("result");
+        let result_ident = Ident::new("__tql_result",Span::call_site());
         let sql_query = &args.sql;
         let rusqlite_ident = quote_spanned! { connection_expr.span() =>
             ::rusqlite
@@ -145,19 +144,19 @@ impl BackendGen for SqliteBackend {
         })
     }
 
-    fn row_type_ident(&self, table_ident: &Ident) -> Tokens {
+    fn row_type_ident(&self, table_ident: &Ident) -> TokenStream {
         quote_spanned! { table_ident.span() =>
             ::rusqlite::Row
         }
     }
 
-    fn to_sql(&self, primary_key_ident: &Ident) -> Tokens {
+    fn to_sql(&self, primary_key_ident: &Ident) -> TokenStream {
         quote! {
             self.#primary_key_ident.to_sql()
         }
     }
 
-    fn to_sql_impl(&self, table_ident: &Ident, to_sql_code: Tokens) -> Tokens {
+    fn to_sql_impl(&self, table_ident: &Ident, to_sql_code: TokenStream) -> TokenStream {
         let rusqlite_ident = quote_spanned! { table_ident.span() =>
             ::rusqlite
         };

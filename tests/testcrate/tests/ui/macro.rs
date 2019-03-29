@@ -21,11 +21,15 @@
 
 //! Tests of the macro.
 
-#![feature(proc_macro)]
+#![feature(proc_macro_hygiene)]
 
 extern crate tql;
 #[macro_use]
 extern crate tql_macros;
+
+#[macro_use]
+mod connection;
+backend_extern_crate!();
 
 use tql::{ForeignKey, PrimaryKey};
 use tql_macros::sql;
@@ -39,7 +43,13 @@ struct Table {
     id: PrimaryKey,
     field1: String,
     i32_field: i32,
-    field2: ForeignKey<Table>,
+    field2: ForeignKey<AnotherTable>,
+}
+
+#[derive(SqlTable)]
+struct AnotherTable {
+    id: PrimaryKey,
+    field: String,
 }
 
 fn main() {

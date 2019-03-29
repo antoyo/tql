@@ -12,7 +12,8 @@ features = ["with-chrono"]
 version = "^0.15.1"
 
 [dev-dependencies]
-compiletest_rs = "^0.3.3"
+compiletest_rs = {version = "^0.3.19", features = ["stable"]}
+
 
 [features]
 sqlite = ["tql/sqlite"]

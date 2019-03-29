@@ -71,10 +71,10 @@ pub fn field_ty_to_type(ty: &syn::Type) -> WithSpan<Type> {
 pub fn fields_vec_to_hashmap(fields: &[Field]) -> SqlFields {
     let mut sql_fields = BTreeMap::new();
     for field in fields {
-        if let Some(ident) = field.ident {
-            if !sql_fields.contains_key(&ident) {
+        if let Some(ref ident) = &field.ident {
+            if !sql_fields.contains_key(ident) {
                 let ty = field_ty_to_type(&field.ty);
-                sql_fields.insert(ident, BothTypes {
+                sql_fields.insert(ident.clone(), BothTypes {
                     syn_type: field.ty.clone(),
                     ty,
                 });

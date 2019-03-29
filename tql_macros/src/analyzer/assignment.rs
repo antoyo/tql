@@ -81,12 +81,12 @@ pub fn argument_to_assignment(arg: &Expression) -> Result<Assignment> {
 /// Convert a `BinOp` to an SQL `AssignmentOperator`.
 fn binop_to_assignment_operator(binop: &BinOp) -> (AssignmentOperator, Span) {
     match *binop {
-        BinOp::AddEq(span) => (AssignmentOperator::Add, span.0[0]),
-        BinOp::SubEq(span) => (AssignmentOperator::Sub, span.0[0]),
-        BinOp::MulEq(span) => (AssignmentOperator::Mul, span.0[0]),
-        BinOp::DivEq(span) => (AssignmentOperator::Divide, span.0[0]),
-        BinOp::RemEq(span) => (AssignmentOperator::Modulo, span.0[0]),
-        BinOp::Eq(span) => (AssignmentOperator::Equal, span.0[0]),
+        BinOp::AddEq(span) => (AssignmentOperator::Add, span.spans[0]),
+        BinOp::SubEq(span) => (AssignmentOperator::Sub, span.spans[0]),
+        BinOp::MulEq(span) => (AssignmentOperator::Mul, span.spans[0]),
+        BinOp::DivEq(span) => (AssignmentOperator::Divide, span.spans[0]),
+        BinOp::RemEq(span) => (AssignmentOperator::Modulo, span.spans[0]),
+        BinOp::Eq(span) => (AssignmentOperator::Equal, span.spans[0]),
         BinOp::Add(_) | BinOp::Sub(_) | BinOp::Mul(_) | BinOp::Div(_) | BinOp::Rem(_) | BinOp::And(_) |
             BinOp::Or(_) | BinOp::BitXor(_) | BinOp::BitXorEq(_) | BinOp::BitAnd(_) | BinOp::BitAndEq(_) |
             BinOp::BitOr(_) | BinOp::BitOrEq(_) | BinOp::Shl(_) | BinOp::ShlEq(_) | BinOp::Shr(_) | BinOp::ShrEq(_) |
