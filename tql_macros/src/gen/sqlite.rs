@@ -56,7 +56,7 @@ impl BackendGen for SqliteBackend {
     fn gen_query_expr(&self, connection_expr: TokenStream, args: &SqlQueryWithArgs, args_expr: TokenStream, struct_expr: TokenStream,
                       aggregate_struct: TokenStream, aggregate_expr: TokenStream) -> TokenStream
     {
-        let result_ident = Ident::new("result",Span::call_site());
+        let result_ident = Ident::new("__tql_result",Span::call_site());
         let sql_query = &args.sql;
         let rusqlite_ident = quote_spanned! { connection_expr.span() =>
             ::rusqlite

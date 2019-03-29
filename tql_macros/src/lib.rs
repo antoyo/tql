@@ -377,7 +377,7 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> (Tokens, Vec<Tokens>) {
         Ident::new(&format!("__tql_arg{}", counter), Span::call_site())
     );
 
-    let ident = Ident::new("_table", Span::call_site());
+    let ident = Ident::new("__tql_table", Span::call_site());
     {
         let mut add_arg = |arg: &Arg| {
             let arg_name =
@@ -395,7 +395,7 @@ fn typecheck_arguments(args: &SqlQueryWithArgs) -> (Tokens, Vec<Tokens>) {
                     Ident::new(&name[index..], pos)
                 })
             {
-                let convert_ident = Ident::new("convert", arg.expression.span());
+                let convert_ident = Ident::new("__tql_convert", arg.expression.span());
                 let to_owned_ident = Ident::new("to_owned", Span::call_site());
                 #[cfg(not(feature = "unstable"))]
                 let expr = arg_name.clone().map(|arg_name| quote! { #arg_name }).unwrap_or_else(|| {

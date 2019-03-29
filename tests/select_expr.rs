@@ -521,8 +521,8 @@ fn test_select() {
         2
     }
 
-    //let table = sql!(TableSelectExpr[result()]).unwrap();
-    //assert_eq!(id3, table.id);
+    let table = sql!(TableSelectExpr[result()]).unwrap();
+    assert_eq!(id3, table.id);
 
     let index = 2i64;
     let table = sql!(TableSelectExpr[index + 1]).unwrap();

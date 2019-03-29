@@ -56,7 +56,7 @@ impl BackendGen for PostgresBackend {
     fn gen_query_expr(&self, connection_expr: TokenStream, args: &SqlQueryWithArgs, args_expr: TokenStream, struct_expr: TokenStream,
                       aggregate_struct: TokenStream, aggregate_expr: TokenStream) -> TokenStream
     {
-        let result_ident = Ident::new("result", proc_macro2::Span::call_site());
+        let result_ident = Ident::new("__tql_result", proc_macro2::Span::call_site());
         let sql_query = &args.sql;
         let std_ident = quote_spanned! { connection_expr.span() =>
             ::std

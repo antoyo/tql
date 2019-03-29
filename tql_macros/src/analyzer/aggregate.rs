@@ -115,7 +115,7 @@ pub fn argument_to_aggregate(arg: &Expression) -> Result<Aggregate> {
 /// Convert an `Expression` to a group `Ident`.
 pub fn argument_to_group(arg: &Expression) -> Result<Ident> {
     let mut errors = vec![];
-    let mut group = Ident::new("dummy_ident", Span::call_site());
+    let mut group = Ident::new("__tql_dummy_ident", Span::call_site());
 
     if let Some(identifier) = path_expr_to_identifier(arg, &mut errors) {
         group = identifier;
