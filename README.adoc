@@ -9,6 +9,7 @@ Tql is implemented as a procedural macro and even works on the stable version of
 image:https://img.shields.io/travis/antoyo/tql/master.svg[link="https://travis-ci.org/antoyo/tql"]
 image:https://img.shields.io/crates/l/tql.svg[link="LICENSE"]
 image:https://img.shields.io/gitter/room/tql-rs/Lobby.svg[link="https://gitter.im/tql-rs/Lobby"]
+image:https://img.shields.io/badge/Donate-Patreon-orange.svg[link="https://www.patreon.com/antoyo"]
 
 == Requirements
 
@@ -586,3 +587,10 @@ struct Table1 {
 
 Table1.create()
 ----
+
+== Donations
+
+If you appreciate this project and want new features to be
+implemented, please support me on Patreon.
+
+image:https://c5.patreon.com/external/logo/become_a_patron_button.png[link="https://www.patreon.com/antoyo"]
