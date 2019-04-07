@@ -587,6 +587,7 @@ struct Table1 {
 
 Table1.create()
 ----
+|===
 
 == Donations
 
